@@ -1,0 +1,20 @@
+node_modules/
+dist/
+out/
+release/
+.vite/
+*.log
+
+# vendored binaries — fetched, not committed
+vendor/ffmpeg/
+
+# local capture output and scratch
+recordings/
+tmp/
+*.mp4
+*.webm
+*.wav
+
+# test fixtures are checked in deliberately; see docs/specs
+!tests/fixtures/**/*.mp4
+!tests/fixtures/**/*.webm
