@@ -38,7 +38,15 @@ function registerBundleProtocol(): void {
       : join(RENDERER_DIR, normalize(pathname.replace(/^\//, "")) || "index.html");
 
     try {
-      return await net.fetch(pathToFileURL(filePath).toString());
+      const res = await net.fetch(pathToFileURL(filePath).toString());
+
+      // In production the page is zc://app, so this is same-origin. Under
+      // `npm run dev` the renderer comes from http://localhost and reaching
+      // zc:// is cross-origin, which needs an explicit allow.
+      const headers = new Headers(res.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+
+      return new Response(res.body, { status: res.status, headers });
     } catch (err) {
       console.error(`zc:// failed for ${filePath}:`, err);
       return new Response(`not found: ${filePath}`, { status: 404 });
