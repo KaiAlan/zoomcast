@@ -134,9 +134,64 @@ async function runUiShot(): Promise<void> {
   app.quit();
 }
 
+/**
+ * Export a bundle headlessly and capture preview frames from the same editor
+ * instance, so preview/export parity can be checked automatically.
+ *
+ * Driven by ZOOMCAST_PARITY (bundle dir), ZOOMCAST_PARITY_OUT (mp4 path) and
+ * ZOOMCAST_PARITY_SHOTS (comma-separated output-time ms).
+ */
+async function runParity(): Promise<void> {
+  const dir = process.env.ZOOMCAST_PARITY ?? "";
+  const out = process.env.ZOOMCAST_PARITY_OUT ?? join(process.cwd(), "tmp", "parity.mp4");
+  const shots = (process.env.ZOOMCAST_PARITY_SHOTS ?? "")
+    .split(",")
+    .filter((s) => s.trim() !== "")
+    .map(Number);
+
+  const win = createWindow(false, `?bundle=${encodeURIComponent(dir)}`);
+  await new Promise<void>((resolve) => win.webContents.once("did-finish-load", resolve));
+
+  for (let tries = 0; tries < 200; tries++) {
+    const ready = (await win.webContents.executeJavaScript(
+      "typeof window.__zc === 'object' && window.__zc !== undefined",
+    )) as boolean;
+    if (ready) break;
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+
+  mkdirSync(dirname(out), { recursive: true });
+  await win.webContents.executeJavaScript(
+    `window.__zc.exportTo(${JSON.stringify(out)})`,
+  );
+  console.log(`exported ${out}`);
+
+  for (const t of shots) {
+    const dataUrl = (await win.webContents.executeJavaScript(
+      `window.__zc.renderAt(${t})`,
+    )) as string;
+    const file = join(dirname(out), `preview-${t}.png`);
+    writeFileSync(file, Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ""), "base64"));
+    console.log(`wrote ${file}`);
+  }
+
+  app.quit();
+}
+
 void app.whenReady().then(async () => {
   registerBundleProtocol();
   registerIpc();
+
+  if (process.env.ZOOMCAST_PARITY !== undefined) {
+    try {
+      await runParity();
+    } catch (err) {
+      console.error("parity run failed:", err);
+      process.exitCode = 1;
+      app.quit();
+    }
+    return;
+  }
 
   if (process.env.ZOOMCAST_UI_SHOT !== undefined) {
     try {

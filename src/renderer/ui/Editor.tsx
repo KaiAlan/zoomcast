@@ -8,6 +8,7 @@ import { planZoom } from "../../shared/zoom/planner";
 import { replan } from "../../shared/zoom/replan";
 import type { PlanContext, ZoomConfig } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
+import { exportClip } from "../media/exportClip";
 import { PreviewPlayer } from "../media/PreviewPlayer";
 import { VideoSource } from "../media/VideoSource";
 import { Inspector } from "./Inspector";
@@ -33,6 +34,7 @@ export function Editor({ bundle }: { bundle: OpenedBundle }) {
   const [playheadMs, setPlayheadMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("loading…");
+  const [exporting, setExporting] = useState<string | null>(null);
 
   const { manifest } = bundle;
 
@@ -130,6 +132,28 @@ export function Editor({ bundle }: { bundle: OpenedBundle }) {
 
         setStatus(`${manifest.video.width}×${manifest.video.height} · ${manifest.video.fps}fps`);
 
+        // Test hooks for tools/verify-parity.ts. renderAt is awaited directly
+        // rather than going through the player, so a screenshot is guaranteed
+        // to be taken after the frame has actually been drawn.
+        window.__zc = {
+          renderAt: async (tOutputMs: number) => {
+            await renderAt(tOutputMs);
+            return canvas.toDataURL("image/png");
+          },
+          exportTo: async (outFile: string) => {
+            await exportClip({
+              manifest,
+              project: live.current.project,
+              mediaDir: bundle.dir.replace(/\\/g, "/"),
+              renderer,
+              source,
+              outFile,
+              encoder: "libx264",
+              onProgress: () => undefined,
+            });
+          },
+        };
+
         // ?seek=<ms> lets a screenshot land on a chosen playhead position.
         const seek = new URLSearchParams(window.location.search).get("seek");
         player.seek(seek === null ? 0 : Number(seek));
@@ -178,6 +202,43 @@ export function Editor({ bundle }: { bundle: OpenedBundle }) {
     });
   };
 
+  const runExport = (): void => {
+    const renderer = rendererRef.current;
+    const source = sourceRef.current;
+    if (renderer === null || source === null || exporting !== null) return;
+
+    void (async () => {
+      const target = await window.zoomcast.pickExportTarget(`${manifest.id}.mp4`);
+      if (target === null) return;
+
+      playerRef.current?.pause();
+      setExporting("starting…");
+
+      try {
+        await exportClip({
+          manifest,
+          project,
+          mediaDir: bundle.dir.replace(/\\/g, "/"),
+          renderer,
+          source,
+          outFile: target,
+          encoder: "h264_amf",
+          onProgress: ({ done, total }) =>
+            setExporting(`${Math.round((done / total) * 100)}%`),
+        });
+
+        setExporting(null);
+        setStatus(`exported to ${target}`);
+      } catch (err) {
+        setExporting(null);
+        setStatus(err instanceof Error ? err.message : String(err));
+      } finally {
+        // The export drew at output size; put the preview back where it was.
+        playerRef.current?.seek(playerRef.current.playheadMs);
+      }
+    })();
+  };
+
   return (
     <div style={{ display: "flex", height: "100vh", background: "#0d0e11", color: "#e6e6e6" }}>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 20, gap: 14, minWidth: 0 }}>
@@ -214,6 +275,14 @@ export function Editor({ bundle }: { bundle: OpenedBundle }) {
             onClick={() => void window.zoomcast.saveProject(bundle.dir, project)}
           >
             save
+          </button>
+          <button
+            type="button"
+            style={{ ...button, opacity: exporting === null ? 1 : 0.5 }}
+            disabled={exporting !== null}
+            onClick={runExport}
+          >
+            {exporting === null ? "export…" : `exporting ${exporting}`}
           </button>
         </div>
 
