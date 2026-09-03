@@ -38,16 +38,25 @@ export function App() {
     }
   }, []);
 
+  // Opening a finished recording lives here rather than in Welcome, so it also
+  // works when a take is started by hotkey while the editor is already open.
+  useEffect(() => {
+    if (isShoot || isAudio) return;
+    return window.zoomcast.recording.onStopped((result) => void open(result.dir));
+  }, [isShoot, isAudio, open]);
+
   // ?bundle=<path> auto-opens, which is how the UI screenshot mode drives this.
   useEffect(() => {
     if (isShoot) return;
     const dir = new URLSearchParams(window.location.search).get("bundle");
-    if (dir !== null) void open(dir);
+    if (dir !== null && dir.trim() !== "") void open(dir);
   }, [isShoot, open]);
 
   if (isAudio) return null;
   if (isShoot) return <ShootHarness />;
-  if (bundle !== null) return <Editor bundle={bundle} />;
+  if (bundle !== null) {
+    return <Editor bundle={bundle} onBack={() => setBundle(null)} />;
+  }
 
   return <Welcome error={error} onOpen={(dir) => void open(dir)} />;
 }

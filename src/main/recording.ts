@@ -12,7 +12,37 @@ import {
 import { logDiag } from "./log";
 import { runCountdown, showRecordingBorder } from "./overlays";
 
-export const RECORD_HOTKEY = "CommandOrControl+Shift+R";
+/**
+ * Candidate record shortcuts, best first.
+ *
+ * A global shortcut is taken from every other app while zoomcast runs, so the
+ * obvious picks are all bad: Ctrl+Shift+R is hard-reload in every browser,
+ * Ctrl+Shift+W closes the window, Win+Alt+R belongs to the Xbox Game Bar
+ * recorder. Even Ctrl+Alt+R turned out to be claimed on the author's machine.
+ *
+ * Rather than guess, the app walks this list and keeps the first one Windows
+ * actually grants. `recordHotkeyLabel()` then reports what it got, so the UI
+ * always shows the shortcut that really works.
+ */
+const RECORD_HOTKEY_CANDIDATES = [
+  "CommandOrControl+Alt+R",
+  "CommandOrControl+Alt+Z",
+  "Alt+Shift+R",
+  "CommandOrControl+Alt+`",
+  "CommandOrControl+Shift+`",
+  "CommandOrControl+Alt+Insert",
+];
+
+let activeHotkey: string | null = null;
+
+/** Whichever shortcut actually registered, spelled how a person reads it. */
+export function recordHotkeyLabel(): string {
+  if (activeHotkey === null) return "";
+  return activeHotkey.replace(
+    "CommandOrControl",
+    process.platform === "darwin" ? "Cmd" : "Ctrl",
+  );
+}
 
 let tray: Tray | null = null;
 let border: BrowserWindow | null = null;
@@ -102,7 +132,7 @@ function updateTray(): void {
     Menu.buildFromTemplate([
       {
         label: recording ? "Stop recording" : "Start recording",
-        accelerator: RECORD_HOTKEY,
+        accelerator: activeHotkey ?? undefined,
         click: () => void toggleRecording(),
       },
       { type: "separator" },
@@ -159,9 +189,24 @@ export function registerRecordingControls(): void {
     tray = null;
   }
 
-  if (!globalShortcut.register(RECORD_HOTKEY, () => void toggleRecording())) {
-    console.warn(`could not register ${RECORD_HOTKEY}; another app likely owns it`);
+  activeHotkey = null;
+  for (const candidate of RECORD_HOTKEY_CANDIDATES) {
+    if (globalShortcut.register(candidate, () => void toggleRecording())) {
+      activeHotkey = candidate;
+      break;
+    }
   }
+
+  if (activeHotkey === null) {
+    logDiag(
+      "hotkey",
+      `every candidate shortcut is taken (${RECORD_HOTKEY_CANDIDATES.join(", ")}). Recording still works from the tray and the window.`,
+    );
+  } else {
+    logDiag("hotkey", `registered ${activeHotkey}`);
+  }
+
+  updateTray();
 }
 
 export function teardownRecordingControls(): void {

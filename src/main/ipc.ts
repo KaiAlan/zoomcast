@@ -5,7 +5,7 @@ import type { Project } from "../shared/project/types";
 import { openBundle, saveProject } from "./bundleIo";
 import { isRecording } from "./capture/SessionController";
 import { ExportSession } from "./exportRunner";
-import { listRecordings, toggleRecording } from "./recording";
+import { listRecordings, recordHotkeyLabel, toggleRecording } from "./recording";
 
 const sessions = new Map<string, ExportSession>();
 
@@ -27,6 +27,7 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle("recording:list", () => listRecordings());
+  ipcMain.handle("recording:hotkey", () => recordHotkeyLabel());
   ipcMain.handle("recording:toggle", () => toggleRecording());
   ipcMain.handle("recording:isActive", () => isRecording());
 

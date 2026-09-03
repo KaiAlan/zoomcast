@@ -25,6 +25,7 @@ export function Welcome({ onOpen, error }: Props) {
   const [recordings, setRecordings] = useState<RecordingSummary[]>([]);
   const [state, setState] = useState<"idle" | "countdown" | "recording">("idle");
   const [notice, setNotice] = useState<string | null>(null);
+  const [hotkey, setHotkey] = useState("");
 
   const refresh = useCallback(() => {
     void window.zoomcast.listRecordings().then(setRecordings);
@@ -32,6 +33,7 @@ export function Welcome({ onOpen, error }: Props) {
 
   useEffect(() => {
     refresh();
+    void window.zoomcast.recordHotkey().then(setHotkey);
     void window.zoomcast.isRecording().then((on) => setState(on ? "recording" : "idle"));
 
     const offs = [
@@ -48,7 +50,6 @@ export function Welcome({ onOpen, error }: Props) {
             ? `recording ended unexpectedly — opening anyway (${result.backend})`
             : null,
         );
-        onOpen(result.dir);
       }),
       window.zoomcast.recording.onError((message) => {
         setState("idle");
@@ -59,7 +60,7 @@ export function Welcome({ onOpen, error }: Props) {
     return () => {
       for (const off of offs) off();
     };
-  }, [refresh, onOpen]);
+  }, [refresh]);
 
   const label =
     state === "recording" ? "stop recording" : state === "countdown" ? "…" : "record";
@@ -113,7 +114,9 @@ export function Welcome({ onOpen, error }: Props) {
         </button>
       </div>
 
-      <div style={{ fontSize: 12, opacity: 0.4 }}>or press Ctrl+Shift+R anywhere</div>
+      <div style={{ fontSize: 12, opacity: 0.4 }}>
+        {hotkey === "" ? "\u00a0" : `or press ${hotkey} anywhere`}
+      </div>
 
       {notice !== null && (
         <div style={{ fontSize: 12, color: "#e0894a", maxWidth: 560, textAlign: "center" }}>

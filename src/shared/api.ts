@@ -55,6 +55,8 @@ export type ZoomcastApi = {
   audioChunk: (role: "mic" | "system", chunk: Uint8Array) => Promise<void>;
 
   listRecordings: () => Promise<RecordingSummary[]>;
+  /** Display label for the global record shortcut, so the UI cannot drift. */
+  recordHotkey: () => Promise<string>;
   toggleRecording: () => Promise<void>;
   isRecording: () => Promise<boolean>;
   recording: RecordingEvents;

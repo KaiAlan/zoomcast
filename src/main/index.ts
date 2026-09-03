@@ -249,6 +249,14 @@ void app.whenReady().then(async () => {
   registerDisplayMediaHandler();
   registerIpc();
 
+  // Registered before any headless mode returns, so screenshots and the record
+  // test see the same tray and hotkey state the real app has.
+  try {
+    registerRecordingControls();
+  } catch (err) {
+    logFatal("registerRecordingControls", err);
+  }
+
   if (process.env.ZOOMCAST_PARITY !== undefined) {
     try {
       await runParity();
@@ -280,12 +288,6 @@ void app.whenReady().then(async () => {
       app.quit();
     }
     return;
-  }
-
-  try {
-    registerRecordingControls();
-  } catch (err) {
-    logFatal("registerRecordingControls", err);
   }
 
   if (process.env.ZOOMCAST_RECORD_TEST !== undefined) {

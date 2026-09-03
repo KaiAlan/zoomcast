@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { sourceToOutput } from "../../shared/project/timeline";
 import type { Cut } from "../../shared/project/types";
 import type { ZoomKeyframe } from "../../shared/zoom/types";
@@ -30,8 +31,17 @@ export function Timeline({
   maxComfortableZoom,
   onSeek,
 }: Props) {
+  const [scrubbing, setScrubbing] = useState(false);
+
   const pct = (tOutput: number): number =>
     outputDurationMs === 0 ? 0 : (tOutput / outputDurationMs) * 100;
+
+  /** Map a pointer position on the track to an output time. */
+  const seekTo = (clientX: number, el: HTMLElement): void => {
+    const box = el.getBoundingClientRect();
+    const ratio = (clientX - box.left) / box.width;
+    onSeek(Math.max(0, Math.min(1, ratio)) * outputDurationMs);
+  };
 
   const ticks: number[] = [];
   const step = outputDurationMs > 20_000 ? 5000 : 1000;
@@ -50,10 +60,20 @@ export function Timeline({
           overflow: "hidden",
         }}
         onPointerDown={(e) => {
-          const box = e.currentTarget.getBoundingClientRect();
-          const ratio = (e.clientX - box.left) / box.width;
-          onSeek(Math.max(0, Math.min(1, ratio)) * outputDurationMs);
+          // Pointer capture keeps the scrub alive when the cursor leaves the
+          // track, which is what makes dragging past either end feel normal.
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setScrubbing(true);
+          seekTo(e.clientX, e.currentTarget);
         }}
+        onPointerMove={(e) => {
+          if (scrubbing) seekTo(e.clientX, e.currentTarget);
+        }}
+        onPointerUp={(e) => {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+          setScrubbing(false);
+        }}
+        onPointerCancel={() => setScrubbing(false)}
       >
         {ticks.map((t) => (
           <div

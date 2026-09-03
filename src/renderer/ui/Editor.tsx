@@ -24,7 +24,13 @@ const button: React.CSSProperties = {
   fontSize: 13,
 };
 
-export function Editor({ bundle }: { bundle: OpenedBundle }) {
+export function Editor({
+  bundle,
+  onBack,
+}: {
+  bundle: OpenedBundle;
+  onBack: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const sourceRef = useRef<VideoSource | null>(null);
@@ -172,6 +178,29 @@ export function Editor({ bundle }: { bundle: OpenedBundle }) {
     };
   }, [bundle, manifest, applyPlan]);
 
+  // Space toggles playback. preventDefault matters twice over: it stops the
+  // page scrolling, and it stops Space from re-activating whichever button was
+  // last clicked, which would otherwise fight this handler.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== "Space" || event.repeat) return;
+
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target !== null &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (typing) return;
+
+      event.preventDefault();
+      playerRef.current?.toggle();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const onConfigChange = (config: ZoomConfig): void => {
     setProject((prev) => {
       const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
@@ -243,8 +272,23 @@ export function Editor({ bundle }: { bundle: OpenedBundle }) {
     <div style={{ display: "flex", height: "100vh", background: "#0d0e11", color: "#e6e6e6" }}>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 20, gap: 14, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            title="Back to recordings"
+            style={{
+              ...button,
+              padding: "4px 11px",
+              lineHeight: 1.2,
+            }}
+          >
+            ←
+          </button>
           <span style={{ fontSize: 15 }}>{manifest.id}</span>
           <span style={{ fontSize: 12, opacity: 0.5 }}>{status}</span>
+          <span style={{ fontSize: 12, opacity: 0.35, marginLeft: "auto" }}>
+            space to play · drag the timeline to scrub
+          </span>
         </div>
 
         <canvas
