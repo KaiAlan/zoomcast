@@ -1,4 +1,5 @@
 import { app, BrowserWindow, net, protocol } from "electron";
+import { registerIpc } from "./ipc";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -45,7 +46,7 @@ function registerBundleProtocol(): void {
   });
 }
 
-function createWindow(show = true): BrowserWindow {
+function createWindow(show = true, route = ""): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -55,11 +56,15 @@ function createWindow(show = true): BrowserWindow {
       preload: join(here, "../preload/index.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Electron only loads an ESM (.mjs) preload with the sandbox disabled.
+      // With it on, the preload silently never runs and window.zoomcast is
+      // undefined.
+      sandbox: false,
     },
   });
 
   const devUrl = process.env.ELECTRON_RENDERER_URL;
-  void win.loadURL(devUrl ?? "zc://app/index.html");
+  void win.loadURL(devUrl === undefined ? `zc://app/index.html${route}` : `${devUrl}${route}`);
 
   return win;
 }
@@ -76,7 +81,7 @@ async function runShoot(): Promise<void> {
   const outDir = process.env.ZOOMCAST_SHOOT_DIR ?? join(process.cwd(), "tmp", "shots");
   mkdirSync(outDir, { recursive: true });
 
-  const win = createWindow(false);
+  const win = createWindow(false, "#shoot");
   await new Promise<void>((resolve) => win.webContents.once("did-finish-load", resolve));
 
   // did-finish-load fires before React mounts, so wait for the hook itself
@@ -102,8 +107,47 @@ async function runShoot(): Promise<void> {
   app.quit();
 }
 
+/**
+ * Open a bundle in the real editor and capture the window. Lets the editor be
+ * checked from a still image rather than only by watching it live.
+ *
+ * Driven by ZOOMCAST_UI_SHOT (a bundle directory) and ZOOMCAST_UI_SHOT_OUT.
+ */
+async function runUiShot(): Promise<void> {
+  const dir = process.env.ZOOMCAST_UI_SHOT ?? "";
+  const out = process.env.ZOOMCAST_UI_SHOT_OUT ?? join(process.cwd(), "tmp", "ui.png");
+  const settleMs = Number(process.env.ZOOMCAST_UI_SHOT_DELAY ?? "2500");
+
+  const seek = process.env.ZOOMCAST_UI_SHOT_SEEK;
+  const query =
+    `?bundle=${encodeURIComponent(dir)}` + (seek === undefined ? "" : `&seek=${seek}`);
+
+  const win = createWindow(false, query);
+  await new Promise<void>((resolve) => win.webContents.once("did-finish-load", resolve));
+  await new Promise<void>((resolve) => setTimeout(resolve, settleMs));
+
+  const image = await win.webContents.capturePage();
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, image.toPNG());
+  console.log(`wrote ${out}`);
+
+  app.quit();
+}
+
 void app.whenReady().then(async () => {
   registerBundleProtocol();
+  registerIpc();
+
+  if (process.env.ZOOMCAST_UI_SHOT !== undefined) {
+    try {
+      await runUiShot();
+    } catch (err) {
+      console.error("ui shot failed:", err);
+      process.exitCode = 1;
+      app.quit();
+    }
+    return;
+  }
 
   if (process.env.ZOOMCAST_SHOOT !== undefined) {
     try {
