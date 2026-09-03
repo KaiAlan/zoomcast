@@ -1,38 +1,69 @@
 /**
  * Decode verification: render frames through the real VideoSource + Renderer,
- * then prove each render is the frame ffmpeg puts at that timestamp.
+ * then prove each render is the frame that actually sits at that timestamp.
  *
- * This exists because a seek that lands on the wrong frame is invisible to unit
+ * This exists because a seek landing on the wrong frame is invisible to unit
  * tests and easy to miss by eye — a B-frame composition offset shifted every
- * frame by 50ms and looked completely plausible until compared side by side.
+ * frame by 50ms and looked entirely plausible until compared side by side.
  *
- * The oracle is deliberately *relative*. Absolute PSNR against ffmpeg's PNG is
- * useless here: our frames reach RGB through Chromium's YUV conversion and
- * ffmpeg's through its own, and on testsrc2's saturated primaries that
- * disagreement alone costs ~25dB. So instead we score the render against
- * several neighbouring frames and require the exact one to win. Colour
- * conversion penalises every candidate equally, so the argmax stays honest.
+ * Two decisions here were arrived at the hard way:
+ *
+ * 1. References come from decoding the fixture ONCE, in order, with no seeking
+ *    at all. Every seek-based approach produced false failures: `-ss <boundary>`
+ *    and `-ss <midpoint>` disagree by three frames, and `select=eq(n\,IDX)`
+ *    cannot survive comma escaping through execFileSync. Sequential decode has
+ *    no seek semantics to get wrong.
+ *
+ * 2. The oracle is *relative*. Absolute PSNR is useless: our frames reach RGB
+ *    through Chromium's YUV conversion and ffmpeg's through its own, and on
+ *    testsrc2's saturated primaries that disagreement alone costs ~25dB. So we
+ *    score each render against neighbouring frames and require the exact one to
+ *    win. Colour conversion penalises every candidate equally, so the argmax
+ *    stays honest.
  *
  * Run: npm run verify:decode
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
 const OUT = join(ROOT, "tmp", "verify-decode");
+const REF = join(OUT, "ref");
 const FIXTURE = join(ROOT, "tests", "fixtures", "basic", "screen.mp4");
 const FPS = 60;
-const FRAME_MS = 1000 / FPS;
 
-/** Offsets in frames to score against. 0 must win every time. */
+/** Frame offsets to score against. 0 must win every time. */
 const NEIGHBOURS = [-3, -1, 0, 1, 3];
-// Frame-aligned times only: ffmpeg -ss rounds up at a non-boundary while we
-// floor, so a mid-frame timestamp would fail for a reason that is not a bug.
 const TIMES_MS = [0, 500, 1200, 2500, 3350, 4900];
 
 rmSync(OUT, { recursive: true, force: true });
-mkdirSync(OUT, { recursive: true });
+mkdirSync(REF, { recursive: true });
+
+// --------------------------------------------------------------- references
+
+console.log("decoding the fixture in order (no seeking)...");
+
+execFileSync(
+  "ffmpeg",
+  [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    FIXTURE,
+    "-start_number",
+    "0",
+    join(REF, "%04d.png"),
+  ],
+  { stdio: "inherit" },
+);
+
+const refPath = (frameIndex: number): string =>
+  join(REF, `${String(frameIndex).padStart(4, "0")}.png`);
+
+// ------------------------------------------------------------------ renders
 
 const specs = TIMES_MS.map((tMs) => ({
   zoom: { scale: 1, cx: 0.5, cy: 0.5 },
@@ -66,6 +97,8 @@ if (shoot.status !== 0) {
   throw new Error(`shoot failed with status ${shoot.status ?? "null"}`);
 }
 
+// ------------------------------------------------------------------ scoring
+
 /** Luma-only PSNR, which sidesteps most of the colour-matrix disagreement. */
 function psnr(a: string, b: string): number {
   const res = spawnSync(
@@ -92,36 +125,6 @@ function psnr(a: string, b: string): number {
   return match[1] === "inf" ? Number.POSITIVE_INFINITY : Number(match[1]);
 }
 
-/**
- * Extract an exact frame by index.
- *
- * Seeks to the MIDDLE of the frame's display interval rather than its
- * boundary. Seeking to a boundary rounds unpredictably — the decimal string
- * for 71/60 can land on either frame 71 or 72 — which silently made
- * neighbouring references identical and the comparison meaningless.
- */
-function extractFrame(frameIndex: number, path: string): void {
-  const midpointSec = (frameIndex + 0.5) / FPS;
-
-  execFileSync(
-    "ffmpeg",
-    [
-      "-y",
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-ss",
-      midpointSec.toFixed(6),
-      "-i",
-      FIXTURE,
-      "-frames:v",
-      "1",
-      path,
-    ],
-    { stdio: "inherit" },
-  );
-}
-
 let failures = 0;
 const rows: Array<Record<string, string | number>> = [];
 
@@ -135,10 +138,8 @@ for (const [i, tMs] of TIMES_MS.entries()) {
 
   for (const k of NEIGHBOURS) {
     const frameIndex = expectedFrame + k;
-    if (frameIndex < 0) continue;
-
-    const ref = join(OUT, `ref-${String(i).padStart(2, "0")}_n${frameIndex}.png`);
-    extractFrame(frameIndex, ref);
+    const ref = refPath(frameIndex);
+    if (frameIndex < 0 || !existsSync(ref)) continue;
 
     const db = psnr(mine, ref);
     scores[`k=${k}`] = db === Number.POSITIVE_INFINITY ? "inf" : db.toFixed(1);
@@ -169,4 +170,4 @@ if (failures > 0) {
   );
 }
 
-console.log(`all ${TIMES_MS.length} renders are the frame ffmpeg puts at that timestamp`);
+console.log(`all ${TIMES_MS.length} renders are the frame at that timestamp`);

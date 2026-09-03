@@ -1,6 +1,8 @@
 import { DataStream, MP4BoxBuffer, createFile, type Sample } from "mp4box";
 
 type IndexEntry = {
+  /** Position in decode order — the order chunks must be fed to the decoder. */
+  decodeIndex: number;
   /** Composition time in the track's own timescale. Integer, compared exactly. */
   ctsTicks: number;
   timestampUs: number;
@@ -42,7 +44,10 @@ export class VideoSource {
   private cachedFrame: VideoFrame | null = null;
 
   private constructor(
+    /** Decode order: how chunks must be fed. */
     private readonly index: IndexEntry[],
+    /** Presentation order: how timestamps are looked up. */
+    private readonly byPresentation: IndexEntry[],
     private readonly config: VideoDecoderConfig,
     private readonly timescale: number,
     readonly durationMs: number,
@@ -103,9 +108,10 @@ export class VideoSource {
 
     const timescale = first.timescale;
 
-    const index: IndexEntry[] = samples.map((s) => {
+    const index: IndexEntry[] = samples.map((s, decodeIndex) => {
       const cts = s.cts - ctsOrigin;
       return {
+        decodeIndex,
         ctsTicks: cts,
         timestampUs: Math.round((cts / s.timescale) * 1e6),
         durationUs: Math.round((s.duration / s.timescale) * 1e6),
@@ -138,29 +144,45 @@ export class VideoSource {
       `VideoSource: ${index.length} samples, ${keyframes} keyframes, codec ${codec}`,
     );
 
-    return new VideoSource(index, config, timescale, durationMs, width, height);
+    // mp4box yields samples in DECODE order, which with B-frames is not
+    // composition order. Searching for a timestamp needs a presentation-sorted
+    // view; feeding the decoder needs the decode-ordered one. Keeping only the
+    // first makes a binary search land on the right frame only by luck.
+    const byPresentation = [...index].sort((a, b) => a.ctsTicks - b.ctsTicks);
+
+    return new VideoSource(
+      index,
+      byPresentation,
+      config,
+      timescale,
+      durationMs,
+      width,
+      height,
+    );
   }
 
   /**
-   * Index of the sample *displayed* at `tMs` — the last one whose composition
-   * time is at or before it. Note this floors: at a time inside a frame's
-   * interval you get that frame, not the next one. (ffmpeg's `-ss` rounds up
-   * instead, which is why the two disagree on non-frame-aligned times.)
+   * The sample *displayed* at `tMs` — the last one whose composition time is at
+   * or before it. Note this floors: at a time inside a frame's interval you get
+   * that frame, not the next one.
    *
-   * The comparison happens in integer ticks, not float milliseconds: converting
-   * ticks to ms makes an exact frame boundary land on 1200.0000000000002, and
-   * the search then returns the previous frame.
+   * Searches the presentation-ordered view, because the decode-ordered one is
+   * not monotonic in composition time once B-frames are involved.
+   *
+   * Comparison is in integer ticks, not float milliseconds: converting ticks to
+   * ms makes an exact frame boundary land on 1200.0000000000002, and the search
+   * then returns the previous frame.
    */
-  private sampleIndexAt(tMs: number): number {
+  private sampleAt(tMs: number): IndexEntry | undefined {
     const targetTicks = Math.round((tMs * this.timescale) / 1000);
 
     let lo = 0;
-    let hi = this.index.length - 1;
+    let hi = this.byPresentation.length - 1;
     let best = 0;
 
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
-      const entry = this.index[mid];
+      const entry = this.byPresentation[mid];
       if (entry === undefined) break;
 
       if (entry.ctsTicks <= targetTicks) {
@@ -171,7 +193,7 @@ export class VideoSource {
       }
     }
 
-    return best;
+    return this.byPresentation[best];
   }
 
   private syncIndexAt(idx: number): number {
@@ -186,15 +208,15 @@ export class VideoSource {
    * and MUST be closed — a leaked frame stalls the decoder within seconds.
    */
   async frameAt(tMs: number): Promise<VideoFrame> {
-    const idx = this.sampleIndexAt(tMs);
+    const target = this.sampleAt(tMs);
+    if (target === undefined) throw new Error(`no sample at ${tMs}ms`);
 
+    const idx = target.decodeIndex;
     if (idx === this.cachedIndex && this.cachedFrame !== null) {
       return this.cachedFrame.clone();
     }
 
     const from = this.syncIndexAt(idx);
-    const target = this.index[idx];
-    if (target === undefined) throw new Error(`no sample at ${tMs}ms`);
 
     // Keep at most one frame alive. Buffering every decoded frame until after
     // flush() exhausts Chromium's frame pool and the decoder stalls forever —
