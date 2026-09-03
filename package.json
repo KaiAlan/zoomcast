@@ -1,0 +1,35 @@
+{
+  "name": "zoomcast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Windows screen recorder and editor with cursor-aware auto zoom",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fixture": "tsx tools/make-fixture.ts"
+  },
+  "dependencies": {
+    "mp4box": "^2.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.1.1",
+    "electron-vite": "^5.0.0",
+    "fast-check": "^4.9.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.0"
+  }
+}
