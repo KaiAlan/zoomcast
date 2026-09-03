@@ -2751,7 +2751,8 @@ Expose exactly the two methods above through `contextBridge`. No `ipcRenderer` l
 
 Acceptance criteria against `tests/fixtures/basic`:
 
-- Zoom keyframes appear on the timeline at roughly 400ms, 1800ms, 2000–3000ms and 3600ms — matching the fixture's clicks and typing burst.
+- The `basic` fixture yields exactly **one** zoom, in at `t≈155` and out at `t≈4005`, scale 1.176, focus near `(0.665, 0.645)`. This is correct, not a bug: `minHoldMs` 1500 means a 5-second clip cannot support more than about three zooms, and the fixture's three clicks plus typing burst all fall inside one hold window. Verified empirically at Task 9.
+- Because of that, `basic` is a poor harness for *watching the planner make decisions*. Generate a second fixture (`tests/fixtures/spread`, ~30s with clicks 4–6s apart in distinct screen regions) before tuning curves by eye. The generator already takes the event list as data; only the constants change.
 - Playback zooms in and out smoothly with no visible snapping at transition boundaries.
 - Changing `minHoldMs` in the inspector visibly changes the number of keyframes.
 - Editing a keyframe's scale marks it pinned, and a subsequent config change leaves that keyframe alone.
