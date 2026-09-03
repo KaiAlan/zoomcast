@@ -2,5 +2,25 @@
   { "zoom": { "scale": 1, "cx": 0.5, "cy": 0.5 } },
   { "zoom": { "scale": 1.176, "cx": 0.5, "cy": 0.5 } },
   { "zoom": { "scale": 2, "cx": 0.2, "cy": 0.3 } },
-  { "zoom": { "scale": 3, "cx": 0, "cy": 0.5 } }
+  { "zoom": { "scale": 3, "cx": 0, "cy": 0.5 } },
+  {
+    "zoom": { "scale": 1, "cx": 0.5, "cy": 0.5 },
+    "video": "zc://app/@fs/C:/dev/zoomcast/tests/fixtures/basic/screen.mp4",
+    "tMs": 0
+  },
+  {
+    "zoom": { "scale": 1, "cx": 0.5, "cy": 0.5 },
+    "video": "zc://app/@fs/C:/dev/zoomcast/tests/fixtures/basic/screen.mp4",
+    "tMs": 2500
+  },
+  {
+    "zoom": { "scale": 1, "cx": 0.5, "cy": 0.5 },
+    "video": "zc://app/@fs/C:/dev/zoomcast/tests/fixtures/basic/screen.mp4",
+    "tMs": 4900
+  },
+  {
+    "zoom": { "scale": 1.6, "cx": 0.25, "cy": 0.25 },
+    "video": "zc://app/@fs/C:/dev/zoomcast/tests/fixtures/basic/screen.mp4",
+    "tMs": 1200
+  }
 ]

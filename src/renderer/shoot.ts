@@ -3,6 +3,7 @@ import type { StyleConfig } from "../shared/project/types";
 import type { ZoomState } from "../shared/zoom/interpolate";
 import type { Size } from "../shared/zoom/types";
 import { Renderer } from "./gl/Renderer";
+import { VideoSource } from "./media/VideoSource";
 
 export type ShotSpec = {
   zoom: ZoomState;
@@ -11,6 +12,10 @@ export type ShotSpec = {
   style?: Partial<StyleConfig>;
   /** Which built-in test image to composite. */
   image?: "grid" | "solid";
+  /** Decode this mp4 instead of drawing a test image. */
+  video?: string;
+  /** Source time to decode, in ms. */
+  tMs?: number;
 };
 
 declare global {
@@ -76,21 +81,42 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
   const renderer = new Renderer(canvas);
   const baseStyle = defaultProject("shoot").style;
 
+  const sources = new Map<string, VideoSource>();
+
   window.__shoot = async (spec: ShotSpec): Promise<string> => {
     const outputSize = spec.outputSize ?? { w: 1280, h: 720 };
-    const sourceSize = spec.sourceSize ?? { w: 1920, h: 1080 };
     const style: StyleConfig = { ...baseStyle, ...spec.style };
 
-    const image = makeTestImage(sourceSize, spec.image ?? "grid");
+    let screen: TexImageSource;
+    let sourceSize: Size;
+    let frame: VideoFrame | null = null;
 
-    renderer.drawFrame({
-      screen: image,
-      zoom: spec.zoom,
-      style,
-      outputSize,
-      sourceSize,
-    });
+    if (spec.video !== undefined) {
+      let source = sources.get(spec.video);
+      if (source === undefined) {
+        source = await VideoSource.open(spec.video);
+        sources.set(spec.video, source);
+      }
 
-    return Promise.resolve(canvas.toDataURL("image/png"));
+      frame = await source.frameAt(spec.tMs ?? 0);
+      screen = frame;
+      sourceSize = { w: source.width, h: source.height };
+    } else {
+      sourceSize = spec.sourceSize ?? { w: 1920, h: 1080 };
+      screen = makeTestImage(sourceSize, spec.image ?? "grid");
+    }
+
+    try {
+      renderer.drawFrame({
+        screen,
+        zoom: spec.zoom,
+        style,
+        outputSize,
+        sourceSize,
+      });
+      return canvas.toDataURL("image/png");
+    } finally {
+      frame?.close();
+    }
   };
 }

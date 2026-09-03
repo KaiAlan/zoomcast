@@ -1,0 +1,9 @@
+[
+  {
+    "zoom": { "scale": 1, "cx": 0.5, "cy": 0.5 },
+    "outputSize": { "w": 1920, "h": 1080 },
+    "style": { "paddingFactor": 1, "cornerRadiusPx": 0, "shadow": { "blurPx": 0, "opacity": 0, "offsetYPx": 0 } },
+    "video": "zc://app/@fs/C:/dev/zoomcast/tests/fixtures/basic/screen.mp4",
+    "tMs": 2500
+  }
+]

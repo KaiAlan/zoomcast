@@ -1,9 +1,49 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, net, protocol } from "electron";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, normalize } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Recording bundles live outside the app directory and the renderer cannot
+ * fetch file:// URLs, so media is served over a private scheme:
+ *   zc://local/C:/path/to/screen.mp4
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "zc",
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+]);
+
+const RENDERER_DIR = join(here, "../renderer");
+const FS_PREFIX = "/@fs/";
+
+/**
+ * The app is served from zc://app so that recording bundles, which live
+ * anywhere on disk, are same-origin with the page. A file:// page cannot fetch
+ * a custom scheme at all — Chromium rejects the request before it reaches the
+ * handler — so serving the renderer over zc:// too is what makes bundle media
+ * loadable without disabling web security.
+ */
+function registerBundleProtocol(): void {
+  protocol.handle("zc", async (request) => {
+    const url = new URL(request.url);
+    const pathname = decodeURIComponent(url.pathname);
+
+    const filePath = pathname.startsWith(FS_PREFIX)
+      ? normalize(pathname.slice(FS_PREFIX.length))
+      : join(RENDERER_DIR, normalize(pathname.replace(/^\//, "")) || "index.html");
+
+    try {
+      return await net.fetch(pathToFileURL(filePath).toString());
+    } catch (err) {
+      console.error(`zc:// failed for ${filePath}:`, err);
+      return new Response(`not found: ${filePath}`, { status: 404 });
+    }
+  });
+}
 
 function createWindow(show = true): BrowserWindow {
   const win = new BrowserWindow({
@@ -19,11 +59,7 @@ function createWindow(show = true): BrowserWindow {
   });
 
   const devUrl = process.env.ELECTRON_RENDERER_URL;
-  if (devUrl !== undefined) {
-    void win.loadURL(devUrl);
-  } else {
-    void win.loadFile(join(here, "../renderer/index.html"));
-  }
+  void win.loadURL(devUrl ?? "zc://app/index.html");
 
   return win;
 }
@@ -67,6 +103,8 @@ async function runShoot(): Promise<void> {
 }
 
 void app.whenReady().then(async () => {
+  registerBundleProtocol();
+
   if (process.env.ZOOMCAST_SHOOT !== undefined) {
     try {
       await runShoot();
