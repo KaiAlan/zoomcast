@@ -1,0 +1,84 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { planExportFrames } from "../../src/shared/export/exportPlan";
+import type { ExportArgsOptions } from "../../src/shared/export/ffmpegArgs";
+import { runExport } from "../../src/main/exportRunner";
+
+const FIXTURE = join(process.cwd(), "tests", "fixtures", "basic");
+const TMP = join(process.cwd(), "tmp");
+const OUT = join(TMP, "e2e-export.mp4");
+
+const probe = (
+  file: string,
+  entries: string,
+  stream: string,
+  countFrames = false,
+): string =>
+  execFileSync(
+    "ffprobe",
+    [
+      "-v",
+      "error",
+      ...(countFrames ? ["-count_frames"] : []),
+      "-select_streams",
+      stream,
+      "-show_entries",
+      entries,
+      "-of",
+      "csv=p=0",
+      file,
+    ],
+    { encoding: "utf8" },
+  ).trim();
+
+describe("export end to end", () => {
+  it("produces a playable mp4 with video and mixed, cut-aware audio", async () => {
+    mkdirSync(TMP, { recursive: true });
+    rmSync(OUT, { force: true });
+
+    const durationMs = 5000;
+    const cuts = [{ startMs: 1000, endMs: 2000 }];
+    const fps = 30;
+    const width = 320;
+    const height = 180;
+
+    const frames = planExportFrames(durationMs, cuts, fps);
+
+    const opts: ExportArgsOptions = {
+      width,
+      height,
+      fps,
+      bitrateMbps: 2,
+      encoder: "libx264",
+      durationMs,
+      cuts,
+      audio: [
+        { file: join(FIXTURE, "mic.webm"), gainDb: 0, startOffsetMs: 142 },
+        { file: join(FIXTURE, "system.webm"), gainDb: -6, startOffsetMs: 138 },
+      ],
+      syncNudgeMs: 0,
+      outFile: OUT,
+    };
+
+    await runExport(opts, frames, (frame) => {
+      // a brightness ramp keyed off the frame index, so the file is not blank
+      const buf = new Uint8Array(width * height * 4);
+      buf.fill(Math.floor((frame.index / Math.max(frames.length, 1)) * 255));
+      return Promise.resolve(buf);
+    });
+
+    expect(existsSync(OUT)).toBe(true);
+
+    // 5000ms minus a 1000ms cut = 4000ms at 30fps = 120 frames
+    expect(frames).toHaveLength(120);
+    expect(Number(probe(OUT, "stream=nb_read_frames", "v:0", true))).toBe(120);
+
+    const duration = Number(probe(OUT, "format=duration", "v:0"));
+    expect(duration).toBeGreaterThan(3.8);
+    expect(duration).toBeLessThan(4.3);
+
+    expect(probe(OUT, "stream=codec_name", "a:0")).toBe("aac");
+  }, 120_000);
+});
