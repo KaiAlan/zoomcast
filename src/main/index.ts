@@ -2,6 +2,8 @@ import { app, BrowserWindow, Menu, net, protocol } from "electron";
 import { registerIpc } from "./ipc";
 import { abortRecording } from "./capture/SessionController";
 import { registerRecordingControls, teardownRecordingControls } from "./recording";
+import { registerDisplayMediaHandler } from "./capture/AudioRecorder";
+import { preloadPath, rendererUrl } from "./windows";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -80,7 +82,7 @@ function createWindow(show = true, route = ""): BrowserWindow {
     show,
     backgroundColor: "#0d0e11",
     webPreferences: {
-      preload: join(here, "../preload/index.mjs"),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
       // Electron only loads an ESM (.mjs) preload with the sandbox disabled.
@@ -90,8 +92,7 @@ function createWindow(show = true, route = ""): BrowserWindow {
     },
   });
 
-  const devUrl = process.env.ELECTRON_RENDERER_URL;
-  void win.loadURL(devUrl === undefined ? `zc://app/index.html${route}` : `${devUrl}${route}`);
+  void win.loadURL(rendererUrl(route));
 
   return win;
 }
@@ -245,6 +246,7 @@ void app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
 
   registerBundleProtocol();
+  registerDisplayMediaHandler();
   registerIpc();
 
   if (process.env.ZOOMCAST_PARITY !== undefined) {

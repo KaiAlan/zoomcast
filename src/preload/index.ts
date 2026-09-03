@@ -22,6 +22,9 @@ const api: ZoomcastApi = {
   saveProject: (dir: string, project: Project) =>
     ipcRenderer.invoke("bundle:save", dir, project) as Promise<void>,
 
+  audioChunk: (role: "mic" | "system", chunk: Uint8Array) =>
+    ipcRenderer.invoke("audio:chunk", role, chunk) as Promise<void>,
+
   listRecordings: () =>
     ipcRenderer.invoke("recording:list") as Promise<RecordingSummary[]>,
   toggleRecording: () => ipcRenderer.invoke("recording:toggle") as Promise<void>,

@@ -51,6 +51,9 @@ export type ZoomcastApi = {
   openBundle: (dir: string) => Promise<OpenedBundle>;
   saveProject: (dir: string, project: Project) => Promise<void>;
 
+  /** Used only by the hidden audio-capture renderer. */
+  audioChunk: (role: "mic" | "system", chunk: Uint8Array) => Promise<void>;
+
   listRecordings: () => Promise<RecordingSummary[]>;
   toggleRecording: () => Promise<void>;
   isRecording: () => Promise<boolean>;

@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Manifest } from "../../shared/bundle/manifest";
 import { pickEncoder } from "../ffmpeg";
+import { logDiag } from "../log";
+import { AudioRecorder, type AudioRole, type AudioTrackResult } from "./AudioRecorder";
 import {
   type CaptureBackend,
   probeBackend,
@@ -38,6 +40,8 @@ type Active = {
   dir: string;
   screenSource: ScreenSource;
   telemetry: TelemetryRecorder;
+  audio: AudioRecorder | null;
+  audioStarted: Array<{ role: AudioRole; startedAtUnixMs: number }>;
   clockBaseMs: number;
   backend: CaptureBackend;
   requestedFps: number;
@@ -54,11 +58,15 @@ export function isRecording(): boolean {
 /**
  * Begin recording.
  *
- * Order matters: the screen capture is started first and awaited until it
- * reports a frame, and only then does telemetry begin, with that instant as the
- * clock base. That makes `video.startOffsetMs` zero by construction rather than
- * something to measure and compensate for later. The cost is losing telemetry
- * from the first few hundred milliseconds, which is countdown time anyway.
+ * Order matters. Audio starts first, because device warm-up costs a few hundred
+ * milliseconds and starting it later would clip the head of every take. Then
+ * the screen capture starts and is awaited until it reports a frame, and that
+ * instant becomes the clock base — which makes `video.startOffsetMs` zero by
+ * construction rather than something to measure and correct later. Telemetry
+ * starts last, against the same base.
+ *
+ * Audio therefore has negative offsets, which is the convention
+ * `toStreamLocalMs` already uses and which ffmpeg's `-itsoffset` accepts.
  */
 export async function startRecording(): Promise<void> {
   if (active !== null) throw new Error("already recording");
@@ -75,6 +83,22 @@ export async function startRecording(): Promise<void> {
   const backend = cachedBackend;
   const requestedFps = backend === "ddagrab" ? DDAGRAB_FPS : GDIGRAB_FPS;
 
+  // Audio first: device warm-up costs a few hundred milliseconds, and starting
+  // it after the screen would silently clip the head of every take. Starting it
+  // earlier makes its offsets negative, which is the same convention
+  // toStreamLocalMs uses and which -itsoffset accepts directly.
+  let audio: AudioRecorder | null = null;
+  let audioStarted: Array<{ role: AudioRole; startedAtUnixMs: number }> = [];
+
+  try {
+    audio = await AudioRecorder.open(dir);
+    audioStarted = await audio.start(["mic", "system"]);
+  } catch (err) {
+    logDiag("audio:start", err);
+    audio = null;
+    audioStarted = [];
+  }
+
   const screenSource = await ScreenSource.start(backend, {
     outFile: join(dir, "screen.mp4"),
     fps: requestedFps,
@@ -87,7 +111,17 @@ export async function startRecording(): Promise<void> {
   const clockBaseMs = screenSource.startedAtUnixMs;
   const telemetry = TelemetryRecorder.start(join(dir, "input.jsonl"), clockBaseMs);
 
-  active = { id, dir, screenSource, telemetry, clockBaseMs, backend, requestedFps };
+  active = {
+    id,
+    dir,
+    screenSource,
+    telemetry,
+    audio,
+    audioStarted,
+    clockBaseMs,
+    backend,
+    requestedFps,
+  };
   void display;
 }
 
@@ -98,6 +132,15 @@ export async function stopRecording(): Promise<RecordingResult> {
 
   await session.telemetry.stop();
   await session.screenSource.stop();
+
+  let audioTracks: AudioTrackResult[] = [];
+  if (session.audio !== null) {
+    try {
+      audioTracks = await session.audio.stop(session.clockBaseMs, session.audioStarted);
+    } catch (err) {
+      logDiag("audio:stop", err);
+    }
+  }
 
   const display = screen.getPrimaryDisplay();
   const recorded = await probeRecording(join(session.dir, "screen.mp4"));
@@ -133,7 +176,12 @@ export async function stopRecording(): Promise<RecordingResult> {
       drawMouse: false,
       startOffsetMs: 0,
     },
-    audio: [],
+    audio: audioTracks.map((track) => ({
+      role: track.role,
+      file: track.file,
+      codec: "opus",
+      startOffsetMs: track.startOffsetMs,
+    })),
     telemetry: { file: "input.jsonl", hasCursorShapes: false },
   };
 

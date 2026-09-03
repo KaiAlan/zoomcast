@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpenedBundle } from "../shared/api";
+import { installAudioHooks } from "./audio";
 import { installShootHook } from "./shoot";
 import { Editor } from "./ui/Editor";
 import { Welcome } from "./ui/Welcome";
@@ -21,6 +22,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
 
   const isShoot = window.location.hash === "#shoot";
+  const isAudio = window.location.hash === "#audio";
+
+  // The hidden audio-capture window renders nothing; it only exposes hooks.
+  useEffect(() => {
+    if (isAudio) installAudioHooks();
+  }, [isAudio]);
 
   const open = useCallback(async (dir: string) => {
     try {
@@ -38,6 +45,7 @@ export function App() {
     if (dir !== null) void open(dir);
   }, [isShoot, open]);
 
+  if (isAudio) return null;
   if (isShoot) return <ShootHarness />;
   if (bundle !== null) return <Editor bundle={bundle} />;
 

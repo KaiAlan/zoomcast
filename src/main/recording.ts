@@ -9,6 +9,7 @@ import {
   startRecording,
   stopRecording,
 } from "./capture/SessionController";
+import { logDiag } from "./log";
 import { runCountdown, showRecordingBorder } from "./overlays";
 
 export const RECORD_HOTKEY = "CommandOrControl+Shift+R";
@@ -85,7 +86,7 @@ export async function toggleRecording(): Promise<void> {
     border = null;
     updateTray();
     const message = err instanceof Error ? err.message : String(err);
-    console.error("recording failed:", message);
+    logDiag("recording", message);
     broadcast("recording:error", message);
   } finally {
     busy = false;
@@ -154,7 +155,7 @@ export function registerRecordingControls(): void {
     tray = new Tray(trayIcon());
     updateTray();
   } catch (err) {
-    console.error("tray unavailable:", err);
+    logDiag("tray", err);
     tray = null;
   }
 
