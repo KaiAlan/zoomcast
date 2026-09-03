@@ -18,3 +18,6 @@ tmp/
 # test fixtures are checked in deliberately; see docs/specs
 !tests/fixtures/**/*.mp4
 !tests/fixtures/**/*.webm
+
+# generated on demand: npm run fixture -- spread
+tests/fixtures/spread/

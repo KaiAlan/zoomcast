@@ -3,12 +3,60 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TelemetryEvent } from "../src/shared/bundle/types";
 
-const OUT = join(process.cwd(), "tests", "fixtures", "basic");
-const DURATION_S = 5;
 const FPS = 60;
 const W = 1920;
 const H = 1080;
 
+type Preset = {
+  name: string;
+  durationS: number;
+  /** [timeMs, x, y, typingKeystrokes] */
+  clicks: Array<[number, number, number, number]>;
+};
+
+/**
+ * `basic` is the committed 5s fixture the tests rely on — small, fast, and
+ * deliberately unchanged.
+ *
+ * `spread` exists to judge how the planner *feels*. At default settings a 5s
+ * clip can only ever justify one zoom (minHoldMs is 1500), so `basic` says
+ * nothing about pacing. `spread` puts six well-separated points of attention in
+ * distinct screen regions, which is what a real walkthrough looks like.
+ */
+const PRESETS: Record<string, Preset> = {
+  basic: {
+    name: "basic",
+    durationS: 5,
+    clicks: [
+      [400, 300, 250, 0],
+      [1800, 1500, 800, 12],
+      [3600, 960, 540, 0],
+    ],
+  },
+  spread: {
+    name: "spread",
+    durationS: 30,
+    clicks: [
+      [1500, 300, 250, 0],
+      [6000, 1600, 850, 14],
+      [11000, 960, 540, 0],
+      [16000, 350, 820, 10],
+      [21500, 1500, 260, 0],
+      [26500, 900, 160, 8],
+    ],
+  },
+};
+
+const presetName = process.argv[2] ?? "basic";
+const preset = PRESETS[presetName];
+
+if (preset === undefined) {
+  throw new Error(
+    `unknown preset "${presetName}" — expected one of ${Object.keys(PRESETS).join(", ")}`,
+  );
+}
+
+const OUT = join(process.cwd(), "tests", "fixtures", preset.name);
 mkdirSync(OUT, { recursive: true });
 
 const ff = (args: string[]): void => {
@@ -17,10 +65,12 @@ const ff = (args: string[]): void => {
   });
 };
 
-// 5s 1080p60 test pattern, GOP 30 — matches the capture settings in spec §5
+console.log(`generating "${preset.name}" (${preset.durationS}s)…`);
+
+// Test pattern matching the capture settings in spec §5
 ff([
   "-f", "lavfi",
-  "-i", `testsrc2=size=${W}x${H}:rate=${FPS}:duration=${DURATION_S}`,
+  "-i", `testsrc2=size=${W}x${H}:rate=${FPS}:duration=${preset.durationS}`,
   "-c:v", "libx264",
   "-preset", "veryfast",
   "-crf", "20",
@@ -38,44 +88,40 @@ for (const [file, freq] of [
 ] as const) {
   ff([
     "-f", "lavfi",
-    "-i", `sine=frequency=${freq}:duration=${DURATION_S}`,
+    "-i", `sine=frequency=${freq}:duration=${preset.durationS}`,
     "-c:a", "libopus",
     "-b:a", "96k",
     join(OUT, file),
   ]);
 }
 
-// Telemetry: three clicks at distinct points, with a typing burst after the second
 const events: TelemetryEvent[] = [];
 
-const click = (t: number, x: number, y: number): void => {
+for (const [t, x, y, keystrokes] of preset.clicks) {
   events.push({ t, k: "move", x, y });
   events.push({ t: t + 5, k: "down", x, y, b: 1 });
   events.push({ t: t + 60, k: "up", x, y, b: 1 });
-};
 
-click(400, 300, 250);
-click(1800, 1500, 800);
-for (let i = 0; i < 12; i++) {
-  events.push({ t: 2000 + i * 90, k: "key", d: "down", c: "KeyA" });
+  for (let i = 0; i < keystrokes; i++) {
+    events.push({ t: t + 200 + i * 90, k: "key", d: "down", c: "KeyA" });
+  }
 }
-click(3600, 960, 540);
 
 events.sort((a, b) => a.t - b.t);
 
 writeFileSync(
   join(OUT, "input.jsonl"),
-  events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+  `${events.map((e) => JSON.stringify(e)).join("\n")}\n`,
   "utf8",
 );
 
 const manifest = {
   version: 1,
-  id: "fixture-basic",
+  id: `fixture-${preset.name}`,
   createdAt: new Date(0).toISOString(),
   clockBaseUnixMs: 0,
   status: "clean",
-  durationMs: DURATION_S * 1000,
+  durationMs: preset.durationS * 1000,
   display: {
     adapter: "fixture",
     outputIdx: 0,

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, net, protocol } from "electron";
+import { app, BrowserWindow, Menu, net, protocol } from "electron";
 import { registerIpc } from "./ipc";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
@@ -187,6 +187,9 @@ async function runParity(): Promise<void> {
 }
 
 void app.whenReady().then(async () => {
+  // Single-purpose tool: the default File/Edit/View/Window menu is noise.
+  Menu.setApplicationMenu(null);
+
   registerBundleProtocol();
   registerIpc();
 
