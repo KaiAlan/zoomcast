@@ -2,16 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpenedBundle } from "../shared/api";
 import { installShootHook } from "./shoot";
 import { Editor } from "./ui/Editor";
-
-const button: React.CSSProperties = {
-  background: "#1c2029",
-  color: "#e6e6e6",
-  border: "1px solid #2a2e38",
-  borderRadius: 5,
-  padding: "8px 16px",
-  cursor: "pointer",
-  fontSize: 13,
-};
+import { Welcome } from "./ui/Welcome";
 
 /** The headless screenshot harness, used by tools/verify-decode.ts. */
 function ShootHarness() {
@@ -23,35 +14,6 @@ function ShootHarness() {
   }, []);
 
   return <canvas ref={canvasRef} width={1280} height={720} />;
-}
-
-function Welcome({ onOpen, error }: { onOpen: () => void; error: string | null }) {
-  return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 16,
-        background: "#0d0e11",
-        color: "#e6e6e6",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      <div style={{ fontSize: 20 }}>zoomcast</div>
-      <div style={{ fontSize: 13, opacity: 0.55 }}>open a recording bundle to edit</div>
-      <button type="button" style={button} onClick={onOpen}>
-        open bundle…
-      </button>
-      {error !== null && (
-        <div style={{ fontSize: 12, color: "#e0894a", maxWidth: 520, textAlign: "center" }}>
-          {error}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function App() {
@@ -79,15 +41,5 @@ export function App() {
   if (isShoot) return <ShootHarness />;
   if (bundle !== null) return <Editor bundle={bundle} />;
 
-  return (
-    <Welcome
-      error={error}
-      onOpen={() => {
-        void (async () => {
-          const dir = await window.zoomcast.pickBundle();
-          if (dir !== null) await open(dir);
-        })();
-      }}
-    />
-  );
+  return <Welcome error={error} onOpen={(dir) => void open(dir)} />;
 }

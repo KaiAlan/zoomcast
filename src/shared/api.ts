@@ -17,6 +17,27 @@ export type OpenedBundle = {
   media: BundleMedia;
 };
 
+export type RecordingSummary = {
+  id: string;
+  dir: string;
+  sizeBytes: number;
+};
+
+export type RecordingResult = {
+  dir: string;
+  backend: "ddagrab" | "gdigrab";
+  durationMs: number;
+  unclean: boolean;
+};
+
+/** Push events the main process sends while recording. */
+export type RecordingEvents = {
+  onCountdown: (fn: () => void) => () => void;
+  onStarted: (fn: () => void) => () => void;
+  onStopped: (fn: (result: RecordingResult) => void) => () => void;
+  onError: (fn: (message: string) => void) => () => void;
+};
+
 export type ExportStartOptions = Omit<ExportArgsOptions, "outFile"> & {
   outFile: string;
 };
@@ -29,6 +50,11 @@ export type ZoomcastApi = {
   pickBundle: () => Promise<string | null>;
   openBundle: (dir: string) => Promise<OpenedBundle>;
   saveProject: (dir: string, project: Project) => Promise<void>;
+
+  listRecordings: () => Promise<RecordingSummary[]>;
+  toggleRecording: () => Promise<void>;
+  isRecording: () => Promise<boolean>;
+  recording: RecordingEvents;
 
   pickExportTarget: (suggested: string) => Promise<string | null>;
   /** Starts ffmpeg and returns a session id to push frames into. */

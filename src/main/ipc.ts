@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import type { ExportStartOptions } from "../shared/api";
 import type { Project } from "../shared/project/types";
 import { openBundle, saveProject } from "./bundleIo";
+import { isRecording } from "./capture/SessionController";
 import { ExportSession } from "./exportRunner";
+import { listRecordings, toggleRecording } from "./recording";
 
 const sessions = new Map<string, ExportSession>();
 
@@ -23,6 +25,10 @@ export function registerIpc(): void {
   ipcMain.handle("bundle:save", (_event, dir: string, project: Project) => {
     saveProject(dir, project);
   });
+
+  ipcMain.handle("recording:list", () => listRecordings());
+  ipcMain.handle("recording:toggle", () => toggleRecording());
+  ipcMain.handle("recording:isActive", () => isRecording());
 
   ipcMain.handle("export:pick", async (_event, suggested: string) => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];

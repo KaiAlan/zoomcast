@@ -19,6 +19,7 @@
     "mp4box": "^2.4.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "uiohook-napi": "^1.5.5",
     "zod": "^4.5.4"
   },
   "devDependencies": {

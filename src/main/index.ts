@@ -1,10 +1,29 @@
 import { app, BrowserWindow, Menu, net, protocol } from "electron";
 import { registerIpc } from "./ipc";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { abortRecording } from "./capture/SessionController";
+import { registerRecordingControls, teardownRecordingControls } from "./recording";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** Electron's main-process stdout does not reach the launching shell on
+ *  Windows, so anything fatal goes to a file we can actually read. */
+function logFatal(where: string, err: unknown): void {
+  const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  try {
+    const file = join(app.getPath("userData"), "main-error.log");
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, `[${new Date().toISOString()}] ${where}: ${message}\n`, "utf8");
+  } catch {
+    // Nothing sensible left to do.
+  }
+  console.error(where, message);
+}
+
+process.on("uncaughtException", (err) => logFatal("uncaughtException", err));
+process.on("unhandledRejection", (err) => logFatal("unhandledRejection", err));
 
 /**
  * Recording bundles live outside the app directory and the renderer cannot
@@ -186,6 +205,41 @@ async function runParity(): Promise<void> {
   app.quit();
 }
 
+/**
+ * Record for a few seconds and write the outcome to a file, so capture can be
+ * exercised without a person clicking. Electron's main-process stdout does not
+ * reach the launching shell on Windows, hence the file.
+ *
+ * Driven by ZOOMCAST_RECORD_TEST=<seconds>, result at tmp/record-test.json.
+ */
+async function runRecordTest(): Promise<void> {
+  const seconds = Number(process.env.ZOOMCAST_RECORD_TEST ?? "4");
+  const resultFile = join(app.getPath("userData"), "record-test.json");
+  mkdirSync(dirname(resultFile), { recursive: true });
+
+  const write = (payload: unknown): void => {
+    writeFileSync(resultFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  };
+
+  const { startRecording, stopRecording } = await import("./capture/SessionController");
+  const { runCountdown, showRecordingBorder } = await import("./overlays");
+
+  try {
+    await runCountdown(1);
+    await startRecording();
+
+    const border = showRecordingBorder();
+    await new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000));
+    border.destroy();
+
+    write({ ok: true, ...(await stopRecording()) });
+  } catch (err) {
+    write({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+
+  app.quit();
+}
+
 void app.whenReady().then(async () => {
   // Single-purpose tool: the default File/Edit/View/Window menu is noise.
   Menu.setApplicationMenu(null);
@@ -226,12 +280,46 @@ void app.whenReady().then(async () => {
     return;
   }
 
+  try {
+    registerRecordingControls();
+  } catch (err) {
+    logFatal("registerRecordingControls", err);
+  }
+
+  if (process.env.ZOOMCAST_RECORD_TEST !== undefined) {
+    try {
+      await runRecordTest();
+    } catch (err) {
+      console.error("record test failed:", err);
+      process.exitCode = 1;
+      app.quit();
+    }
+    return;
+  }
+
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
+app.on("will-quit", () => {
+  teardownRecordingControls();
+});
+
+app.on("before-quit", (event) => {
+  // Finish the take rather than leaving a bundle with no manifest.
+  event.preventDefault();
+  void abortRecording().finally(() => {
+    app.exit(0);
+  });
+});
+
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  // Deliberately does NOT quit. This is a tray app with a global hotkey: it has
+  // to keep running with no windows open, and closing the editor mid-take must
+  // not kill the recording. Quitting is explicit, from the tray menu.
+  //
+  // Without this, destroying the countdown overlay — briefly the only window —
+  // ends the app before recording even starts.
 });
