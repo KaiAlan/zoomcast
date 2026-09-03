@@ -459,6 +459,7 @@ frames when something looks wrong.
 | Webcam device busy | Recording proceeds without webcam; manifest omits the track |
 | Export fails | Partial output deleted; the underlying ffmpeg stderr surfaced verbatim, not summarised |
 | Disk below 5GB free | Recording refuses to start with the free-space figure |
+| ffmpeg missing, too old, or lacking `ddagrab` | Recording refuses to start, naming the resolved binary path and what it lacks |
 
 Capture degrades rather than aborts. A recording missing its webcam is far
 better than a recording that did not happen.
@@ -488,7 +489,7 @@ which front-loads the interesting work and defers the platform-specific risk.
 
 | # | Phase | Outcome |
 | --- | --- | --- |
-| 0 | Scaffold | Electron + Vite + TypeScript, main/preload/renderer split, ffmpeg vendored, encoder probe |
+| 0 | Scaffold | Electron + Vite + TypeScript, main/preload/renderer split, ffmpeg discovery, encoder probe |
 | 1 | Bundle format + fixture generator | Synthesise a valid bundle from a test pattern and generated telemetry; unblocks everything below without capture |
 | 2 | Renderer + preview | mp4box + WebCodecs decode, WebGL2 renderer, styled frame, scrubbing over a fixture bundle |
 | 3 | Zoom planner | Pure module, golden tests, config panel, live re-plan |
@@ -504,11 +505,23 @@ which front-loads the interesting work and defers the platform-specific risk.
 | Package | Purpose |
 | --- | --- |
 | `electron`, `vite`, `typescript`, `react` | Shell, build, UI |
-| ffmpeg (vendored binary, 6.0+) | Capture encode and export encode/mux; `ddagrab` requires 6.0+ |
+| ffmpeg (system, 6.0+ required) | Capture encode and export encode/mux; `ddagrab` requires 6.0+ |
 | `uiohook-napi` | Global mouse and keyboard hooks |
 | `mp4box.js` | MP4 demuxing for WebCodecs |
 | `koffi` | FFI to `user32!GetCursorInfo` (phase 9 only) |
-| `vitest` | Tests |
+| `vitest`, `fast-check` | Unit and property tests |
+| `zod` | Manifest and project-file validation |
+
+### ffmpeg resolution
+
+ffmpeg is **not vendored**. The target machine already has ffmpeg 9.0.1
+(winget, `Gyan.FFmpeg`) on PATH, verified to provide `ddagrab`, `h264_amf`,
+`h264_nvenc` and `libx264`. Vendoring a ~100MB binary into a single-user repo
+buys nothing.
+
+Resolution order at startup: the `ffmpegPath` setting, then a PATH lookup. On
+first run the app verifies the resolved binary reports `ddagrab` among its
+filters, and refuses to record otherwise, naming the path it resolved.
 
 ## 17. Storage
 
