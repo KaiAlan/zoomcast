@@ -6,11 +6,22 @@ export type Background =
   | { kind: "solid"; color: string }
   | { kind: "gradient"; from: string; to: string; angle: number };
 
+export type CursorStyle = {
+  visible: boolean;
+  /** 100 = the shape's natural size at 1x zoom. */
+  sizePct: number;
+  /** 0 = raw telemetry, 1 = heavily damped. */
+  smoothing: number;
+  shadow: boolean;
+  ripples: boolean;
+};
+
 export type StyleConfig = {
   paddingFactor: number;
   cornerRadiusPx: number;
   shadow: { blurPx: number; opacity: number; offsetYPx: number };
   background: Background;
+  cursor: CursorStyle;
 };
 
 export type WebcamConfig = {

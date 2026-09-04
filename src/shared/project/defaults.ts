@@ -12,6 +12,13 @@ export function defaultProject(bundleId: string): Project {
       cornerRadiusPx: 12,
       shadow: { blurPx: 48, opacity: 0.35, offsetYPx: 16 },
       background: { kind: "gradient", from: "#1b1d23", to: "#0d0e11", angle: 135 },
+      cursor: {
+        visible: true,
+        sizePct: 100,
+        smoothing: 0.8,
+        shadow: true,
+        ripples: true,
+      },
     },
     webcam: {
       visible: true,
