@@ -20,6 +20,7 @@
     "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
+    "koffi": "^3.2.1",
     "mp4box": "^2.4.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
