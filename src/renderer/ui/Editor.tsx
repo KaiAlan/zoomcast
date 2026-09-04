@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
-import { ripplesAt } from "../../shared/cursor/ripples";
+import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
@@ -74,9 +74,17 @@ export function Editor({
     [bundle.telemetry, project.style.cursor.smoothing],
   );
 
+  // ripplesAt only ever looks at "down" events, but the full telemetry stream
+  // is dominated by "move" samples. Filtering once here keeps the per-frame
+  // scan (in both preview and export) bounded by click count, not move count.
+  const clicks = useMemo(
+    () => bundle.telemetry.filter((e) => e.k === "down"),
+    [bundle.telemetry],
+  );
+
   // Latest values for the render loop, which must not be re-created per frame.
-  const live = useRef({ project, ctx, cursorPath });
-  live.current = { project, ctx, cursorPath };
+  const live = useRef({ project, ctx, cursorPath, clicks });
+  live.current = { project, ctx, cursorPath, clicks };
 
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
@@ -110,7 +118,7 @@ export function Editor({
       const source = sourceRef.current;
       if (source === null || disposed) return;
 
-      const { project: p, ctx: c, cursorPath } = live.current;
+      const { project: p, ctx: c, cursorPath, clicks } = live.current;
       const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
       const sample = cursorAt(cursorPath, tSource);
 
@@ -123,7 +131,7 @@ export function Editor({
           outputSize: c.output,
           sourceSize: c.source,
           cursor: sample === null ? undefined : { sample, style: p.style.cursor },
-          ripples: ripplesAt(bundle.telemetry, tSource, 450),
+          ripples: ripplesAt(clicks, tSource, RIPPLE_DURATION_MS),
         });
       } finally {
         frame.close();

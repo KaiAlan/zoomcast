@@ -3,7 +3,7 @@ import type { Manifest } from "../../shared/bundle/manifest";
 import type { TelemetryEvent } from "../../shared/bundle/types";
 import type { CursorPath } from "../../shared/cursor/path";
 import { cursorAt } from "../../shared/cursor/path";
-import { ripplesAt } from "../../shared/cursor/ripples";
+import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
 import type { AudioInput } from "../../shared/export/ffmpegArgs";
 import type { Project } from "../../shared/project/types";
@@ -48,6 +48,11 @@ export async function exportClip(opts: {
     project.output.fps,
   );
 
+  // ripplesAt only looks at "down" events; filtering once here keeps the
+  // per-frame scan bounded by click count instead of rescanning the full
+  // (move-dominated) telemetry stream on every one of `frames.length` frames.
+  const clicks = telemetry.filter((e) => e.k === "down");
+
   const audio: AudioInput[] = manifest.audio.map((track) => ({
     file: `${opts.mediaDir}/${track.file}`,
     gainDb: track.role === "mic" ? project.audio.micGainDb : project.audio.systemGainDb,
@@ -89,7 +94,7 @@ export async function exportClip(opts: {
           outputSize: output,
           sourceSize,
           cursor: sample === null ? undefined : { sample, style: project.style.cursor },
-          ripples: ripplesAt(telemetry, frame.tSourceMs, 450),
+          ripples: ripplesAt(clicks, frame.tSourceMs, RIPPLE_DURATION_MS),
         });
       } finally {
         videoFrame.close();

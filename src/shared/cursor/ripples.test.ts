@@ -26,6 +26,10 @@ describe("ripplesAt", () => {
     expect(ripplesAt(clicks, 1500, 400)).toEqual([]);
   });
 
+  it("drops the ripple exactly at the duration boundary (age === durationMs)", () => {
+    expect(ripplesAt(clicks, 1400, 400)).toEqual([]);
+  });
+
   it("ignores clicks in the future", () => {
     expect(ripplesAt(clicks, 1200, 400)).toHaveLength(1);
   });

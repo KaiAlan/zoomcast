@@ -2,6 +2,9 @@ import type { TelemetryEvent } from "../bundle/types";
 
 export type Ripple = { x: number; y: number; progress: number };
 
+/** How long a click ring takes to expand and fade. One constant, two call sites. */
+export const RIPPLE_DURATION_MS = 450;
+
 /**
  * Expanding rings at recent clicks.
  *
