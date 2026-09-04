@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
+import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
@@ -61,9 +62,20 @@ export function Editor({
 
   const outDuration = outputDurationMs(manifest.durationMs, project.cuts);
 
+  // Built once per bundle: pure and cheap, but rebuilding per frame would be
+  // wasteful. Depends on smoothing because that changes the resulting path.
+  const cursorPath = useMemo(
+    () =>
+      buildCursorPath(bundle.telemetry, {
+        smoothing: project.style.cursor.smoothing,
+        sampleHz: 120,
+      }),
+    [bundle.telemetry, project.style.cursor.smoothing],
+  );
+
   // Latest values for the render loop, which must not be re-created per frame.
-  const live = useRef({ project, ctx });
-  live.current = { project, ctx };
+  const live = useRef({ project, ctx, cursorPath });
+  live.current = { project, ctx, cursorPath };
 
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
@@ -97,8 +109,9 @@ export function Editor({
       const source = sourceRef.current;
       if (source === null || disposed) return;
 
-      const { project: p, ctx: c } = live.current;
+      const { project: p, ctx: c, cursorPath } = live.current;
       const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
+      const sample = cursorAt(cursorPath, tSource);
 
       const frame = await source.frameAt(tSource);
       try {
@@ -108,6 +121,7 @@ export function Editor({
           style: p.style,
           outputSize: c.output,
           sourceSize: c.source,
+          cursor: sample === null ? undefined : { sample, style: p.style.cursor },
         });
       } finally {
         frame.close();
@@ -157,6 +171,7 @@ export function Editor({
             await exportClip({
               manifest,
               project: live.current.project,
+              cursorPath: live.current.cursorPath,
               mediaDir: bundle.dir.replace(/\\/g, "/"),
               renderer,
               source,
@@ -254,6 +269,7 @@ export function Editor({
         await exportClip({
           manifest,
           project,
+          cursorPath: live.current.cursorPath,
           mediaDir: bundle.dir.replace(/\\/g, "/"),
           renderer,
           source,

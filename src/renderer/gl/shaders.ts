@@ -80,3 +80,23 @@ void main() {
   float d = sdRoundRect(p, u_quadPx * 0.5, u_radiusPx);
   frag = vec4(c, 1.0 - smoothstep(-1.0, 1.0, d));
 }`;
+
+export const CURSOR_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+uniform sampler2D u_tex;
+uniform float u_shadow;
+
+void main() {
+  vec4 c = texture(u_tex, v_uv);
+
+  if (u_shadow > 0.5) {
+    // Offset alpha tap, so the cursor reads against light backgrounds too.
+    float s = texture(u_tex, v_uv - vec2(0.02, 0.02)).a * 0.35;
+    outColor = mix(vec4(0.0, 0.0, 0.0, s), c, c.a);
+  } else {
+    outColor = c;
+  }
+}
+`;
