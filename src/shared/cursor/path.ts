@@ -22,25 +22,34 @@ export type CursorPath = {
   pressed: Uint8Array;
 };
 
-/** Half-life of the spring, in ms, at the two ends of the smoothing range. */
+/** Half-life of the lag, in ms, at the two ends of the smoothing range. */
 const MIN_HALF_LIFE_MS = 0;
 const MAX_HALF_LIFE_MS = 90;
 
 /**
  * Precompute the drawn cursor path.
  *
- * A critically damped spring, evaluated on a fixed grid rather than per frame.
- * Per-frame integration would depend on frame timing, so a 60fps preview and a
- * 30fps export would produce different paths and verify:parity would be right
- * to fail. On a fixed grid the path is a pure function of telemetry and config,
- * identical in both.
+ * An exponential (one-pole) lag toward the latest telemetry target, evaluated
+ * on a fixed grid rather than per frame. This is not a critically damped
+ * spring — there is no velocity state, only position chasing target — and
+ * that is deliberate: memoryless exponential decay composes exactly across
+ * step sizes (two half-steps of decay equal one full step), so the same
+ * telemetry produces the same path regardless of grid rate. A true spring's
+ * velocity state does not compose that way. Evaluating on a fixed grid
+ * matters for the same reason at a coarser level: per-frame integration would
+ * depend on frame timing, so a 60fps preview and a 30fps export would
+ * produce different paths and verify:parity would be right to fail. On a
+ * fixed grid the path is a pure function of telemetry and config, identical
+ * in both.
  */
 export function buildCursorPath(
   events: TelemetryEvent[],
   opts: PathOptions,
 ): CursorPath {
   const stepMs = 1000 / opts.sampleHz;
-  const moves = events.filter((e) => e.k === "move" || e.k === "down" || e.k === "up");
+  const moves = events.filter(
+    (e) => e.k === "move" || e.k === "down" || e.k === "up" || e.k === "wheel",
+  );
   const first = moves[0];
 
   if (first === undefined || !("x" in first)) {
@@ -82,7 +91,7 @@ export function buildCursorPath(
 
     while (cursor < events.length && (events[cursor] as TelemetryEvent).t <= t) {
       const e = events[cursor] as TelemetryEvent;
-      if (e.k === "move" || e.k === "down" || e.k === "up") {
+      if (e.k === "move" || e.k === "down" || e.k === "up" || e.k === "wheel") {
         targetX = e.x;
         targetY = e.y;
       }

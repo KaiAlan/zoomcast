@@ -5,6 +5,24 @@ import { buildCursorPath, cursorAt } from "./path";
 const opts = { smoothing: 0.8, sampleHz: 120 };
 
 describe("buildCursorPath", () => {
+  it("returns an empty path for no events at all", () => {
+    const path = buildCursorPath([], opts);
+    expect(path.xs).toHaveLength(0);
+    expect(cursorAt(path, 0)).toBeNull();
+  });
+
+  it("returns an empty path for a stream with no coordinates", () => {
+    // A real case: this machine has a take with 40 key events and no mouse
+    // movement. Keystrokes carry no coordinates, so there is nothing to draw.
+    const events: TelemetryEvent[] = [
+      { t: 0, k: "key", d: "down", c: "65" },
+      { t: 100, k: "key", d: "up", c: "65" },
+    ];
+    const path = buildCursorPath(events, opts);
+    expect(path.xs).toHaveLength(0);
+    expect(cursorAt(path, 50)).toBeNull();
+  });
+
   it("returns null for a time before any telemetry", () => {
     const path = buildCursorPath([{ t: 1000, k: "move", x: 10, y: 10 }], opts);
     expect(cursorAt(path, 0)).toBeNull();
