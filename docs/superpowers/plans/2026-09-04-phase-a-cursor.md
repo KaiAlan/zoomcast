@@ -4,7 +4,7 @@
 
 **Goal:** Recordings show a cursor again — drawn by us from telemetry, with real Windows shapes, adjustable size, damped smoothing, a drop shadow and click ripples.
 
-**Architecture:** Capture reads the live cursor shape at 30Hz through `koffi` → `user32!GetCursorInfo` and writes shape-change events into the existing telemetry stream. The editor derives a smoothed cursor path (a critically damped spring, precomputed and pure), and a new renderer pass draws a vector cursor at that position with constant apparent size under zoom. `drawMouse` stays `false` throughout — the cursor is never baked into the capture.
+**Architecture:** Capture reads the live cursor shape at 30Hz through `koffi` → `user32!GetCursorInfo` and writes shape-change events into the existing telemetry stream. The editor derives a smoothed cursor path (an exponential one-pole lag, precomputed and pure), and a new renderer pass draws a vector cursor at that position with constant apparent size under zoom. `drawMouse` stays `false` throughout — the cursor is never baked into the capture.
 
 **Tech Stack:** TypeScript (strict), Electron 44, WebGL2, `koffi` (new), `uiohook-napi`, vitest.
 
@@ -32,7 +32,7 @@
 | `src/main/capture/CursorShapeReader.ts` | The FFI edge. Polls `GetCursorInfo`, returns a raw cursor handle and visibility. Knows nothing about telemetry. |
 | `src/shared/cursor/shapeTracker.ts` | Pure. Maps handle → `CursorShape` and suppresses repeats, so only changes reach the stream. |
 | `src/shared/cursor/shapes.ts` | Pure. Vector path data and hotspots for the eight `CursorShape` values. |
-| `src/shared/cursor/path.ts` | Pure. Critically damped spring over telemetry → sampled cursor path; `cursorAt(path, t)`. |
+| `src/shared/cursor/path.ts` | Pure. Exponential one-pole lag over telemetry → sampled cursor path; `cursorAt(path, t)`. |
 | `src/shared/cursor/ripples.ts` | Pure. Click events → expanding ripple state at time `t`. |
 | `src/renderer/gl/cursorTexture.ts` | Rasterises a vector shape to a canvas once per (shape, size) and caches it as a texture. |
 
@@ -553,7 +553,7 @@ export const CURSOR_SHAPES: Record<CursorShape, CursorArt> = {
       "M12 18 L12 8 A2 2 0 0 1 16 8 L16 15 L16 11 A2 2 0 0 1 20 11 L20 15 " +
       "L20 13 A2 2 0 0 1 24 13 L24 22 A6 6 0 0 1 18 28 L16 28 " +
       "A6 6 0 0 1 10 22 L10 18 A2 2 0 0 1 12 18 Z",
-    hotspot: { x: 13, y: 4 },
+    hotspot: { x: 14, y: 6 },
     viewBox: V,
   },
   ns: {
@@ -760,7 +760,7 @@ const MAX_HALF_LIFE_MS = 90;
 /**
  * Precompute the drawn cursor path.
  *
- * A critically damped spring, evaluated on a fixed grid rather than per frame.
+ * An exponential one-pole lag, evaluated on a fixed grid rather than per frame.
  * Per-frame integration would depend on frame timing, so a 60fps preview and a
  * 30fps export would produce different paths and verify:parity would be right
  * to fail. On a fixed grid the path is a pure function of telemetry and config,
