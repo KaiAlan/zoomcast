@@ -89,7 +89,7 @@ const CURSORINFO = koffi.struct("CURSORINFO", {
 });
 
 const GetCursorInfo = user32.func("__stdcall", "GetCursorInfo", "bool", [
-  koffi.out(koffi.pointer(CURSORINFO)),
+  koffi.inout(koffi.pointer(CURSORINFO)),
 ]);
 const LoadCursorW = user32.func("__stdcall", "LoadCursorW", "void *", [
   "void *",
@@ -112,8 +112,9 @@ for (const [name, id] of Object.entries(IDC)) {
   console.log(name, koffi.address(LoadCursorW(null, id)));
 }
 
-const info = { cbSize: koffi.sizeof(CURSORINFO), flags: 0, hCursor: null, ptScreenPos: { x: 0, y: 0 } };
 setInterval(() => {
+  // cbSize must be fresh on every call: koffi zeroes it when decoding the result.
+  const info = { cbSize: koffi.sizeof(CURSORINFO), flags: 0, hCursor: null, ptScreenPos: { x: 0, y: 0 } };
   if (!GetCursorInfo(info)) return console.log("GetCursorInfo failed");
   console.log(info.flags, koffi.address(info.hCursor), info.ptScreenPos);
 }, 500);
@@ -333,8 +334,12 @@ export class CursorShapeReader {
         ptScreenPos: POINT,
       });
 
+      // inout, not out: GetCursorInfo requires the caller to set cbSize before
+      // the call, and koffi.out() treats the buffer as write-only — the struct
+      // that reaches the API would carry cbSize 0 and fail with error 87 on
+      // every call, silently and forever. Confirmed by probe in task 1.
       const GetCursorInfo = user32.func("__stdcall", "GetCursorInfo", "bool", [
-        koffi.out(koffi.pointer(CURSORINFO)),
+        koffi.inout(koffi.pointer(CURSORINFO)),
       ]);
       const LoadCursorW = user32.func("__stdcall", "LoadCursorW", "void *", [
         "void *",
@@ -348,14 +353,17 @@ export class CursorShapeReader {
       }
 
       const tracker = createShapeTracker(table);
-      const info = {
-        cbSize: koffi.sizeof(CURSORINFO),
-        flags: 0,
-        hCursor: null,
-        ptScreenPos: { x: 0, y: 0 },
-      };
 
       const reader = new CursorShapeReader(() => {
+        // A fresh literal per poll: koffi zeroes cbSize when it decodes the
+        // result, so a reused object fails from the second call onward.
+        const info = {
+          cbSize: koffi.sizeof(CURSORINFO),
+          flags: 0,
+          hCursor: null,
+          ptScreenPos: { x: 0, y: 0 },
+        };
+
         if (!GetCursorInfo(info)) return;
         const event = tracker.observe(
           now(),
