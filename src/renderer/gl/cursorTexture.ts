@@ -2,7 +2,17 @@ import type { CursorShape } from "../../shared/bundle/types";
 import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
 
 /** Extra margin around the glyph so the stroke and shadow are not clipped. */
-const PAD = 4;
+export const PAD = 4;
+
+/**
+ * A rasterised cursor and the size it was actually rasterised at.
+ *
+ * `px` is the clamped, rounded size — never the raw `sizePx` a caller asked
+ * for. Screen-space geometry (the hotspot offset, the drawn quad) must be
+ * derived from `px`, not re-requested from the caller's raw value, or the
+ * hotspot's fraction of the quad stops matching its fraction of the texture.
+ */
+export type CursorTexture = { texture: WebGLTexture; px: number };
 
 /**
  * Rasterises a vector cursor once per (shape, size) and keeps the texture.
@@ -11,9 +21,9 @@ const PAD = 4;
  * to stay sharp when the camera is zoomed and when the export is 4K.
  */
 export class CursorTextureCache {
-  private readonly cache = new Map<string, WebGLTexture>();
+  private readonly cache = new Map<string, CursorTexture>();
 
-  get(gl: WebGL2RenderingContext, shape: CursorShape, sizePx: number): WebGLTexture {
+  get(gl: WebGL2RenderingContext, shape: CursorShape, sizePx: number): CursorTexture {
     const px = Math.max(8, Math.round(sizePx));
     const key = `${shape}@${px}`;
     const held = this.cache.get(key);
@@ -52,7 +62,14 @@ export class CursorTextureCache {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-    this.cache.set(key, tex);
-    return tex;
+    const entry: CursorTexture = { texture: tex, px };
+    this.cache.set(key, entry);
+    return entry;
+  }
+
+  /** Releases every rasterised texture. Call once, from the owning Renderer's dispose. */
+  dispose(gl: WebGL2RenderingContext): void {
+    for (const { texture } of this.cache.values()) gl.deleteTexture(texture);
+    this.cache.clear();
   }
 }

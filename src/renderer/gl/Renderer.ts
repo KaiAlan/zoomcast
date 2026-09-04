@@ -3,7 +3,7 @@ import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
 import type { CursorStyle, StyleConfig } from "../../shared/project/types";
 import type { ZoomState } from "../../shared/zoom/interpolate";
 import type { Size } from "../../shared/zoom/types";
-import { CursorTextureCache } from "./cursorTexture";
+import { CursorTextureCache, PAD } from "./cursorTexture";
 import { screenQuad } from "./layout";
 import { BG_FRAG, CURSOR_FRAG, QUAD_VERT, SCREEN_FRAG, SHADOW_FRAG } from "./shaders";
 
@@ -303,17 +303,21 @@ export class Renderer {
     const art = CURSOR_SHAPES[sample.shape];
 
     const sizePx = (out.h / 1080) * 24 * (style.sizePct / 100);
-    const dim = sizePx + 8; // matches PAD * 2 in cursorTexture.ts
+    const cursorTex = this.cursorTextures.get(gl, sample.shape, sizePx);
+    // Geometry derives from cursorTex.px — the clamped, rounded size the
+    // cache actually rasterised — not the raw sizePx, so the hotspot's
+    // fraction of the drawn quad matches its fraction of the texture.
+    const dim = cursorTex.px + PAD * 2;
 
     const x = quad.x + (sample.x / src.w) * quad.w;
     const y = quad.y + (sample.y / src.h) * quad.h;
 
-    const hotX = (art.hotspot.x / art.viewBox) * sizePx + 4;
-    const hotY = (art.hotspot.y / art.viewBox) * sizePx + 4;
+    const hotX = (art.hotspot.x / art.viewBox) * cursorTex.px + PAD;
+    const hotY = (art.hotspot.y / art.viewBox) * cursorTex.px + PAD;
 
     gl.useProgram(this.cursorProgram.program);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.cursorTextures.get(gl, sample.shape, sizePx));
+    gl.bindTexture(gl.TEXTURE_2D, cursorTex.texture);
     gl.uniform1i(this.cursorProgram.uniforms.u_tex ?? null, 0);
     gl.uniform1f(this.cursorProgram.uniforms.u_shadow ?? null, style.shadow ? 1 : 0);
 
@@ -346,5 +350,6 @@ export class Renderer {
     gl.deleteProgram(this.shadow.program);
     gl.deleteProgram(this.screen.program);
     gl.deleteProgram(this.cursorProgram.program);
+    this.cursorTextures.dispose(gl);
   }
 }
