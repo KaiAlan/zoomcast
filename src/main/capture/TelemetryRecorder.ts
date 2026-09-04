@@ -1,6 +1,7 @@
 import { createWriteStream, type WriteStream } from "node:fs";
 import { uIOhook } from "uiohook-napi";
 import type { TelemetryEvent } from "../../shared/bundle/types";
+import { CursorShapeReader } from "./CursorShapeReader";
 
 const MOVE_INTERVAL_MS = 1000 / 60;
 const FLUSH_INTERVAL_MS = 250;
@@ -20,6 +21,7 @@ export class TelemetryRecorder {
   private readonly stream: WriteStream;
   private pending: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
+  private shapes: CursorShapeReader | null = null;
   private lastMoveAt = 0;
   private stopped = false;
 
@@ -77,6 +79,11 @@ export class TelemetryRecorder {
 
     uIOhook.start();
     this.flushTimer = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
+
+    this.shapes = CursorShapeReader.start(
+      (event) => this.push(event),
+      () => this.now(),
+    );
   }
 
   private flush(): void {
@@ -91,6 +98,8 @@ export class TelemetryRecorder {
     this.stopped = true;
 
     if (this.flushTimer !== null) clearInterval(this.flushTimer);
+    this.shapes?.stop();
+    this.shapes = null;
     uIOhook.removeAllListeners();
 
     try {

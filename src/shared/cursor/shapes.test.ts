@@ -25,6 +25,12 @@ describe("CURSOR_SHAPES", () => {
     expect(CURSOR_SHAPES.arrow.hotspot).toEqual({ x: 0, y: 0 });
   });
 
+  it("puts the hand hotspot on the fingertip", () => {
+    // The topmost point of the first finger's arc (A2 2 ... from 12,8 to 16,8,
+    // centred 14,8) is (14,6). A hotspot above the art offsets every click.
+    expect(CURSOR_SHAPES.hand.hotspot).toEqual({ x: 14, y: 6 });
+  });
+
   it("centres the hotspot of every resize cursor", () => {
     for (const shape of ["ns", "ew", "nwse", "nesw"] as const) {
       const art = CURSOR_SHAPES[shape];

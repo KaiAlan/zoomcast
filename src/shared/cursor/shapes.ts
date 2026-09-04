@@ -33,7 +33,7 @@ export const CURSOR_SHAPES: Record<CursorShape, CursorArt> = {
       "M12 18 L12 8 A2 2 0 0 1 16 8 L16 15 L16 11 A2 2 0 0 1 20 11 L20 15 " +
       "L20 13 A2 2 0 0 1 24 13 L24 22 A6 6 0 0 1 18 28 L16 28 " +
       "A6 6 0 0 1 10 22 L10 18 A2 2 0 0 1 12 18 Z",
-    hotspot: { x: 13, y: 4 },
+    hotspot: { x: 14, y: 6 },
     viewBox: V,
   },
   ns: {
