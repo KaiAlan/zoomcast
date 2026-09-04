@@ -384,7 +384,14 @@ export function Editor({
           overflowY: "auto",
         }}
       >
-        <Inspector config={project.zoom.config} onChange={onConfigChange} />
+        <Inspector
+          config={project.zoom.config}
+          onChange={onConfigChange}
+          cursor={project.style.cursor}
+          onCursorChange={(cursor) =>
+            setProject((p) => ({ ...p, style: { ...p.style, cursor } }))
+          }
+        />
       </div>
     </div>
   );
