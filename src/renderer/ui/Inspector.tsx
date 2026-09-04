@@ -8,6 +8,8 @@ type Props = {
 /** The knobs worth reaching for while tuning; the rest live in project.json. */
 const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number }> = [
   { key: "minHoldMs", label: "min hold (ms)", step: 100 },
+  { key: "minDwellMs", label: "min dwell (ms)", step: 100 },
+  { key: "minRecoveryMs", label: "min recovery (ms)", step: 50 },
   { key: "deadzonePx", label: "deadzone (px)", step: 10 },
   { key: "maxZoomsPerMinute", label: "max zooms / min", step: 1 },
   { key: "clusterRadiusPx", label: "cluster radius (px)", step: 10 },

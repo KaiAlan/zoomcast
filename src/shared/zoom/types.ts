@@ -13,6 +13,10 @@ export type ZoomConfig = {
   minGapMs: number;
   /** A zoom may not be replaced sooner than this after it started. */
   minHoldMs: number;
+  /** Target hold for an emitted zoom; the floor is transitionMs * 2. */
+  minDwellMs: number;
+  /** Zooms closer than this become one travelling zoom instead of two. */
+  minRecoveryMs: number;
   /** A cluster within this distance extends the previous zoom, not a new one. */
   deadzonePx: number;
   /** Excess clusters in a minute are dropped lowest-weight-first. */
@@ -66,4 +70,6 @@ export type PlanContext = {
   source: Size;
   output: Size;
   paddingFactor: number;
+  /** Take length, so the zoom budget is proportional to it. */
+  durationMs: number;
 };

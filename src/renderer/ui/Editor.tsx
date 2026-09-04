@@ -49,6 +49,7 @@ export function Editor({
       source: { w: manifest.video.width, h: manifest.video.height },
       output: { w: project.output.width, h: project.output.height },
       paddingFactor: project.style.paddingFactor,
+      durationMs: manifest.durationMs,
     }),
     [manifest, project.output, project.style.paddingFactor],
   );
@@ -71,11 +72,17 @@ export function Editor({
         source: { w: manifest.video.width, h: manifest.video.height },
         output: { w: existing.output.width, h: existing.output.height },
         paddingFactor: existing.style.paddingFactor,
+        durationMs: manifest.durationMs,
       });
 
       return replan(existing.zoom.keyframes, generated);
     },
-    [bundle.telemetry, manifest.video.width, manifest.video.height],
+    [
+      bundle.telemetry,
+      manifest.video.width,
+      manifest.video.height,
+      manifest.durationMs,
+    ],
   );
 
   useEffect(() => {

@@ -19,11 +19,12 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 116 passing
+npm test              # 136 passing
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
 npm run verify:parity # 4/4 at 43-45dB
+npm run tune -- all   # zoom plan over every take on disk
 ```
 
 Everything runs **natively on Windows in PowerShell**. Not WSL — Electron,
@@ -36,6 +37,11 @@ WSL via `powershell.exe`, which works, but is not the intended setup.)
 
 Press **Ctrl+Alt+Z** anywhere → 3-2-1 countdown → red border while recording →
 press again to stop → the editor opens the take with zooms already planned.
+
+Zoom pacing is set in `src/shared/zoom/config.ts`, tuned against the 35s take
+under `%LOCALAPPDATA%\zoomcast\recordings\`. `npm run tune` replays any take
+through the planner and prints what the plan looks like — use it before
+touching a dial, and after.
 
 In the editor: **space** plays/pauses, **drag the timeline** to scrub, **←**
 goes back to the recordings list, **export…** writes an MP4 with mixed audio.
@@ -53,6 +59,12 @@ Verified on a real take: mic and system tracks at 48kHz Opus with correct
 negative offsets, 232 real telemetry events, and an export producing a
 1920×1080 H.264 + mixed AAC clip whose frames match the preview.
 
+The planner has now been tuned against real footage rather than fixtures. On
+the 35s take it plans 6 zooms at 10.3/min, 62% of the take zoomed, shortest
+hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
+13.7/min including one held 0.89s against 1.2s of transition and one starting
+0.14s after the previous ended.
+
 ## What is NOT built
 
 - **8 — webcam PiP.** A third `MediaRecorder` following the same hidden-renderer
@@ -69,9 +81,6 @@ Also worth doing early:
 - **Surface the `unclean` state.** A recording that ended abnormally is marked
   in the manifest and logged, but the Welcome list does not show it.
 - **Delete recordings from the UI.** The list shows sizes; there is no delete.
-- **Tune the planner against real footage.** The defaults in
-  `src/shared/zoom/config.ts` have never been adjusted against anything but
-  synthetic fixtures. `minHoldMs` is the highest-leverage dial.
 
 ## Known limitation: no working ddagrab on this machine
 
@@ -101,6 +110,7 @@ unit tests could not have caught.
 | `ZOOMCAST_SHOOT` | Renders arbitrary frame specs to PNG through the real compositor |
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
+| `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
 
 ```powershell
 # compositor stills
@@ -127,6 +137,25 @@ cat "$env:APPDATA\zoomcast\main-error.log"
 ## Things that will bite you
 
 Each of these cost real time; none is hypothetical.
+
+**Zoom planning**
+
+- **On a 1080p source into a 1080p output every zoom is exactly 1.176x.**
+  `maxComfortableZoom` is `source.w / (output.w * paddingFactor)` = 1/0.85, and
+  any cluster tighter than ~1630px wants more than that, so it clamps. This
+  means `marginPx` and `clusterRadiusPx` do nothing to zoom DEPTH at this
+  resolution — only timing is tunable. Recording a higher-resolution source is
+  the only way to get a deeper zoom.
+- **`maxZoomsPerMinute` is a backstop, not a pacing dial.** Turning it down
+  makes the result worse: it deletes the clusters that would otherwise have
+  merged into one travelling shot, leaving isolated zooms and long flat
+  stretches. Pace with `minHoldMs`, `minDwellMs` and `minRecoveryMs`.
+- **Cluster guards cannot see camera pathologies.** `guards.ts` works on
+  attention; the two things that actually make auto-zoom unwatchable are only
+  visible once zoom times exist, so they are guarded in `segments.ts`: a zoom
+  held for less than its own two transitions (the camera never arrives), and a
+  zoom-out followed 140ms later by a zoom-in elsewhere (a flinch, not two
+  shots). Both were found in real footage that no unit test would have caught.
 
 **Media and timing**
 

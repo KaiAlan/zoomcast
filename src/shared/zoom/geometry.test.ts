@@ -37,7 +37,12 @@ describe("maxComfortableZoom", () => {
 });
 
 describe("fitScale", () => {
-  const ctx: PlanContext = { source: HD, output: HD, paddingFactor: 0.85 };
+  const ctx: PlanContext = {
+    source: HD,
+    output: HD,
+    paddingFactor: 0.85,
+    durationMs: 60_000,
+  };
 
   const cluster = (halfW: number): Cluster => ({
     startT: 0,

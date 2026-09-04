@@ -10,6 +10,7 @@ const ctx: PlanContext = {
   source: { w: 1920, h: 1080 },
   output: { w: 1920, h: 1080 },
   paddingFactor: 0.85,
+  durationMs: 60_000,
 };
 
 describe("planZoom", () => {
@@ -28,14 +29,66 @@ describe("planZoom", () => {
     expect(kfs[1]?.scale).toBe(1);
   });
 
-  it("leads the zoom in and trails it out", () => {
+  it("leads the zoom in", () => {
     const kfs = planZoom(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
     expect(kfs[0]?.tSourceMs).toBe(750); // 1000 - leadInMs 250
-    expect(kfs[1]?.tSourceMs).toBe(1400); // 1000 + trailMs 400
+  });
+
+  it("holds a lone click for minDwellMs rather than just trailMs", () => {
+    // trailMs alone would end this at 1400 — a 650ms hold against 1200ms of
+    // transition, which is a twitch, not a shot.
+    const kfs = planZoom(
+      [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
+      DEFAULT_ZOOM_CONFIG,
+      ctx,
+    );
+    expect(kfs[1]?.tSourceMs).toBe(750 + DEFAULT_ZOOM_CONFIG.minDwellMs);
+  });
+
+  it("travels between two focus points instead of pulling out and back in", () => {
+    // A long cluster at 500,500 then a separate one 1000px away, close enough
+    // that trailMs and leadInMs would otherwise collide. This is the shape the
+    // real 35s take produces at 25.8s.
+    const kfs = planZoom(
+      [
+        { t: 1000, k: "down", x: 500, y: 500, b: 1 },
+        { t: 2500, k: "down", x: 500, y: 500, b: 1 },
+        { t: 4000, k: "down", x: 500, y: 500, b: 1 },
+        { t: 5000, k: "down", x: 1500, y: 500, b: 1 },
+      ],
+      DEFAULT_ZOOM_CONFIG,
+      ctx,
+    );
+
+    expect(kfs).toHaveLength(3);
+    expect(kfs[0]?.scale).toBeGreaterThan(1);
+    expect(kfs[1]?.scale).toBeGreaterThan(1);
+    expect(kfs[1]?.cx).toBeCloseTo(1500 / 1920, 6);
+    expect(kfs[2]?.scale).toBe(1);
+  });
+
+  it("never emits a zoom held for less than its own two transitions", () => {
+    const events = [
+      { t: 1000, k: "down" as const, x: 500, y: 500, b: 1 },
+      { t: 5000, k: "down" as const, x: 1500, y: 900, b: 1 },
+      { t: 9000, k: "down" as const, x: 300, y: 200, b: 1 },
+    ];
+    const kfs = planZoom(events, DEFAULT_ZOOM_CONFIG, ctx);
+
+    for (let i = 0; i < kfs.length - 1; i++) {
+      const k = kfs[i];
+      const next = kfs[i + 1];
+      if (k === undefined || next === undefined) continue;
+      if (k.scale > 1 && next.scale === 1) {
+        expect(next.tSourceMs - k.tSourceMs).toBeGreaterThanOrEqual(
+          DEFAULT_ZOOM_CONFIG.transitionMs * 2,
+        );
+      }
+    }
   });
 
   it("never leads in before zero", () => {
@@ -100,6 +153,18 @@ describe("planZoom", () => {
       for (let i = 1; i < zoomIns.length; i++) {
         const gap = (zoomIns[i] ?? 0) - (zoomIns[i - 1] ?? 0);
         expect(gap).toBeGreaterThanOrEqual(DEFAULT_ZOOM_CONFIG.minHoldMs);
+      }
+    });
+
+    it("leaves at least minRecoveryMs between one zoom ending and the next", () => {
+      for (let i = 1; i < kfs.length; i++) {
+        const prev = kfs[i - 1];
+        const k = kfs[i];
+        if (prev?.scale === 1 && k !== undefined && k.scale > 1) {
+          expect(k.tSourceMs - prev.tSourceMs).toBeGreaterThanOrEqual(
+            DEFAULT_ZOOM_CONFIG.minRecoveryMs,
+          );
+        }
       }
     });
   });

@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "fixture": "tsx tools/make-fixture.ts",
     "verify:decode": "tsx tools/verify-decode.ts",
-    "verify:parity": "tsx tools/verify-parity.ts"
+    "verify:parity": "tsx tools/verify-parity.ts",
+    "tune": "tsx tools/tune-planner.ts"
   },
   "dependencies": {
     "mp4box": "^2.4.1",
