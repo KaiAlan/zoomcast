@@ -1,7 +1,9 @@
 import { toStreamLocalMs } from "../../shared/bundle/streamTime";
 import type { Manifest } from "../../shared/bundle/manifest";
+import type { TelemetryEvent } from "../../shared/bundle/types";
 import type { CursorPath } from "../../shared/cursor/path";
 import { cursorAt } from "../../shared/cursor/path";
+import { ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
 import type { AudioInput } from "../../shared/export/ffmpegArgs";
 import type { Project } from "../../shared/project/types";
@@ -24,6 +26,8 @@ export async function exportClip(opts: {
   project: Project;
   /** Null when the bundle has no cursor telemetry — export just draws no cursor. */
   cursorPath: CursorPath | null;
+  /** Same events the preview's ripplesAt call draws from — sampled on the source timeline. */
+  telemetry: TelemetryEvent[];
   mediaDir: string;
   renderer: Renderer;
   source: VideoSource;
@@ -32,7 +36,8 @@ export async function exportClip(opts: {
   onProgress: (p: ExportProgress) => void;
   signal?: { cancelled: boolean };
 }): Promise<void> {
-  const { manifest, project, cursorPath, renderer, source, outFile, onProgress } = opts;
+  const { manifest, project, cursorPath, telemetry, renderer, source, outFile, onProgress } =
+    opts;
 
   const output = { w: project.output.width, h: project.output.height };
   const sourceSize = { w: manifest.video.width, h: manifest.video.height };
@@ -84,6 +89,7 @@ export async function exportClip(opts: {
           outputSize: output,
           sourceSize,
           cursor: sample === null ? undefined : { sample, style: project.style.cursor },
+          ripples: ripplesAt(telemetry, frame.tSourceMs, 450),
         });
       } finally {
         videoFrame.close();

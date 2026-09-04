@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
+import { ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
@@ -122,6 +123,7 @@ export function Editor({
           outputSize: c.output,
           sourceSize: c.source,
           cursor: sample === null ? undefined : { sample, style: p.style.cursor },
+          ripples: ripplesAt(bundle.telemetry, tSource, 450),
         });
       } finally {
         frame.close();
@@ -172,6 +174,7 @@ export function Editor({
               manifest,
               project: live.current.project,
               cursorPath: live.current.cursorPath,
+              telemetry: bundle.telemetry,
               mediaDir: bundle.dir.replace(/\\/g, "/"),
               renderer,
               source,
@@ -270,6 +273,7 @@ export function Editor({
           manifest,
           project,
           cursorPath: live.current.cursorPath,
+          telemetry: bundle.telemetry,
           mediaDir: bundle.dir.replace(/\\/g, "/"),
           renderer,
           source,

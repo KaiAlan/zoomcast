@@ -100,3 +100,21 @@ void main() {
   }
 }
 `;
+
+export const RIPPLE_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+uniform float u_progress;
+
+void main() {
+  vec2 p = v_uv * 2.0 - 1.0;
+  float d = length(p);
+
+  // A ring that expands and fades: radius tracks progress, alpha falls away.
+  float ring = smoothstep(0.06, 0.0, abs(d - u_progress));
+  float fade = 1.0 - u_progress;
+
+  outColor = vec4(1.0, 1.0, 1.0, ring * fade * 0.5);
+}
+`;
