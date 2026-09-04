@@ -13,9 +13,19 @@ cursor, no background, and the camera snaps between fixed points.
 Most of this is not new scope. The v1 spec §3 already lists "styled frame:
 background, padding, rounded corners, drop shadow" and "custom-rendered cursor
 with smoothing and click ripples"; §10 already specifies the five renderer
-passes in order. Only the screen quad was ever built. This document is
-therefore mostly a completion of §10, plus two genuinely new pieces: a
-follow-cursor camera, and editable zoom segments on the timeline.
+passes in order.
+
+Three of those passes exist. `Renderer.drawFrame` runs
+`drawBackground → drawShadow → drawScreen` today: a linear gradient or solid
+background, a rounded-rect drop shadow, and the screen quad with padding,
+corner radius and unsharp. What is missing is the **cursor pass**, the richer
+background kinds (mesh gradient, image, blur), the frame border, and — the
+reason none of it is apparent — **any UI at all for `style`**. The Inspector
+exposes zoom config and nothing else, so the background has never been
+changeable.
+
+This document is therefore a completion of §10, plus two genuinely new pieces:
+a follow-cursor camera, and editable zoom segments on the timeline.
 
 The reference is Cursorful, whose UI the author recorded for comparison.
 
@@ -69,6 +79,12 @@ keyframe, so between shots it can only cut or slide in a straight line.
 **Invisible zooms.** The timeline draws cuts and a playhead. Zoom keyframes
 exist in the project and are re-planned live, but nothing renders them, so the
 plan can only be judged by watching playback.
+
+**Unreachable style.** `StyleConfig` — padding, corner radius, shadow,
+background — is honoured by the renderer and persisted in `project.json`, but
+`Inspector.tsx` lists only `ZoomConfig` fields. Every styling control in this
+document is therefore new UI over partly-existing rendering, not new rendering
+throughout.
 
 ## 4. Scope
 
@@ -170,16 +186,16 @@ No change. `TelemetryEvent` already carries
 
 ## 7. Render model
 
-v1 §10's pass order stands, with the passes that were never built now built:
+v1 §10's pass order stands. Passes 1–3 exist and are extended; 4 and 5 are new.
 
-1. **Background** — procedural gradient, solid colour, or image; blurred per
-   `background.blur`; fills the output.
-2. **Shadow** — soft rounded-rect behind the screen quad.
-3. **Screen quad** — camera transform, rounded corners via SDF, unsharp when
-   effective sample scale exceeds 1.0, optional border.
-4. **Cursor** — vector shape at the smoothed position, constant apparent size
-   under zoom, optional shadow and click ripples.
-5. **Motion blur** — directional post pass, driven by camera velocity.
+1. **Background** *(exists: linear gradient, solid)* — extended with mesh
+   gradient presets, image, and a blur stage.
+2. **Shadow** *(exists)* — unchanged.
+3. **Screen quad** *(exists: camera transform, SDF corners, unsharp)* —
+   extended with an optional border.
+4. **Cursor** *(new)* — vector shape at the smoothed position, constant
+   apparent size under zoom, optional shadow and click ripples.
+5. **Motion blur** *(new)* — directional post pass, driven by camera velocity.
 
 v1 numbered the webcam as pass 4 and the cursor as 5; since the webcam is still
 deferred to phase 8, the cursor takes 4 here and motion blur — which v1 did not
