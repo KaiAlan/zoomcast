@@ -33,7 +33,21 @@ WSL via `powershell.exe`, which works, but is not the intended setup.)
 
 ## Using it
 
-`npm run build` then `npx electron .`
+Installed: **zoomcast** in the Start menu. `npm run dist` builds the installer
+to `release\zoomcast Setup <version>.exe`; it installs per-user (no admin),
+makes Start menu and desktop shortcuts, and ships an uninstaller.
+
+From source: `npm run build` then `npx electron .`
+
+The app lives in the tray. **Start with Windows** is a checkbox in the tray
+menu, off by default — with it on, Windows launches zoomcast hidden at login
+(`--hidden`), so the hotkey is live with no editor window. Closing the editor
+does not quit; **Show editor** brings it back, creating a window if none is
+left. Quitting is explicit, from the tray.
+
+ffmpeg is **not bundled** — the installed app finds it on PATH exactly as the
+dev build does, so a machine without ffmpeg installs fine and then fails to
+record.
 
 Press **Ctrl+Alt+Z** anywhere → 3-2-1 countdown → red border while recording →
 press again to stop → the editor opens the take with zooms already planned.
@@ -111,6 +125,16 @@ unit tests could not have caught.
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
 | `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
+| `npm run icon` | Redraws `build/icon.ico` from `tools/make-icon.ts` |
+
+The record test is the best check on a packaged build, because it exercises the
+native addon, the tray and the hotkey inside the real installed layout:
+
+```powershell
+$env:ZOOMCAST_RECORD_TEST = '5'
+.\release\win-unpacked\zoomcast.exe | Out-Null
+cat "$env:APPDATA\zoomcast\record-test.json"
+```
 
 ```powershell
 # compositor stills
@@ -172,6 +196,24 @@ Each of these cost real time; none is hypothetical.
   instead, and never seeks.
 - **Preview and export must keep calling the same `Renderer`.** If they diverge
   that is a design-level failure. `verify:parity` is the guard.
+
+**Packaging**
+
+- **Do not let electron-builder rebuild native modules.** `npmRebuild: false`
+  is deliberate: `uiohook-napi` ships `prebuildify --napi` binaries, which are
+  Node-API and therefore ABI-stable, and the one in `node_modules` is what the
+  dev build has always run. With the rebuild on, packaging dies with
+  `Could not find any Visual Studio installation to use`.
+- **`asarUnpack: "**/*.node"` is required.** A native addon cannot be loaded
+  from inside an asar archive.
+- **The single-instance lock must skip the headless modes.** `verify:parity`,
+  `verify:decode`, `ZOOMCAST_SHOOT`, `ZOOMCAST_UI_SHOT` and
+  `ZOOMCAST_RECORD_TEST` each spawn their own Electron while a normal instance
+  may already be running. Taking the lock unconditionally makes every one of
+  them exit immediately, silently, with no output.
+- **The icon is generated, not vendored.** `tools/make-icon.ts` writes a real
+  multi-size `.ico` with nothing but `zlib`. Change the drawing there, not the
+  binary.
 
 **Electron**
 

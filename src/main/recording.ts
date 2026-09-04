@@ -9,6 +9,7 @@ import {
   startRecording,
   stopRecording,
 } from "./capture/SessionController";
+import { autostartEnabled, setAutostart } from "./autostart";
 import { logDiag } from "./log";
 import { runCountdown, showRecordingBorder } from "./overlays";
 
@@ -47,6 +48,17 @@ export function recordHotkeyLabel(): string {
 let tray: Tray | null = null;
 let border: BrowserWindow | null = null;
 let busy = false;
+
+/**
+ * How the tray opens the editor. Owned by index.ts, because launching at login
+ * — and closing the editor — both leave the app running with no window at all,
+ * and the tray still has to be able to bring one back.
+ */
+let openEditor: (() => void) | null = null;
+
+export function registerEditorOpener(open: () => void): void {
+  openEditor = open;
+}
 
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -138,7 +150,17 @@ function updateTray(): void {
       { type: "separator" },
       {
         label: "Show editor",
-        click: () => BrowserWindow.getAllWindows()[0]?.show(),
+        click: () => openEditor?.(),
+      },
+      { type: "separator" },
+      {
+        label: "Start with Windows",
+        type: "checkbox",
+        checked: autostartEnabled(),
+        click: (item) => {
+          setAutostart(item.checked);
+          updateTray();
+        },
       },
       { type: "separator" },
       {

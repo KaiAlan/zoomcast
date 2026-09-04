@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Windows screen recorder and editor with cursor-aware auto zoom",
+  "author": "Kaialan",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -14,7 +15,9 @@
     "fixture": "tsx tools/make-fixture.ts",
     "verify:decode": "tsx tools/verify-decode.ts",
     "verify:parity": "tsx tools/verify-parity.ts",
-    "tune": "tsx tools/tune-planner.ts"
+    "tune": "tsx tools/tune-planner.ts",
+    "icon": "tsx tools/make-icon.ts",
+    "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "mp4box": "^2.4.1",
@@ -29,6 +32,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "fast-check": "^4.9.0",
     "tsx": "^4.23.13",

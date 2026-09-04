@@ -1,0 +1,39 @@
+appId: dev.zoomcast.app
+productName: zoomcast
+
+# uiohook-napi ships prebuildify --napi binaries, which are Node-API and so
+# ABI-stable across Electron versions — the one already in node_modules is what
+# `npx electron .` has been running all along. Rebuilding it from source would
+# need Visual Studio for no gain.
+npmRebuild: false
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built bundles and the manifest. Production dependencies are added
+# automatically; everything else in the repo — src, tools, docs, and the mp4
+# fixtures under tests — has no business in an installer.
+files:
+  - out/**/*
+  - package.json
+
+# uiohook-napi is a native addon, and a .node file cannot be loaded from inside
+# an asar archive.
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target: nsis
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: zoomcast
+  # A tray app that survives zero windows must not be left running while its
+  # own uninstaller deletes it.
+  allowElevation: true

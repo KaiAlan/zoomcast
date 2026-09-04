@@ -1,7 +1,12 @@
 import { app, BrowserWindow, Menu, net, protocol } from "electron";
 import { registerIpc } from "./ipc";
 import { abortRecording } from "./capture/SessionController";
-import { registerRecordingControls, teardownRecordingControls } from "./recording";
+import { startedHidden } from "./autostart";
+import {
+  registerEditorOpener,
+  registerRecordingControls,
+  teardownRecordingControls,
+} from "./recording";
 import { registerDisplayMediaHandler } from "./capture/AudioRecorder";
 import { preloadPath, rendererUrl } from "./windows";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
@@ -9,6 +14,31 @@ import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Windows groups taskbar buttons, jump lists and notifications by this id.
+ * Without it an installed build shows up as "Electron" and gets its own,
+ * separate taskbar slot from the shortcut that launched it.
+ */
+app.setAppUserModelId("dev.zoomcast.app");
+
+/**
+ * The headless modes each spawn their own Electron while a normal instance may
+ * already be running, so the single-instance lock must not apply to them —
+ * taking it would make verify:parity and friends exit immediately.
+ */
+const HEADLESS_MODES = [
+  "ZOOMCAST_PARITY",
+  "ZOOMCAST_UI_SHOT",
+  "ZOOMCAST_SHOOT",
+  "ZOOMCAST_RECORD_TEST",
+];
+
+const headless = HEADLESS_MODES.some((key) => process.env[key] !== undefined);
+
+// A second launch — from the Start menu, or the shortcut — must reach the
+// running tray app rather than start a rival one that cannot get the hotkey.
+if (!headless && !app.requestSingleInstanceLock()) app.exit(0);
 
 /** Electron's main-process stdout does not reach the launching shell on
  *  Windows, so anything fatal goes to a file we can actually read. */
@@ -241,6 +271,20 @@ async function runRecordTest(): Promise<void> {
   app.quit();
 }
 
+/** Bring the editor back, creating it if the app is running window-less. */
+function showEditor(): void {
+  const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+
+  if (win === undefined) {
+    createWindow();
+    return;
+  }
+
+  win.show();
+  if (win.isMinimized()) win.restore();
+  win.focus();
+}
+
 void app.whenReady().then(async () => {
   // Single-purpose tool: the default File/Edit/View/Window menu is noise.
   Menu.setApplicationMenu(null);
@@ -248,6 +292,9 @@ void app.whenReady().then(async () => {
   registerBundleProtocol();
   registerDisplayMediaHandler();
   registerIpc();
+  registerEditorOpener(showEditor);
+
+  app.on("second-instance", showEditor);
 
   // Registered before any headless mode returns, so screenshots and the record
   // test see the same tray and hotkey state the real app has.
@@ -301,7 +348,10 @@ void app.whenReady().then(async () => {
     return;
   }
 
-  createWindow();
+  // Launched at login there is no window, only the tray: opening the editor
+  // on every boot would be the opposite of a background recorder.
+  if (!startedHidden()) createWindow();
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
