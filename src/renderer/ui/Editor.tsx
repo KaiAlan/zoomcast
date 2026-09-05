@@ -234,6 +234,15 @@ export function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // PreviewPlayer draws only on play/seek/toggle and nothing watches `project`,
+  // so a cursor edit is invisible on a paused preview without this. It is an
+  // effect rather than a seek inside onCursorChange because `cursorPath` is a
+  // useMemo on smoothing: only the re-render rebuilds it, so a synchronous
+  // seek would redraw the old path.
+  useEffect(() => {
+    playerRef.current?.seek(playerRef.current.playheadMs);
+  }, [project.style.cursor]);
+
   const onConfigChange = (config: ZoomConfig): void => {
     setProject((prev) => {
       const withConfig = { ...prev, zoom: { ...prev.zoom, config } };

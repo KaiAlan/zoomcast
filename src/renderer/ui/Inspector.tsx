@@ -33,6 +33,10 @@ const row: React.CSSProperties = {
   padding: "5px 0",
 };
 
+const fieldLabel: React.CSSProperties = { fontSize: 13, opacity: 0.8 };
+
+const sectionHeader: React.CSSProperties = { fontSize: 13, opacity: 0.55, marginBottom: 8 };
+
 const numberInput: React.CSSProperties = {
   width: 92,
   background: "#0f1115",
@@ -46,11 +50,11 @@ const numberInput: React.CSSProperties = {
 export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
   return (
     <div>
-      <div style={{ fontSize: 13, opacity: 0.55, marginBottom: 8 }}>zoom planner</div>
+      <div style={sectionHeader}>zoom planner</div>
 
       {FIELDS.map(({ key, label, step }) => (
         <label key={key} style={row}>
-          <span style={{ fontSize: 13, opacity: 0.8 }}>{label}</span>
+          <span style={fieldLabel}>{label}</span>
           <input
             type="number"
             step={step}
@@ -66,10 +70,10 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
       ))}
 
       <div style={{ marginTop: 16 }}>
-        <div style={{ opacity: 0.6, marginBottom: 6 }}>cursor</div>
+        <div style={sectionHeader}>cursor</div>
 
         <label style={row}>
-          <span>visible</span>
+          <span style={fieldLabel}>visible</span>
           <input
             type="checkbox"
             checked={cursor.visible}
@@ -78,7 +82,7 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
         </label>
 
         <label style={row}>
-          <span>size (%)</span>
+          <span style={fieldLabel}>size (%)</span>
           <input
             type="number"
             step={10}
@@ -86,7 +90,7 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
             value={cursor.sizePct}
             onChange={(e) => {
               const value = Number(e.target.value);
-              if (Number.isNaN(value) || value <= 0) return;
+              if (Number.isNaN(value) || value < 10) return;
               onCursorChange({ ...cursor, sizePct: value });
             }}
             style={numberInput}
@@ -94,7 +98,7 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
         </label>
 
         <label style={row}>
-          <span>smoothing</span>
+          <span style={fieldLabel}>smoothing</span>
           <input
             type="range"
             min={0}
@@ -110,7 +114,7 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
         </label>
 
         <label style={row}>
-          <span>shadow</span>
+          <span style={fieldLabel}>shadow</span>
           <input
             type="checkbox"
             checked={cursor.shadow}
@@ -119,7 +123,7 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
         </label>
 
         <label style={row}>
-          <span>ripples</span>
+          <span style={fieldLabel}>ripples</span>
           <input
             type="checkbox"
             checked={cursor.ripples}
