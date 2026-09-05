@@ -80,3 +80,45 @@ void main() {
   float d = sdRoundRect(p, u_quadPx * 0.5, u_radiusPx);
   frag = vec4(c, 1.0 - smoothstep(-1.0, 1.0, d));
 }`;
+
+export const CURSOR_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+uniform sampler2D u_tex;
+uniform float u_shadow;
+
+void main() {
+  vec4 c = texture(u_tex, v_uv);
+
+  if (u_shadow > 0.5) {
+    // Offset alpha tap, so the cursor reads against light backgrounds too.
+    float s = texture(u_tex, v_uv - vec2(0.02, 0.02)).a * 0.35;
+    // Source-over, not mix(): mix gives output alpha s(1-c.a) + c.a*c.a, which
+    // squashes the glyph's antialiased boundary (0.5 becomes 0.425 at s=0.35)
+    // and renders every edge thinner and more transparent than intended.
+    float a = c.a + s * (1.0 - c.a);
+    outColor = vec4(c.rgb * c.a / max(a, 1e-4), a);
+  } else {
+    outColor = c;
+  }
+}
+`;
+
+export const RIPPLE_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+uniform float u_progress;
+
+void main() {
+  vec2 p = v_uv * 2.0 - 1.0;
+  float d = length(p);
+
+  // A ring that expands and fades: radius tracks progress, alpha falls away.
+  float ring = smoothstep(0.06, 0.0, abs(d - u_progress));
+  float fade = 1.0 - u_progress;
+
+  outColor = vec4(1.0, 1.0, 1.0, ring * fade * 0.5);
+}
+`;

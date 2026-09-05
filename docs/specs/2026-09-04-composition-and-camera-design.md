@@ -232,8 +232,14 @@ tuned against real footage, and it is unaffected. Segments decide **where**.
 For `position: "fixed"`, the centre is the cluster centroid, as today.
 
 For `position: "follow"`, the centre tracks a **smoothed cursor path**: a
-critically damped spring over the telemetry move events, evaluated once for the
-whole take and cached on the project.
+exponential (one-pole) lag over the telemetry position events, evaluated once
+for the whole take and cached on the project.
+
+The lag is deliberate in preference to a true second-order spring. Memoryless
+exponential decay composes exactly across step sizes, so the no-overshoot and
+frame-rate-independence properties hold exactly rather than approximately — a
+real spring, carrying velocity state, would give neither for free, and an
+overshooting camera looks broken.
 
 Precomputing rather than integrating per frame is the important decision. A
 per-frame simulation depends on frame timing, so preview at 60fps and export at

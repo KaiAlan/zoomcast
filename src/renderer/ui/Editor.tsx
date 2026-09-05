@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
+import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
+import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
@@ -61,9 +63,28 @@ export function Editor({
 
   const outDuration = outputDurationMs(manifest.durationMs, project.cuts);
 
+  // Built once per bundle: pure and cheap, but rebuilding per frame would be
+  // wasteful. Depends on smoothing because that changes the resulting path.
+  const cursorPath = useMemo(
+    () =>
+      buildCursorPath(bundle.telemetry, {
+        smoothing: project.style.cursor.smoothing,
+        sampleHz: 120,
+      }),
+    [bundle.telemetry, project.style.cursor.smoothing],
+  );
+
+  // ripplesAt only ever looks at "down" events, but the full telemetry stream
+  // is dominated by "move" samples. Filtering once here keeps the per-frame
+  // scan (in both preview and export) bounded by click count, not move count.
+  const clicks = useMemo(
+    () => bundle.telemetry.filter((e) => e.k === "down"),
+    [bundle.telemetry],
+  );
+
   // Latest values for the render loop, which must not be re-created per frame.
-  const live = useRef({ project, ctx });
-  live.current = { project, ctx };
+  const live = useRef({ project, ctx, cursorPath, clicks });
+  live.current = { project, ctx, cursorPath, clicks };
 
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
@@ -97,8 +118,9 @@ export function Editor({
       const source = sourceRef.current;
       if (source === null || disposed) return;
 
-      const { project: p, ctx: c } = live.current;
+      const { project: p, ctx: c, cursorPath, clicks } = live.current;
       const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
+      const sample = cursorAt(cursorPath, tSource);
 
       const frame = await source.frameAt(tSource);
       try {
@@ -108,6 +130,8 @@ export function Editor({
           style: p.style,
           outputSize: c.output,
           sourceSize: c.source,
+          cursor: sample === null ? undefined : { sample, style: p.style.cursor },
+          ripples: ripplesAt(clicks, tSource, RIPPLE_DURATION_MS),
         });
       } finally {
         frame.close();
@@ -157,6 +181,8 @@ export function Editor({
             await exportClip({
               manifest,
               project: live.current.project,
+              cursorPath: live.current.cursorPath,
+              clicks: live.current.clicks,
               mediaDir: bundle.dir.replace(/\\/g, "/"),
               renderer,
               source,
@@ -208,6 +234,15 @@ export function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // PreviewPlayer draws only on play/seek/toggle and nothing watches `project`,
+  // so a cursor edit is invisible on a paused preview without this. It is an
+  // effect rather than a seek inside onCursorChange because `cursorPath` is a
+  // useMemo on smoothing: only the re-render rebuilds it, so a synchronous
+  // seek would redraw the old path.
+  useEffect(() => {
+    playerRef.current?.seek(playerRef.current.playheadMs);
+  }, [project.style.cursor]);
+
   const onConfigChange = (config: ZoomConfig): void => {
     setProject((prev) => {
       const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
@@ -254,6 +289,8 @@ export function Editor({
         await exportClip({
           manifest,
           project,
+          cursorPath: live.current.cursorPath,
+          clicks: live.current.clicks,
           mediaDir: bundle.dir.replace(/\\/g, "/"),
           renderer,
           source,
@@ -356,7 +393,14 @@ export function Editor({
           overflowY: "auto",
         }}
       >
-        <Inspector config={project.zoom.config} onChange={onConfigChange} />
+        <Inspector
+          config={project.zoom.config}
+          onChange={onConfigChange}
+          cursor={project.style.cursor}
+          onCursorChange={(cursor) =>
+            setProject((p) => ({ ...p, style: { ...p.style, cursor } }))
+          }
+        />
       </div>
     </div>
   );

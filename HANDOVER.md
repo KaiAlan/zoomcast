@@ -1,9 +1,14 @@
 # zoomcast — handover
 
-Updated 2026-09-04. **Phases 0–7 complete.** The tool records your screen, mic
-and system audio, plans zooms from real input telemetry, lets you cut and
-scrub, and exports a finished MP4. Phases 8 (webcam PiP) and 9 (cursor shapes,
-polish) remain.
+Updated 2026-09-05. **Phases 0–7 and phase A complete.** The tool records your
+screen, mic and system audio, plans zooms from real input telemetry, draws a
+synthetic cursor with real shapes and click ripples, lets you cut and scrub, and
+exports a finished MP4.
+
+Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
+tracked as phases B–F in
+`docs/specs/2026-09-04-composition-and-camera-design.md` §13, plus webcam PiP
+(the old phase 8), which is untouched and independent of all of them.
 
 ## What this is
 
@@ -19,11 +24,11 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 136 passing
+npm test              # 179 passing, 26 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
-npm run verify:parity # 4/4 at 43-45dB
+npm run verify:parity # 5/5 at 43-45dB
 npm run tune -- all   # zoom plan over every take on disk
 ```
 
@@ -81,17 +86,54 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 
 ## What is NOT built
 
-- **8 — webcam PiP.** A third `MediaRecorder` following the same hidden-renderer
-  pattern as `AudioRecorder`, a second `VideoSource` in the editor, the webcam
-  pass in `Renderer` (`FrameState.webcam` already exists), placement UI.
-- **9 — polish.** Cursor shapes via `koffi` calling `user32!GetCursorInfo` at
-  30Hz, click ripples.
+Phases B–F are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
+§13. Only B has a written plan so far:
+`docs/superpowers/plans/2026-09-05-phase-b-compositor.md`.
+
+| Phase | Deliverable | Depends on |
+| --- | --- | --- |
+| B | Background presets, blur, custom image, frame border, aspect/resolution, and the `style` UI that has never existed | — |
+| C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance | A, B |
+| D | Directional motion blur | C |
+| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
+| F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
+
+**C is the one the user actually wants.** The zoom complaint is measured, with a
+specific signature, in `docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md`
+— read that before touching a pacing dial. B goes first anyway, and the spec's
+reason is good: the camera should be tuned once, against the finished composited
+look rather than raw full-bleed footage.
+
+**A seam phase C will hit, worth knowing before it starts.** Spec §8 claims the
+cursor's position "comes from the same smoothed path the camera uses (§9), so
+cursor and camera cannot disagree." That claim does not currently hold up:
+`buildCursorPath`'s only damping input is `PathOptions.smoothing`, which is a
+**presentation** control the user can set to 0 (raw telemetry), and
+`MAX_HALF_LIFE_MS` is 90ms — a cursor-scale half-life. A follow camera wants
+several hundred ms and must not go jittery because someone turned the cursor's
+smoothing off. So C must either build a second path at camera damping (which
+falsifies §8) or thread a separate half-life. The cheap future-proofing is to
+let `PathOptions` take `halfLifeMs` directly and move the 0–1 `smoothing` →
+half-life mapping to the Editor call site, where the style control actually
+lives; `buildCursorPath` then serves both consumers without either owning the
+other's units. **This is a spec issue as much as a code one** — fix §8's wording
+either way.
+
+**Webcam PiP** (the old phase 8) is independent of all of it: a third
+`MediaRecorder` following the same hidden-renderer pattern as `AudioRecorder`, a
+second `VideoSource` in the editor, the webcam pass in `Renderer`
+(`FrameState.webcam` already exists), placement UI. It will need
+`registerDisplayMediaHandler()` treatment for `getUserMedia`.
 
 Also worth doing early:
 
 - **Undo/redo.** Spec §6 specifies immutable project snapshots. Nothing yet.
 - **Draggable cut regions.** Currently a placeholder "cut 0.5s here" button;
   there is no way to adjust or delete a cut once made.
+- **`addCut` never redraws the paused preview.** Adding a cut changes the
+  output→source mapping at the current playhead, but nothing redraws, so the
+  frame on screen is stale until the user scrubs. Same family as the cursor bug
+  fixed in phase A. See "three idioms" below.
 - **Surface the `unclean` state.** A recording that ended abnormally is marked
   in the manifest and logged, but the Welcome list does not show it.
 - **Delete recordings from the UI.** The list shows sizes; there is no delete.
@@ -124,6 +166,7 @@ unit tests could not have caught.
 | `ZOOMCAST_SHOOT` | Renders arbitrary frame specs to PNG through the real compositor |
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
+| `ZOOMCAST_RECORD_TEST_RUNS=<n>` | n recordings in **one process**, each reporting `hasCursorShapes` and its cursor-event count. Use 2+ for anything touching process-global state — see the koffi entry below |
 | `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
 | `npm run icon` | Redraws `build/icon.ico` from `tools/make-icon.ts` |
 
@@ -158,6 +201,28 @@ cat "$env:APPDATA\zoomcast\record-test.json"
 cat "$env:APPDATA\zoomcast\main-error.log"
 ```
 
+## The cursor pipeline (phase A)
+
+`drawMouse` stays `false` — v1 decision #6, because a cursor baked into the
+pixels cannot be smoothed, resized, or kept sharp under zoom. Everything here
+exists to draw it back on top, better.
+
+- `src/main/capture/CursorShapeReader.ts` polls `user32!GetCursorInfo` at 30Hz
+  via koffi and writes shape events into the telemetry stream.
+- `src/shared/cursor/shapeTracker.ts` maps a cursor handle to a shape.
+- `src/shared/cursor/shapes.ts` holds eight vector shapes, drawn not extracted.
+- `src/shared/cursor/path.ts` precomputes the smoothed position path.
+- `src/shared/cursor/ripples.ts` returns the active click ripples at a time.
+- `src/renderer/gl/cursorTexture.ts` rasterises per (shape, size) and caches.
+- `src/renderer/gl/Renderer.ts` draws ripples, then the cursor, over the screen.
+- `src/renderer/ui/Inspector.tsx` exposes all five `CursorStyle` controls.
+
+Two known cosmetic weaknesses, both visible in a rendered shot and neither worth
+blocking on: the `wait` glyph reads as two crescents rather than a clean spinner
+ring, and `hand` reads as a rounded blob at small sizes. Both are geometrically
+valid paths, just not great drawings. Redraw them in `shapes.ts` if they bother
+you — nothing else has to change.
+
 ## Things that will bite you
 
 Each of these cost real time; none is hypothetical.
@@ -180,6 +245,76 @@ Each of these cost real time; none is hypothetical.
   held for less than its own two transitions (the camera never arrives), and a
   zoom-out followed 140ms later by a zoom-in elsewhere (a flinch, not two
   shots). Both were found in real footage that no unit test would have caught.
+
+**The cursor pipeline**
+
+- **koffi registers NAMED types in a process-global registry.**
+  `koffi.struct("POINT", …)` throws `Duplicate type name` on the second call, so
+  FFI setup must be memoised at module scope, never run per recording. It was
+  per-recording once: the second recording of every app session threw, the throw
+  was swallowed by `start()`'s catch, and the take silently carried no shape
+  stream while the manifest still claimed one. zoomcast is a tray app that lives
+  for days, so run 2 is the normal case. **Anything touching process-global
+  state must be tested with `ZOOMCAST_RECORD_TEST_RUNS=2`** — a single-run test
+  is structurally incapable of seeing this class of bug.
+- **`koffi.inout(koffi.pointer(CURSORINFO))`, never `koffi.out(...)`.** `out()`
+  never marshals `cbSize` *into* the call, so `GetCursorInfo` fails with
+  `ERROR_INVALID_PARAMETER` on every call, silently. The stream just stays empty.
+- **Allocate the `info` literal fresh inside the poll closure.** koffi zeroes
+  `cbSize` when decoding, so a reused object fails from the second poll on. This
+  is unrelated to the memoisation above and is still required.
+- **`koffi.address()` returns `bigint`** in koffi 3.2.1. Handles are small
+  (65539–65567), so `Number(...)` is lossless. Confirmed handles: arrow 65539,
+  ibeam 65541, wait 65543, nwse 65549, nesw 65551, ew 65553, ns 65555,
+  hand 65567.
+- **Every subpath in `shapes.ts` must be closed.** All eight shapes render
+  through one recipe — stroke black, then fill white — and Canvas2D's `fill()`
+  encloses zero area on an open subpath, so a bare polyline paints nothing and
+  only the stroke survives. Five of eight shapes were open for an entire phase:
+  `ibeam` rendered as a solid black glyph and the four resize cursors as white
+  heads joined by a black bar. `shapes.test.ts` now asserts closure.
+- **`new Path2D(bad)` does not throw.** It silently yields an empty or truncated
+  path, so a typo in path data is invisible to every runtime check. The grammar
+  tests in `shapes.test.ts` exist for exactly this.
+- **A feature the fixture never exercises is a feature nothing guards.** The
+  five broken shapes survived nine reviews because `tests/fixtures/basic` had no
+  `k:"cursor"` events at all, so parity and every screenshot had only ever drawn
+  `arrow`. `make-fixture` now emits shape events. Same lesson as adding 1900 to
+  the parity `SHOTS` so a ripple window was actually sampled.
+- **The cursor must not scale with the zoom.** Position maps through the screen
+  quad so the cursor tracks the camera, but size derives from output height
+  alone. A cursor that grows as the camera pushes in reads as a bug.
+- **Textures are re-rasterised per (shape, size), never scaled from one bitmap.**
+  That is the entire reason the shapes are vectors.
+- **The rasterised size and the on-screen geometry must come from one value.**
+  `CursorTextureCache.get` returns `{ texture, px }` where `px` is the clamped,
+  rounded size it actually drew, and `padFor(px)` is the margin it actually used.
+  `Renderer.drawCursor` derives the quad and hotspot offset from both. Computing
+  geometry from the raw request instead puts the hotspot off the click point at
+  any non-default size.
+- **Cursor and ripples are not clipped to the screen quad.** `drawScreen`
+  applies a rounded-rect SDF; the cursor and rings are free quads in output
+  space, so a cursor near the source edge spills over the rounded corner onto the
+  background. Windows clips it in reality. Low frequency, easy to live with.
+
+**React and redraw — three idioms, one question**
+
+`Editor.tsx` answers "how does an edit reach the paused preview?" three
+different ways, and `PreviewPlayer.draw()` runs only on `play()` / `seek()` /
+`toggle()` with nothing watching `project`:
+
+1. `onCursorChange` — a `useEffect` on `project.style.cursor`. **Correct**, and
+   the only one that works for a value feeding a `useMemo`: `cursorPath` is
+   memoised on `smoothing`, so a synchronous seek would redraw the OLD path.
+2. `onConfigChange` — patches `live.current` inside the state updater, then
+   seeks synchronously. Works, but depends on React invoking the functional
+   updater synchronously at dispatch — the eager-state optimisation, which is an
+   optimisation and not a contract.
+3. `addCut` — patches `live.current` and never seeks at all, so adding a cut
+   does not redraw. That is a live bug, listed above.
+
+**Unify them in phase C**, which per spec §10 already owns preview performance
+and rewrites the playhead/render loop wholesale. Do not add a fourth.
 
 **Media and timing**
 
@@ -205,7 +340,16 @@ Each of these cost real time; none is hypothetical.
   dev build has always run. With the rebuild on, packaging dies with
   `Could not find any Visual Studio installation to use`.
 - **`asarUnpack: "**/*.node"` is required.** A native addon cannot be loaded
-  from inside an asar archive.
+  from inside an asar archive. There are two of them now, and they ship
+  differently: `uiohook-napi` keeps its binary under `prebuilds/`, while koffi
+  resolves its own from a **separate scoped optional dependency**,
+  `@koromix/koffi-win32-x64/win32_x64/koffi.node` — nothing inside `koffi/`
+  itself. The glob covers both; verify with
+  `ls release/win-unpacked/resources/app.asar.unpacked/node_modules` after a
+  `dist`. This matters because `import koffi` is at module scope in
+  `CursorShapeReader`, transitively imported from `src/main/index.ts`, so a
+  resolution failure in a packaged build is a **startup crash**, not the
+  graceful degradation `start()`'s try/catch gives.
 - **The single-instance lock must skip the headless modes.** `verify:parity`,
   `verify:decode`, `ZOOMCAST_SHOOT`, `ZOOMCAST_UI_SHOT` and
   `ZOOMCAST_RECORD_TEST` each spawn their own Electron while a normal instance
@@ -256,7 +400,27 @@ Each of these cost real time; none is hypothetical.
 **Other**
 
 - **`src/shared/` must not import electron, touch the DOM, or hit the
-  filesystem.** That purity is why 116 tests run in plain node.
+  filesystem.** That purity is why 179 tests run in plain node.
+- **`project.json` is normalised on load, never cast.** `normalizeProject` in
+  `src/shared/project/migrate.ts` merges field-by-field over `defaultProject`,
+  so a file written by an older build — or half-written, or hand-edited —
+  degrades to defaults rather than throwing. `bundleIo` used to do a bare
+  `as Project`, which was safe only while the shape never changed; phase A added
+  the first required field to it and phases B and C add more. **Anyone adding a
+  field to `Project` must add it to `normalizeProject` too, or old projects
+  silently lose it.**
+- **A `useMemo` cannot be refreshed by patching a ref.** If a value feeds a
+  memo, the redraw that must see it has to happen after the re-render, i.e. in
+  an effect. See "three idioms" above.
+- **`ripplesAt` scans every prior click each frame.** O(clicks before t), so a
+  10-minute take with ~1500 clicks costs ~27M trivial iterations over a 60fps
+  export. Fine in practice; a binary search for the window start would make it
+  O(active ripples) if it ever shows up in a profile.
+- **`src/renderer/shoot.ts` is a THIRD `drawFrame` call site.** The rule
+  elsewhere in this file says "preview and export are two separate call sites",
+  and for product code that is true — but `shoot.ts` is a fourth wall. It
+  deliberately draws no cursor and no ripples, so `ZOOMCAST_SHOOT` stills omit
+  them. Do not assume a shoot fixture proves a cursor-related change.
 - **Vite is pinned to ^7 and `@vitejs/plugin-react` to ^5.** `electron-vite@5`
   peers on vite ≤7 while plugin-react 6 needs vite 8.
 - **PowerShell deletes an env var set to `''`.** Pass `' '` (a space) when a

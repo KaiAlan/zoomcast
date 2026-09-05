@@ -1,8 +1,19 @@
-import type { StyleConfig } from "../../shared/project/types";
+import type { CursorSample } from "../../shared/cursor/path";
+import type { Ripple } from "../../shared/cursor/ripples";
+import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
+import type { CursorStyle, StyleConfig } from "../../shared/project/types";
 import type { ZoomState } from "../../shared/zoom/interpolate";
 import type { Size } from "../../shared/zoom/types";
+import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
-import { BG_FRAG, QUAD_VERT, SCREEN_FRAG, SHADOW_FRAG } from "./shaders";
+import {
+  BG_FRAG,
+  CURSOR_FRAG,
+  QUAD_VERT,
+  RIPPLE_FRAG,
+  SCREEN_FRAG,
+  SHADOW_FRAG,
+} from "./shaders";
 
 export type FrameState = {
   screen: TexImageSource;
@@ -11,6 +22,8 @@ export type FrameState = {
   style: StyleConfig;
   outputSize: Size;
   sourceSize: Size;
+  cursor?: { sample: CursorSample; style: CursorStyle };
+  ripples?: Ripple[];
 };
 
 type Program = {
@@ -92,6 +105,9 @@ export class Renderer {
   private readonly bg: Program;
   private readonly shadow: Program;
   private readonly screen: Program;
+  private readonly cursorProgram: Program;
+  private readonly rippleProgram: Program;
+  private readonly cursorTextures = new CursorTextureCache();
   private readonly tex: WebGLTexture;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -135,6 +151,8 @@ export class Renderer {
       "u_sharpen",
       "u_texel",
     ]);
+    this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow"]);
+    this.rippleProgram = link(gl, RIPPLE_FRAG, ["u_progress"]);
 
     const tex = gl.createTexture();
     if (tex === null) throw new Error("could not create texture");
@@ -172,6 +190,18 @@ export class Renderer {
 
     this.drawShadow(quad, out, style);
     this.drawScreen(quad, out, src, style, state.screen);
+
+    // Ripples are their own toggle, independent of cursor visibility: a click
+    // near the ends of the path can outlive the cursor sample that produced
+    // it (cursorAt returns null there), and `visible: false` should not mute
+    // a separately-enabled ripple.
+    if (style.cursor.ripples) {
+      this.drawRipples(state.ripples ?? [], quad, out, src);
+    }
+
+    if (state.cursor !== undefined && state.cursor.style.visible) {
+      this.drawCursor(state.cursor.sample, state.cursor.style, quad, out, src);
+    }
 
     gl.bindVertexArray(null);
   }
@@ -273,6 +303,80 @@ export class Renderer {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
+  /**
+   * Draw expanding click rings, one quad per active ripple, in output space.
+   *
+   * Position maps through the same quad as the cursor, so rings track the
+   * zoom the same way. Drawn before the cursor so the cursor sits on top.
+   */
+  private drawRipples(
+    ripples: Ripple[],
+    quad: { x: number; y: number; w: number; h: number },
+    out: Size,
+    src: Size,
+  ): void {
+    const gl = this.gl;
+    if (ripples.length === 0) return;
+
+    // Deliberately independent of cursor.sizePct: the ring marks the click, not
+    // the glyph, so it keeps one size however large the cursor is drawn.
+    const size = (out.h / 1080) * 96;
+    gl.useProgram(this.rippleProgram.program);
+
+    for (const r of ripples) {
+      const x = quad.x + (r.x / src.w) * quad.w;
+      const y = quad.y + (r.y / src.h) * quad.h;
+
+      gl.uniform1f(this.rippleProgram.uniforms.u_progress ?? null, r.progress);
+      this.setRect(this.rippleProgram, x - size / 2, y - size / 2, size, size, out);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+  }
+
+  /**
+   * Draw the cursor in output space.
+   *
+   * The position is mapped through the same quad the screen was drawn into, so
+   * the cursor tracks the zoom — but the SIZE is not scaled by the zoom, so its
+   * apparent size stays constant. A cursor that grows as the camera pushes in
+   * reads as a bug.
+   */
+  private drawCursor(
+    sample: CursorSample,
+    style: CursorStyle,
+    quad: { x: number; y: number; w: number; h: number },
+    out: Size,
+    src: Size,
+  ): void {
+    const gl = this.gl;
+    const art = CURSOR_SHAPES[sample.shape];
+
+    const sizePx = (out.h / 1080) * 24 * (style.sizePct / 100);
+    const cursorTex = this.cursorTextures.get(gl, sample.shape, sizePx);
+    // Geometry derives from cursorTex.px — the clamped, rounded size the
+    // cache actually rasterised — not the raw sizePx, so the hotspot's
+    // fraction of the drawn quad matches its fraction of the texture.
+    // Same px and the same pad the cache actually rasterised with: geometry
+    // recomputed from anything else puts the hotspot off the click point.
+    const pad = padFor(cursorTex.px);
+    const dim = cursorTex.px + pad * 2;
+
+    const x = quad.x + (sample.x / src.w) * quad.w;
+    const y = quad.y + (sample.y / src.h) * quad.h;
+
+    const hotX = (art.hotspot.x / art.viewBox) * cursorTex.px + pad;
+    const hotY = (art.hotspot.y / art.viewBox) * cursorTex.px + pad;
+
+    gl.useProgram(this.cursorProgram.program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, cursorTex.texture);
+    gl.uniform1i(this.cursorProgram.uniforms.u_tex ?? null, 0);
+    gl.uniform1f(this.cursorProgram.uniforms.u_shadow ?? null, style.shadow ? 1 : 0);
+
+    this.setRect(this.cursorProgram, x - hotX, y - hotY, dim, dim, out);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
   /** Read the drawn frame back as tightly packed RGBA, top row first. */
   readPixels(out: Size): Uint8Array {
     const gl = this.gl;
@@ -297,5 +401,8 @@ export class Renderer {
     gl.deleteProgram(this.bg.program);
     gl.deleteProgram(this.shadow.program);
     gl.deleteProgram(this.screen.program);
+    gl.deleteProgram(this.cursorProgram.program);
+    gl.deleteProgram(this.rippleProgram.program);
+    this.cursorTextures.dispose(gl);
   }
 }

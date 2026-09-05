@@ -21,8 +21,14 @@ const OUT = join(ROOT, "tmp", "parity");
 const BUNDLE = join(ROOT, "tests", "fixtures", "basic");
 const MP4 = join(OUT, "export.mp4");
 
-/** Output times to compare, in ms. Chosen to straddle the zoom transition. */
-const SHOTS = [0, 1000, 2500, 4600];
+/**
+ * Output times to compare, in ms. 0, 1000, 2500 and 4600 straddle the zoom
+ * transition. 1900 lands inside the fixture's second click's ripple window
+ * ([1805, 2255) at 450ms duration) — without it this guard never rendered a
+ * ripple in either path, so a preview-only or export-only ripple regression
+ * would pass silently.
+ */
+const SHOTS = [0, 1000, 1900, 2500, 4600];
 const MIN_PSNR_DB = 28;
 
 rmSync(OUT, { recursive: true, force: true });

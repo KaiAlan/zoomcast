@@ -9,7 +9,7 @@ import {
 } from "./recording";
 import { registerDisplayMediaHandler } from "./capture/AudioRecorder";
 import { preloadPath, rendererUrl } from "./windows";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -242,9 +242,20 @@ async function runParity(): Promise<void> {
  * reach the launching shell on Windows, hence the file.
  *
  * Driven by ZOOMCAST_RECORD_TEST=<seconds>, result at tmp/record-test.json.
+ *
+ * ZOOMCAST_RECORD_TEST_RUNS=<n> records n times in ONE process. That is not a
+ * convenience: process-global state initialised per recording is invisible to a
+ * single-run test, and exactly that bug shipped once. koffi.struct() registers
+ * a NAMED type in a process-global registry, the registration sat inside
+ * CursorShapeReader.start(), and the second recording of every app session
+ * threw, was swallowed, and silently produced no shape stream. zoomcast is a
+ * tray app that lives for days, so run 2 is the normal case, not the edge one.
+ * Every run's manifest is reported so a regression shows as run 2 losing what
+ * run 1 had.
  */
 async function runRecordTest(): Promise<void> {
   const seconds = Number(process.env.ZOOMCAST_RECORD_TEST ?? "4");
+  const runs = Math.max(1, Number(process.env.ZOOMCAST_RECORD_TEST_RUNS ?? "1"));
   const resultFile = join(app.getPath("userData"), "record-test.json");
   mkdirSync(dirname(resultFile), { recursive: true });
 
@@ -255,17 +266,39 @@ async function runRecordTest(): Promise<void> {
   const { startRecording, stopRecording } = await import("./capture/SessionController");
   const { runCountdown, showRecordingBorder } = await import("./overlays");
 
+  const results: unknown[] = [];
+
   try {
-    await runCountdown(1);
-    await startRecording();
+    for (let run = 0; run < runs; run++) {
+      await runCountdown(1);
+      await startRecording();
 
-    const border = showRecordingBorder();
-    await new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000));
-    border.destroy();
+      const border = showRecordingBorder();
+      await new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000));
+      border.destroy();
 
-    write({ ok: true, ...(await stopRecording()) });
+      const stopped = await stopRecording();
+      const manifestPath = join(stopped.dir, "manifest.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        telemetry?: { hasCursorShapes?: boolean };
+      };
+      const events = readFileSync(join(stopped.dir, "input.jsonl"), "utf8");
+
+      results.push({
+        run: run + 1,
+        ...stopped,
+        hasCursorShapes: manifest.telemetry?.hasCursorShapes ?? false,
+        cursorEvents: (events.match(/"k":"cursor"/g) ?? []).length,
+      });
+    }
+
+    write(runs === 1 ? { ok: true, ...(results[0] as object) } : { ok: true, runs: results });
   } catch (err) {
-    write({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    write({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      completed: results,
+    });
   }
 
   app.quit();

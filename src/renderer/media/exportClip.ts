@@ -1,5 +1,9 @@
 import { toStreamLocalMs } from "../../shared/bundle/streamTime";
 import type { Manifest } from "../../shared/bundle/manifest";
+import type { TelemetryEvent } from "../../shared/bundle/types";
+import type { CursorPath } from "../../shared/cursor/path";
+import { cursorAt } from "../../shared/cursor/path";
+import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
 import type { AudioInput } from "../../shared/export/ffmpegArgs";
 import type { Project } from "../../shared/project/types";
@@ -20,6 +24,15 @@ export type ExportProgress = { done: number; total: number };
 export async function exportClip(opts: {
   manifest: Manifest;
   project: Project;
+  /** Null when the bundle has no cursor telemetry — export just draws no cursor. */
+  cursorPath: CursorPath | null;
+  /**
+   * The pre-filtered "down" events, exactly the array the preview's ripplesAt
+   * draws from — not the raw telemetry stream. Passing the same array rather
+   * than re-deriving it is what makes "preview and export draw from the same
+   * data" true by construction instead of by discipline.
+   */
+  clicks: TelemetryEvent[];
   mediaDir: string;
   renderer: Renderer;
   source: VideoSource;
@@ -28,7 +41,8 @@ export async function exportClip(opts: {
   onProgress: (p: ExportProgress) => void;
   signal?: { cancelled: boolean };
 }): Promise<void> {
-  const { manifest, project, renderer, source, outFile, onProgress } = opts;
+  const { manifest, project, cursorPath, clicks, renderer, source, outFile, onProgress } =
+    opts;
 
   const output = { w: project.output.width, h: project.output.height };
   const sourceSize = { w: manifest.video.width, h: manifest.video.height };
@@ -69,6 +83,8 @@ export async function exportClip(opts: {
       // goes through the helper anyway so a non-zero offset cannot be missed.
       const localMs = toStreamLocalMs(frame.tSourceMs, manifest.video.startOffsetMs);
 
+      const sample = cursorPath === null ? null : cursorAt(cursorPath, frame.tSourceMs);
+
       const videoFrame = await source.frameAt(localMs);
       try {
         renderer.drawFrame({
@@ -77,6 +93,8 @@ export async function exportClip(opts: {
           style: project.style,
           outputSize: output,
           sourceSize,
+          cursor: sample === null ? undefined : { sample, style: project.style.cursor },
+          ripples: ripplesAt(clicks, frame.tSourceMs, RIPPLE_DURATION_MS),
         });
       } finally {
         videoFrame.close();

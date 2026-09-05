@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TelemetryEvent } from "../src/shared/bundle/types";
+import type { CursorShape, TelemetryEvent } from "../src/shared/bundle/types";
 
 const FPS = 60;
 const W = 1920;
@@ -106,6 +106,24 @@ for (const [t, x, y, keystrokes] of preset.clicks) {
     events.push({ t: t + 200 + i * 90, k: "key", d: "down", c: "KeyA" });
   }
 }
+
+// Cycle the shapes so the fixture actually exercises more than `arrow`.
+//
+// Without these the fixture emitted no k:"cursor" events at all, so
+// verify:parity, ZOOMCAST_UI_SHOT and every shoot still had only ever drawn
+// one of the eight shapes — and five of the other seven were broken for an
+// entire phase without a single check noticing. A shape that is never
+// rasterised is a shape nothing guards.
+const SHAPE_CYCLE = [
+  "arrow", "ibeam", "hand", "ns", "ew", "nwse", "nesw", "wait",
+] as const satisfies readonly CursorShape[];
+
+preset.clicks.forEach(([t], i) => {
+  // Shortly before each click, so the shape is live across the click and its
+  // ripple window rather than changing on the same tick.
+  const shape = SHAPE_CYCLE[i % SHAPE_CYCLE.length] as CursorShape;
+  events.push({ t: Math.max(0, t - 120), k: "cursor", shape });
+});
 
 events.sort((a, b) => a.t - b.t);
 

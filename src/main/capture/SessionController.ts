@@ -182,7 +182,10 @@ export async function stopRecording(): Promise<RecordingResult> {
       codec: "opus",
       startOffsetMs: track.startOffsetMs,
     })),
-    telemetry: { file: "input.jsonl", hasCursorShapes: false },
+    telemetry: {
+      file: "input.jsonl",
+      hasCursorShapes: session.telemetry.hasCursorShapes,
+    },
   };
 
   writeFileSync(
