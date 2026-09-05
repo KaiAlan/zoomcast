@@ -1,3 +1,5 @@
+import { MESH_POINTS } from "../../shared/style/backgrounds";
+
 /**
  * All geometry is a unit quad. `u_rect` places it in output space using a
  * top-left origin (x, y, w, h all normalised 0..1), and the vertex shader
@@ -15,17 +17,84 @@ void main() {
   gl_Position = vec4(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
 }`;
 
+/**
+ * Background: mesh gradient, solid colour, or an image.
+ *
+ * The mesh is inverse-distance weighting over MESH_POINTS coloured control
+ * points — cheap, unconditionally smooth, and free of the banding a two-stop
+ * linear gradient shows across a dark palette. u_mode picks the branch; the
+ * loop bound is a compile-time constant so the program stays branch-free
+ * inside it.
+ *
+ * Distances are measured in square space via u_aspect. Without that a preset
+ * smears horizontally on 16:9 and vertically on 9:16, so the same preset would
+ * look like two different gradients once aspect ratio became selectable.
+ *
+ * The blur samples the mesh at a 3x3 kernel rather than running a second pass
+ * over a framebuffer. At this kernel size evaluating the mesh nine times is
+ * cheaper than the round trip, because each evaluation is a handful of
+ * reciprocals rather than a texture fetch. The image branch does pay for taps,
+ * which is why its kernel is the same nine and not more.
+ */
 export const BG_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
-uniform vec3  u_from;
-uniform vec3  u_to;
-uniform float u_angle;
+uniform int   u_mode;        // 0 = mesh, 1 = solid, 2 = image
+uniform vec3  u_color;
+uniform vec2  u_points[${MESH_POINTS}];
+uniform vec3  u_colors[${MESH_POINTS}];
+uniform float u_falloff;
+uniform float u_aspect;      // output w/h, so distance is measured square
+uniform float u_blurPx;
+uniform vec2  u_texelPx;     // 1/outputW, 1/outputH
+uniform sampler2D u_image;
+uniform vec2  u_imageScale;  // cover-fit scale, applied about the centre
 out vec4 frag;
+
+vec3 mesh(vec2 uv) {
+  vec2 p = vec2(uv.x * u_aspect, uv.y);
+  vec3 acc = vec3(0.0);
+  float wsum = 0.0;
+
+  for (int i = 0; i < ${MESH_POINTS}; i++) {
+    vec2 d = p - vec2(u_points[i].x * u_aspect, u_points[i].y);
+    // The epsilon keeps the weight finite exactly at a control point, where
+    // the distance is zero and the reciprocal would otherwise be infinite.
+    float w = 1.0 / (dot(d, d) * u_falloff + 0.0005);
+    acc += u_colors[i] * w;
+    wsum += w;
+  }
+
+  return acc / wsum;
+}
+
+vec3 image(vec2 uv) {
+  // Cover fit: scale about the centre so the short edge fills and the long
+  // edge is cropped, never letterboxed.
+  vec2 c = (uv - 0.5) * u_imageScale + 0.5;
+  return texture(u_image, c).rgb;
+}
+
+vec3 sample_bg(vec2 uv) {
+  if (u_mode == 1) return u_color;
+  if (u_mode == 2) return image(uv);
+  return mesh(uv);
+}
+
 void main() {
-  vec2 dir = vec2(cos(u_angle), sin(u_angle));
-  float t = clamp(dot(v_uv - 0.5, dir) + 0.5, 0.0, 1.0);
-  frag = vec4(mix(u_from, u_to, t), 1.0);
+  if (u_blurPx <= 0.0) {
+    frag = vec4(sample_bg(v_uv), 1.0);
+    return;
+  }
+
+  vec2 step = u_texelPx * u_blurPx;
+  vec3 sum = vec3(0.0);
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      sum += sample_bg(v_uv + vec2(float(x), float(y)) * step);
+    }
+  }
+  frag = vec4(sum / 9.0, 1.0);
 }`;
 
 const SD_ROUND_RECT = `

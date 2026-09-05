@@ -4,6 +4,11 @@ import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
 import type { CursorStyle, StyleConfig } from "../../shared/project/types";
 import type { ZoomState } from "../../shared/zoom/interpolate";
 import type { Size } from "../../shared/zoom/types";
+import {
+  BLUR_RADIUS_PX,
+  MESH_POINTS,
+  gradientPreset,
+} from "../../shared/style/backgrounds";
 import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
 import {
@@ -136,7 +141,22 @@ export class Renderer {
     gl.bindVertexArray(null);
     this.vao = vao;
 
-    this.bg = link(gl, BG_FRAG, ["u_from", "u_to", "u_angle"]);
+    // Array uniforms are looked up per element, never as a block: asking for
+    // "u_points" alone returns null and every point silently stays at zero.
+    const bgUniforms = [
+      "u_mode",
+      "u_color",
+      "u_falloff",
+      "u_aspect",
+      "u_blurPx",
+      "u_texelPx",
+      "u_image",
+      "u_imageScale",
+    ];
+    for (let i = 0; i < MESH_POINTS; i++) {
+      bgUniforms.push(`u_points[${i}]`, `u_colors[${i}]`);
+    }
+    this.bg = link(gl, BG_FRAG, bgUniforms);
     this.shadow = link(gl, SHADOW_FRAG, [
       "u_spanPx",
       "u_halfPx",
@@ -184,7 +204,7 @@ export class Renderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(this.vao);
 
-    this.drawBackground(style);
+    this.drawBackground(style, out);
 
     const quad = screenQuad(src, out, style.paddingFactor, state.zoom);
 
@@ -223,23 +243,45 @@ export class Renderer {
     );
   }
 
-  private drawBackground(style: StyleConfig): void {
+  private drawBackground(style: StyleConfig, out: Size): void {
     const gl = this.gl;
+    const bg = style.background;
+
+    // "hidden" is a flat black ground, which is what an export wants when the
+    // result is going to be composited downstream.
+    if (bg.kind === "hidden") {
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+
     gl.useProgram(this.bg.program);
-
-    // INTERIM, replaced in this phase's Task 3 by the mesh gradient. Background
-    // lost its `from`/`to`/`angle` fields when it widened from a union to a
-    // flat record, and named presets do not exist yet, so every kind renders
-    // flat for exactly as long as it takes Tasks 2 and 3 to land.
-    const bgStyle = style.background;
-    const from = hexToRgb(bgStyle.color);
-    const to = from;
-    const angle = 0;
-
-    gl.uniform3f(this.bg.uniforms.u_from ?? null, from[0], from[1], from[2]);
-    gl.uniform3f(this.bg.uniforms.u_to ?? null, to[0], to[1], to[2]);
-    gl.uniform1f(this.bg.uniforms.u_angle ?? null, angle);
     gl.uniform4f(this.bg.uniforms.u_rect ?? null, 0, 0, 1, 1);
+
+    // Quoted at 1080p and scaled by output height, so the blur keeps the same
+    // apparent size at 4K export as in the preview — the same reasoning that
+    // keeps the cursor a constant apparent size.
+    gl.uniform1f(this.bg.uniforms.u_blurPx ?? null, BLUR_RADIUS_PX[bg.blur] * (out.h / 1080));
+    gl.uniform2f(this.bg.uniforms.u_texelPx ?? null, 1 / out.w, 1 / out.h);
+
+    if (bg.kind === "color") {
+      const [r, g, b] = hexToRgb(bg.color);
+      gl.uniform1i(this.bg.uniforms.u_mode ?? null, 1);
+      gl.uniform3f(this.bg.uniforms.u_color ?? null, r, g, b);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      return;
+    }
+
+    const preset = gradientPreset(bg.preset);
+    gl.uniform1i(this.bg.uniforms.u_mode ?? null, 0);
+    gl.uniform1f(this.bg.uniforms.u_falloff ?? null, preset.falloff);
+    gl.uniform1f(this.bg.uniforms.u_aspect ?? null, out.w / out.h);
+
+    preset.points.forEach((pt, i) => {
+      const [r, g, b] = hexToRgb(pt.color);
+      gl.uniform2f(this.bg.uniforms[`u_points[${i}]`] ?? null, pt.x, pt.y);
+      gl.uniform3f(this.bg.uniforms[`u_colors[${i}]`] ?? null, r, g, b);
+    });
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
