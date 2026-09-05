@@ -4,7 +4,7 @@ import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
 import type { CursorStyle, StyleConfig } from "../../shared/project/types";
 import type { ZoomState } from "../../shared/zoom/interpolate";
 import type { Size } from "../../shared/zoom/types";
-import { CursorTextureCache, PAD } from "./cursorTexture";
+import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
 import {
   BG_FRAG,
@@ -352,13 +352,16 @@ export class Renderer {
     // Geometry derives from cursorTex.px — the clamped, rounded size the
     // cache actually rasterised — not the raw sizePx, so the hotspot's
     // fraction of the drawn quad matches its fraction of the texture.
-    const dim = cursorTex.px + PAD * 2;
+    // Same px and the same pad the cache actually rasterised with: geometry
+    // recomputed from anything else puts the hotspot off the click point.
+    const pad = padFor(cursorTex.px);
+    const dim = cursorTex.px + pad * 2;
 
     const x = quad.x + (sample.x / src.w) * quad.w;
     const y = quad.y + (sample.y / src.h) * quad.h;
 
-    const hotX = (art.hotspot.x / art.viewBox) * cursorTex.px + PAD;
-    const hotY = (art.hotspot.y / art.viewBox) * cursorTex.px + PAD;
+    const hotX = (art.hotspot.x / art.viewBox) * cursorTex.px + pad;
+    const hotY = (art.hotspot.y / art.viewBox) * cursorTex.px + pad;
 
     gl.useProgram(this.cursorProgram.program);
     gl.activeTexture(gl.TEXTURE0);

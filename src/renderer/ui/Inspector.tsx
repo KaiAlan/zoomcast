@@ -89,8 +89,16 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
             min={10}
             value={cursor.sizePct}
             onChange={(e) => {
+              // Accept anything numeric and let CursorTextureCache clamp.
+              //
+              // Rejecting here returned without calling the handler, so no
+              // state changed, so React never re-rendered and the input kept
+              // the rejected text until some unrelated render snapped it back.
+              // One clamp site instead: out-of-range renders as a min- or
+              // max-size cursor, which explains itself and recovers as soon as
+              // the user finishes typing. min={10} stays as spinner behaviour.
               const value = Number(e.target.value);
-              if (Number.isNaN(value) || value < 10) return;
+              if (Number.isNaN(value)) return;
               onCursorChange({ ...cursor, sizePct: value });
             }}
             style={numberInput}

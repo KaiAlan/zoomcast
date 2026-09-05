@@ -1,8 +1,30 @@
 import type { CursorShape } from "../../shared/bundle/types";
 import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
 
-/** Extra margin around the glyph so the stroke and shadow are not clipped. */
-export const PAD = 4;
+/**
+ * Extra margin around the glyph so the stroke and shadow are not clipped.
+ *
+ * Proportional, not fixed: the stroke is 3 path units wide, which is
+ * 1.5 * px/32 device pixels at the half-width, and `arrow`'s hotspot sits at
+ * viewBox (0,0) — the exact texture corner — so its round join runs past a
+ * fixed 4px margin once px is much above 85. That is reachable at 4K export.
+ */
+export function padFor(px: number): number {
+  return Math.max(4, Math.ceil(px * 0.0625));
+}
+
+/**
+ * Bounds on the rasterised glyph, in device pixels.
+ *
+ * The floor keeps a cursor visible; the ceiling is the real point. Nothing
+ * upstream bounds the requested size — the inspector deliberately does not
+ * validate — so without this a typed 10000 asks for a texture past
+ * MAX_TEXTURE_SIZE, texImage2D fails with INVALID_VALUE, and the broken entry
+ * is CACHED, so it never heals. Well before that a fat-fingered extra zero
+ * costs multiple megabytes per shape.
+ */
+export const MIN_CURSOR_PX = 8;
+export const MAX_CURSOR_PX = 512;
 
 /**
  * A rasterised cursor and the size it was actually rasterised at.
@@ -24,14 +46,15 @@ export class CursorTextureCache {
   private readonly cache = new Map<string, CursorTexture>();
 
   get(gl: WebGL2RenderingContext, shape: CursorShape, sizePx: number): CursorTexture {
-    const px = Math.max(8, Math.round(sizePx));
+    const px = Math.min(MAX_CURSOR_PX, Math.max(MIN_CURSOR_PX, Math.round(sizePx)));
     const key = `${shape}@${px}`;
     const held = this.cache.get(key);
     if (held !== undefined) return held;
 
     const art = CURSOR_SHAPES[shape];
     const scale = px / art.viewBox;
-    const dim = px + PAD * 2;
+    const pad = padFor(px);
+    const dim = px + pad * 2;
 
     const canvas = document.createElement("canvas");
     canvas.width = dim;
@@ -40,7 +63,7 @@ export class CursorTextureCache {
     const ctx = canvas.getContext("2d");
     if (ctx === null) throw new Error("could not get 2d context for cursor");
 
-    ctx.translate(PAD, PAD);
+    ctx.translate(pad, pad);
     ctx.scale(scale, scale);
 
     const path = new Path2D(art.path);
