@@ -89,9 +89,14 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 
 ## What is NOT built
 
-Phases B–F are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
-§13. Only B has a written plan so far:
-`docs/superpowers/plans/2026-09-05-phase-b-compositor.md`.
+Phases C–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
+§13. None has a written plan yet.
+
+**Start any new session at
+`docs/superpowers/plans/2026-09-05-phase-b-handoff.md`.** It carries the order of
+work — the phase B re-review, then merge, then a "Phase C — start here" section
+that opens with three blocking questions for the user about a broken export and
+holds the debugging state so none of it has to be re-derived.
 
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |

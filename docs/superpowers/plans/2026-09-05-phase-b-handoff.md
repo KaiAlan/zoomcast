@@ -3,6 +3,11 @@
 Read `HANDOVER.md` first for the project as a whole. This file covers only
 phase B and what is mid-flight.
 
+**Order of work:** the phase B re-review (below) → fix round → merge → then
+**"Phase C — start here"** at the end of this file, which opens with three
+blocking questions for the user about a broken export and carries the debugging
+state so none of it gets re-derived.
+
 Spec: `docs/specs/2026-09-04-composition-and-camera-design.md`
 Plan: `docs/superpowers/plans/2026-09-05-phase-b-compositor.md`
 
@@ -207,27 +212,113 @@ small PNG could be generated rather than vendored.
 
 ---
 
-## After phase B
+## Phase C — start here
 
-**Phase C is next and it is the one the user actually wants.** The zoom
-complaint is measured, with a specific signature, in
+Phase C is next and **it is the one the user actually wants**. Work through this
+section in order; the first item is blocking and only the user can clear it.
+
+### 1. Blocking: three questions for the user about the broken export
+
+Ask these before writing any phase C code. Phase C's entire deliverable is
+judged by watching exported footage, so an export that silently truncates makes
+the phase unverifiable. Full diagnosis:
+`docs/superpowers/notes/2026-09-05-export-truncated-bug.md`.
+
+1. **Did the export button reach 100%, or stop partway?**
+2. **Did the status line show an error, and what did it say?**
+3. **Was the file opened before the export had finished?** At the measured
+   `h264_amf` rate a 27s take needs several minutes, and the target file sits
+   `moov`-less in Downloads for the whole run — so opening it early shows
+   exactly this symptom.
+
+These are asked rather than guessed because the app persists nothing about
+export failures: `runExport` (`Editor.tsx:299-336`) puts the error into React
+state only, so `main-error.log` has no export entry at all. **The user's memory
+is the only surviving evidence.**
+
+### 2. Debugging state carried over — do not re-derive this
+
+Root cause is **not** established. Two candidates remain. What is already
+settled:
+
+**Confirmed.** The file is `ftyp` → `free` → `mdat` with no `moov` — an
+incomplete write, not corrupt data. ffmpeg writes `moov` last, so the muxer
+never finished, which means `ExportSession.cancel()` ran instead of `finish()`,
+which means **something threw inside the renderer's export loop**.
+
+**Ruled out by reproduction, not by reasoning:**
+
+| Candidate | How it was eliminated |
+| --- | --- |
+| The take itself, its 17.7fps capture, its negative audio offsets | Same take re-exported successfully |
+| The image background, the LOD blur | Repro carried the same image background; 38,799,457 bytes, 26.766667s, valid |
+| Frame count / IPC volume (~1620 frames of ~8MB RGBA) | The successful repro pushed exactly the same amount |
+| `h264_amf` rejecting rawvideo over stdin | Tested directly at the same pix_fmt and bitrate: exit 0, valid output |
+| `exportRunner` logic | `finish()` awaits a zero exit; `cancel()` is the only truncating path and is only called from a catch |
+
+**The one confirmed difference, and the strongest lead:** the reproduction used
+a different encoder from the real export button.
+
+| Path | Encoder | Line |
+| --- | --- | --- |
+| `verify:parity` / test hook | `libx264` | `Editor.tsx:209` |
+| The real export button | **`h264_amf`** | `Editor.tsx:322` |
+
+Both hardcoded, and **nothing has ever tested `h264_amf`** — the e2e test and
+both parity paths use libx264. Same shape as the phase A failure where five of
+eight cursor shapes were broken because the fixture never emitted a cursor
+event. `h264_amf` also measures **~8fps at 1080p, 0.13x realtime**, which makes
+every export a multi-minute window.
+
+**Order of work when the answers arrive:** make export failures reach
+`logDiag` first (otherwise a failing retry teaches nothing again), then guard
+`h264_amf`, then measure both encoders on one take before assuming hardware is
+the fast path, then fix with a failing case first. Do **not** reach for
+`+faststart` — the file is incomplete, not misordered.
+
+### 3. What the zoom complaint actually is
+
+Measured, with a specific signature, in
 `docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md` — read it before
-touching a pacing dial. Summary: on the user's own 51s take, all 7 zooms sit
-exactly on the 1.40s hold floor, only 34% of the take is zoomed, and the camera
-crosses 1492px in one move on a 1920px source.
+touching a pacing dial. On the user's own 51s take all 7 zooms sit exactly on
+the 1.40s hold floor, only 34% of the take is zoomed, and the camera crosses
+1492px in one move on a 1920px source.
 
-Three things phase C should know going in:
+**"Smooth" is answered, and it is three separate causes, not one.** The user's
+words: *"the zooms feel floaty and laggy and the motion isnt smooth too"*.
+
+| Word | Cause | Fixable by tuning? |
+| --- | --- | --- |
+| **floaty** | `transitionMs` 600 on `cubicBezier(0.33, 0, 0.1, 1)` — an aggressive decelerate that spends most of its motion in the first third, then crawls | yes |
+| **laggy** | Spec §3: `onTick` fires `setPlayheadMs` every rAF so React re-renders 60x/sec, and `draw()` drops any frame arriving mid-decode with nothing prefetching | yes |
+| **not smooth** | Fewer source frames than smooth motion needs — this take captured at **17.7fps** | **no** |
+
+**Be honest about the third.** `ddagrab` does not work on this machine, so
+60fps GPU capture is unavailable and the source is sometimes under 20fps. Phase
+C can smooth motion *between* frames but cannot invent frames that were never
+captured. Getting `ddagrab` working would improve this more than any easing
+change. Do not tune around it and report it as fixed.
+
+### 4. Two seams phase C will hit
 
 - **`addCut` never redraws the paused preview** — a live bug, and the third of
   three redraw idioms in `Editor.tsx`. Phase C owns the preview loop rewrite
   per spec §10, which is the right moment to have one answer instead of three.
 - **Spec §8's claim that cursor and camera share one smoothed path does not
-  hold.** `buildCursorPath`'s only damping input is a presentation control the
-  user can zero, with a 90ms cursor-scale half-life; a follow camera wants
-  several hundred ms. Let `PathOptions` take `halfLifeMs` directly and move the
-  0–1 mapping to the Editor call site. This is a spec issue as much as a code
-  one.
-- **One question is still open with the user**, and it points at opposite
-  fixes: they listed "smooth" among the zoom complaints, and it is unresolved
-  whether they mean the motion is not smooth or that it over-smooths and feels
-  floaty. **Ask before tuning damping.**
+  hold.** `buildCursorPath`'s only damping input is `PathOptions.smoothing`, a
+  presentation control the user can set to 0, and `MAX_HALF_LIFE_MS` is 90ms —
+  a cursor-scale half-life. A follow camera wants several hundred ms and must
+  not go jittery because someone turned the cursor's smoothing off. Let
+  `PathOptions` take `halfLifeMs` directly and move the 0-1 mapping to the
+  Editor call site. **This is a spec issue as much as a code one** — fix §8's
+  wording either way.
+
+### 5. Then the rest of the roadmap
+
+D (motion blur) and E (timeline: draggable segments, real cuts, undo/redo) both
+depend on C. F (clip speed) depends on E and is abandonable. **G, a UI revamp,
+was added at the user's request and sits after E** — deliberately last, because
+E settles the timeline's shape and a revamp before that would be redesigned as
+draggable segments and undo/redo land. G has no spec section and needs a
+brainstorm rather than a task list, since unlike A-F it is not a defect with a
+known fix.
