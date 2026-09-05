@@ -49,21 +49,21 @@ After the review: fix round, scoped re-review, then
 
 ---
 
-## Also owed to a human, and not coverable by any review
+## The one human check this branch owed: done
 
-**The image picker has never been driven.** It opens a native dialog, so no
-headless path reaches it — `background:choose` in `src/main/ipc.ts` is the only
-code on this branch with zero automated coverage of its real path. Check:
+**The image picker was driven by hand on 2026-09-05 and works.** It opens a
+native dialog, so no headless path reaches it — `background:choose` in
+`src/main/ipc.ts` was the only code on this branch with zero automated coverage
+of its real path, and it is now confirmed working end to end by the user.
 
-- choosing an image puts it behind the frame
-- a copy named `background-<timestamp>.<ext>` appears in the recording's own
-  directory
-- the `blur` control appears, and only for `kind: "image"`
-- save → back → reopen still shows it
-- **moving or deleting the original source file changes nothing** — that is the
-  whole reason spec §5 says copy rather than reference
+One sub-property was not separately reported and is worth a glance if it ever
+matters: that **moving or deleting the original source file changes nothing**,
+which is the entire reason spec §5 copies rather than references. The copy
+itself is straightforward (`copyFileSync` into the bundle dir, timestamped
+name), so this is a low-risk gap rather than an open question.
 
-The app was left running on the phase B build for exactly this.
+Nothing else on this branch needs a human. The remaining gaps are all
+harness-shaped and listed under "What the guards still do not exercise" below.
 
 ---
 
@@ -173,8 +173,9 @@ events, so only `arrow` had ever been rasterised. The equivalent question here:
 
 - **No parity configuration uses `kind: "image"`**, because it needs a file on
   disk. The image branch, the cover-fit arithmetic and the LOD blur are guarded
-  only by `ZOOMCAST_SHOOT` stills that a human has to open. A preview/export
-  divergence in the image path would pass silently.
+  only by `ZOOMCAST_SHOOT` stills that a human has to open. The picker itself is
+  now hand-verified, but a preview/export *divergence* in the image path would
+  still pass silently — that is a different failure from the one a human sees.
 - **No parity configuration uses `kind: "hidden"`**, which is the one branch
   that never binds the background program at all.
 - **There is no React component test coverage anywhere.** The 211 tests are
