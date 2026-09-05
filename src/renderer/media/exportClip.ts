@@ -26,8 +26,13 @@ export async function exportClip(opts: {
   project: Project;
   /** Null when the bundle has no cursor telemetry — export just draws no cursor. */
   cursorPath: CursorPath | null;
-  /** Same events the preview's ripplesAt call draws from — sampled on the source timeline. */
-  telemetry: TelemetryEvent[];
+  /**
+   * The pre-filtered "down" events, exactly the array the preview's ripplesAt
+   * draws from — not the raw telemetry stream. Passing the same array rather
+   * than re-deriving it is what makes "preview and export draw from the same
+   * data" true by construction instead of by discipline.
+   */
+  clicks: TelemetryEvent[];
   mediaDir: string;
   renderer: Renderer;
   source: VideoSource;
@@ -36,7 +41,7 @@ export async function exportClip(opts: {
   onProgress: (p: ExportProgress) => void;
   signal?: { cancelled: boolean };
 }): Promise<void> {
-  const { manifest, project, cursorPath, telemetry, renderer, source, outFile, onProgress } =
+  const { manifest, project, cursorPath, clicks, renderer, source, outFile, onProgress } =
     opts;
 
   const output = { w: project.output.width, h: project.output.height };
@@ -47,11 +52,6 @@ export async function exportClip(opts: {
     project.cuts,
     project.output.fps,
   );
-
-  // ripplesAt only looks at "down" events; filtering once here keeps the
-  // per-frame scan bounded by click count instead of rescanning the full
-  // (move-dominated) telemetry stream on every one of `frames.length` frames.
-  const clicks = telemetry.filter((e) => e.k === "down");
 
   const audio: AudioInput[] = manifest.audio.map((track) => ({
     file: `${opts.mediaDir}/${track.file}`,

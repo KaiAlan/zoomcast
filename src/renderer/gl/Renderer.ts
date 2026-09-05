@@ -316,13 +316,17 @@ export class Renderer {
     src: Size,
   ): void {
     const gl = this.gl;
+    if (ripples.length === 0) return;
+
+    // Deliberately independent of cursor.sizePct: the ring marks the click, not
+    // the glyph, so it keeps one size however large the cursor is drawn.
+    const size = (out.h / 1080) * 96;
+    gl.useProgram(this.rippleProgram.program);
 
     for (const r of ripples) {
-      const size = (out.h / 1080) * 96;
       const x = quad.x + (r.x / src.w) * quad.w;
       const y = quad.y + (r.y / src.h) * quad.h;
 
-      gl.useProgram(this.rippleProgram.program);
       gl.uniform1f(this.rippleProgram.uniforms.u_progress ?? null, r.progress);
       this.setRect(this.rippleProgram, x - size / 2, y - size / 2, size, size, out);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

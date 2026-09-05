@@ -52,7 +52,9 @@ describe("buildCursorPath", () => {
   });
 
   it("never overshoots the target", () => {
-    // Critically damped, not underdamped — an overshooting cursor looks broken.
+    // An exponential lag approaches its target and never passes it. That is
+    // the reason it was chosen over a spring: a spring can be tuned not to
+    // overshoot, but cannot be made structurally incapable of it.
     const events: TelemetryEvent[] = [
       { t: 0, k: "move", x: 0, y: 0 },
       { t: 200, k: "move", x: 300, y: 0 },
@@ -95,15 +97,4 @@ describe("buildCursorPath", () => {
     expect(cursorAt(path, 400)?.shape).toBe("hand");
   });
 
-  it("reports pressed between a down and its up", () => {
-    const events: TelemetryEvent[] = [
-      { t: 0, k: "move", x: 0, y: 0 },
-      { t: 100, k: "down", x: 0, y: 0, b: 1 },
-      { t: 300, k: "up", x: 0, y: 0, b: 1 },
-      { t: 500, k: "move", x: 0, y: 0 },
-    ];
-    const path = buildCursorPath(events, opts);
-    expect(cursorAt(path, 200)?.pressed).toBe(true);
-    expect(cursorAt(path, 400)?.pressed).toBe(false);
-  });
 });

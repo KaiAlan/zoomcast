@@ -94,7 +94,11 @@ void main() {
   if (u_shadow > 0.5) {
     // Offset alpha tap, so the cursor reads against light backgrounds too.
     float s = texture(u_tex, v_uv - vec2(0.02, 0.02)).a * 0.35;
-    outColor = mix(vec4(0.0, 0.0, 0.0, s), c, c.a);
+    // Source-over, not mix(): mix gives output alpha s(1-c.a) + c.a*c.a, which
+    // squashes the glyph's antialiased boundary (0.5 becomes 0.425 at s=0.35)
+    // and renders every edge thinner and more transparent than intended.
+    float a = c.a + s * (1.0 - c.a);
+    outColor = vec4(c.rgb * c.a / max(a, 1e-4), a);
   } else {
     outColor = c;
   }

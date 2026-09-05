@@ -10,7 +10,6 @@ export type CursorSample = {
   x: number;
   y: number;
   shape: CursorShape;
-  pressed: boolean;
 };
 
 export type CursorPath = {
@@ -19,7 +18,6 @@ export type CursorPath = {
   xs: Float32Array;
   ys: Float32Array;
   shapes: CursorShape[];
-  pressed: Uint8Array;
 };
 
 /** Half-life of the lag, in ms, at the two ends of the smoothing range. */
@@ -59,7 +57,6 @@ export function buildCursorPath(
       xs: new Float32Array(0),
       ys: new Float32Array(0),
       shapes: [],
-      pressed: new Uint8Array(0),
     };
   }
 
@@ -71,7 +68,6 @@ export function buildCursorPath(
   const xs = new Float32Array(count);
   const ys = new Float32Array(count);
   const shapes: CursorShape[] = new Array<CursorShape>(count);
-  const pressed = new Uint8Array(count);
 
   // Half-life form, so the response is frame-rate independent by construction.
   const halfLife =
@@ -83,7 +79,6 @@ export function buildCursorPath(
   let targetX = first.x;
   let targetY = first.y;
   let shape: CursorShape = "arrow";
-  let down = false;
   let cursor = 0;
 
   for (let i = 0; i < count; i++) {
@@ -95,8 +90,6 @@ export function buildCursorPath(
         targetX = e.x;
         targetY = e.y;
       }
-      if (e.k === "down") down = true;
-      if (e.k === "up") down = false;
       if (e.k === "cursor") shape = e.shape;
       cursor++;
     }
@@ -107,10 +100,9 @@ export function buildCursorPath(
     xs[i] = x;
     ys[i] = y;
     shapes[i] = shape;
-    pressed[i] = down ? 1 : 0;
   }
 
-  return { t0, stepMs, xs, ys, shapes, pressed };
+  return { t0, stepMs, xs, ys, shapes };
 }
 
 export function cursorAt(path: CursorPath, tMs: number): CursorSample | null {
@@ -122,7 +114,6 @@ export function cursorAt(path: CursorPath, tMs: number): CursorSample | null {
     x: path.xs[i] as number,
     y: path.ys[i] as number,
     shape: path.shapes[i] ?? "arrow",
-    pressed: path.pressed[i] === 1,
   };
 }
 
