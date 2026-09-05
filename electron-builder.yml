@@ -18,8 +18,18 @@ files:
   - out/**/*
   - package.json
 
-# uiohook-napi is a native addon, and a .node file cannot be loaded from inside
-# an asar archive.
+# Native addons: a .node file cannot be loaded from inside an asar archive.
+#
+# Two of them now. uiohook-napi ships its binary under prebuilds/, but koffi
+# resolves its own from a SEPARATE scoped optional dependency —
+# @koromix/koffi-win32-x64/win32_x64/koffi.node — not from anything inside
+# koffi/ itself. The glob covers both, and `npm run dist` was verified to place
+# both in release/win-unpacked/resources/app.asar.unpacked/node_modules/.
+#
+# This matters more than it looks: `import koffi` sits at module scope in
+# CursorShapeReader, transitively imported from src/main/index.ts, so a
+# resolution failure in the packaged app is a startup crash rather than the
+# graceful degradation start()'s try/catch gives.
 asarUnpack:
   - "**/*.node"
 

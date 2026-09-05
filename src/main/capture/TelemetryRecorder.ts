@@ -24,15 +24,18 @@ export class TelemetryRecorder {
   private shapes: CursorShapeReader | null = null;
 
   /**
-   * Whether the shape stream is actually being written.
+   * Whether the shape stream was actually written for this recording.
    *
    * The reader degrades to null rather than throwing, so the manifest must
    * report what happened rather than what was intended - a take claiming
    * shapes it does not have renders as a permanent arrow with no clue why.
+   *
+   * Latched at start rather than derived from `shapes`, because stop() nulls
+   * that field and the manifest is written after stop() - so a getter reading
+   * it reported false on every recording, including the ones that did capture
+   * shapes. Caught by the packaged record test, not by any unit test.
    */
-  get hasCursorShapes(): boolean {
-    return this.shapes !== null;
-  }
+  hasCursorShapes = false;
   private lastMoveAt = 0;
   private stopped = false;
 
@@ -95,6 +98,7 @@ export class TelemetryRecorder {
       (event) => this.push(event),
       () => this.now(),
     );
+    this.hasCursorShapes = this.shapes !== null;
   }
 
   private flush(): void {
