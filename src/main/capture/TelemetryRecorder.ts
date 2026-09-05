@@ -22,6 +22,17 @@ export class TelemetryRecorder {
   private pending: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private shapes: CursorShapeReader | null = null;
+
+  /**
+   * Whether the shape stream is actually being written.
+   *
+   * The reader degrades to null rather than throwing, so the manifest must
+   * report what happened rather than what was intended - a take claiming
+   * shapes it does not have renders as a permanent arrow with no clue why.
+   */
+  get hasCursorShapes(): boolean {
+    return this.shapes !== null;
+  }
   private lastMoveAt = 0;
   private stopped = false;
 

@@ -1,4 +1,4 @@
-import koffi from "koffi";
+import koffi, { type TypeObject } from "koffi";
 import type { CursorShape, TelemetryEvent } from "../../shared/bundle/types";
 import { createShapeTracker, type ShapeTable } from "../../shared/cursor/shapeTracker";
 import { logDiag } from "../log";
@@ -26,6 +26,61 @@ const IDC: Record<number, CursorShape> = {
  * because a baked cursor cannot be smoothed, resized or zoomed. So the shape is
  * read separately and drawn at render time.
  */
+type Bindings = {
+  CURSORINFO: TypeObject;
+  GetCursorInfo: (info: unknown) => boolean;
+  table: ShapeTable;
+};
+
+let bindings: Bindings | null = null;
+
+/**
+ * Load user32 and register the FFI types, once per process.
+ *
+ * koffi.struct() registers a NAMED type in a process-global registry, so a
+ * second call with the same name throws "Duplicate type name". This used to sit
+ * inside start(), which runs once per recording - so the second recording of an
+ * app session threw, the throw was swallowed by start()'s own catch, and the
+ * take silently carried no shape stream at all while the manifest still claimed
+ * one. zoomcast is a tray app that lives for days, so that was the normal case
+ * rather than the edge one. The registry is process-global, so the bindings
+ * have to be too.
+ */
+function loadBindings(): Bindings {
+  if (bindings !== null) return bindings;
+
+  const user32 = koffi.load("user32.dll");
+
+  const POINT = koffi.struct("POINT", { x: "int32", y: "int32" });
+  const CURSORINFO = koffi.struct("CURSORINFO", {
+    cbSize: "uint32",
+    flags: "uint32",
+    hCursor: "void *",
+    ptScreenPos: POINT,
+  });
+
+  // inout, not out: GetCursorInfo requires the caller to set cbSize before
+  // the call, and koffi.out() treats the buffer as write-only — the struct
+  // that reaches the API would carry cbSize 0 and fail with error 87 on
+  // every call, silently and forever. Confirmed by probe in task 1.
+  const GetCursorInfo = user32.func("__stdcall", "GetCursorInfo", "bool", [
+    koffi.inout(koffi.pointer(CURSORINFO)),
+  ]);
+  const LoadCursorW = user32.func("__stdcall", "LoadCursorW", "void *", [
+    "void *",
+    "uintptr_t",
+  ]);
+
+  const table: ShapeTable = new Map();
+  for (const [id, shape] of Object.entries(IDC)) {
+    const handle = Number(koffi.address(LoadCursorW(null, Number(id))));
+    if (handle !== 0) table.set(handle, shape);
+  }
+
+  bindings = { CURSORINFO, GetCursorInfo, table };
+  return bindings;
+}
+
 export class CursorShapeReader {
   private timer: NodeJS.Timeout | null = null;
 
@@ -38,33 +93,7 @@ export class CursorShapeReader {
     now: () => number,
   ): CursorShapeReader | null {
     try {
-      const user32 = koffi.load("user32.dll");
-
-      const POINT = koffi.struct("POINT", { x: "int32", y: "int32" });
-      const CURSORINFO = koffi.struct("CURSORINFO", {
-        cbSize: "uint32",
-        flags: "uint32",
-        hCursor: "void *",
-        ptScreenPos: POINT,
-      });
-
-      // inout, not out: GetCursorInfo requires the caller to set cbSize before
-      // the call, and koffi.out() treats the buffer as write-only — the struct
-      // that reaches the API would carry cbSize 0 and fail with error 87 on
-      // every call, silently and forever. Confirmed by probe in task 1.
-      const GetCursorInfo = user32.func("__stdcall", "GetCursorInfo", "bool", [
-        koffi.inout(koffi.pointer(CURSORINFO)),
-      ]);
-      const LoadCursorW = user32.func("__stdcall", "LoadCursorW", "void *", [
-        "void *",
-        "uintptr_t",
-      ]);
-
-      const table: ShapeTable = new Map();
-      for (const [id, shape] of Object.entries(IDC)) {
-        const handle = Number(koffi.address(LoadCursorW(null, Number(id))));
-        if (handle !== 0) table.set(handle, shape);
-      }
+      const { CURSORINFO, GetCursorInfo, table } = loadBindings();
 
       const tracker = createShapeTracker(table);
 
