@@ -44,9 +44,31 @@ Three things stand out, and they line up with the three words in the complaint:
   1080p-into-1080p clamp `HANDOVER.md` already documents. `marginPx` and
   `clusterRadiusPx` do nothing to depth here. This is purely timing and travel.
 - Preview smoothness is a separate, already-diagnosed cause (spec §3 "laggy
-  preview": per-rAF React re-render, no prefetch, gdigrab at 26-29fps). The user
-  said "smooth" in a list of complaints; it is ambiguous whether they meant the
-  motion is not smooth or that it over-smooths. **Ask before tuning damping.**
+  preview": per-rAF React re-render, no prefetch, gdigrab at 26-29fps).
+
+## What "smooth" meant — answered 2026-09-05
+
+The complaint listed "smooth" ambiguously and it has now been clarified by the
+user, in their words:
+
+> "by smooth i meant the zooms feel floaty and laggy and the motion isnt smooth
+> too"
+
+So it is **all three at once**, and they are three different causes:
+
+| Word | What it points at | Fix lives in |
+| --- | --- | --- |
+| **floaty** | Transitions too slow / over-eased. `transitionMs` is 600 with `cubicBezier(0.33, 0, 0.1, 1)`, an aggressive decelerate that spends most of its motion in the first third and then crawls. | retuned transitions |
+| **laggy** | Preview performance, spec §3: `onTick` fires `setPlayheadMs` on every rAF so React re-renders 60x/sec, and `PreviewPlayer.draw()` drops any frame arriving mid-decode with nothing prefetching. | preview performance |
+| **not smooth** | There are simply fewer source frames than smooth motion needs. gdigrab measured 26-29fps against 30 requested, and the take that produced this complaint captured at **17.7fps**. No amount of easing hides that. | capture rate, or interpolation |
+
+**The third is the one to be honest about.** The first two are tunable in phase
+C. The third is a capture limitation: `ddagrab` does not work on this machine
+(see `HANDOVER.md`), so 60fps GPU capture is unavailable and the source is
+sometimes under 20fps. Phase C can make the camera motion smoother *between*
+frames, but it cannot invent frames that were never captured. Say so rather
+than tuning around it — and note that getting `ddagrab` working would improve
+this more than any easing change.
 
 ## Also noticed, unrelated to the complaint
 

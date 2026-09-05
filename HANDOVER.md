@@ -99,6 +99,15 @@ Phases B–F are specified in `docs/specs/2026-09-04-composition-and-camera-desi
 | D | Directional motion blur | C |
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
+| G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
+
+**Open bug, unfixed: export produces a truncated mp4.** A real export from the
+phase B build wrote an `mdat` with no `moov` and is unplayable. Diagnosis, what
+was reproduced, and what was ruled out are in
+`docs/superpowers/notes/2026-09-05-export-truncated-bug.md`. The short version:
+the same take exports fine through `libx264`, and the real export button is the
+only path that uses `h264_amf` — which nothing has ever tested. **Read that file
+before touching the export path.**
 
 **C is the one the user actually wants.** The zoom complaint is measured, with a
 specific signature, in `docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md`

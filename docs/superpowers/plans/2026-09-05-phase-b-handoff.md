@@ -67,6 +67,23 @@ harness-shaped and listed under "What the guards still do not exercise" below.
 
 ---
 
+## Open bug found while hand-testing this branch
+
+**Export produced a truncated, unplayable mp4** — `mdat` with no `moov`. Full
+diagnosis in `docs/superpowers/notes/2026-09-05-export-truncated-bug.md`.
+
+Not caused by phase B as far as the evidence goes: the same take, with the same
+image background, exports correctly through `libx264`. The real export button is
+the only path using `h264_amf`, and nothing has ever tested it. Root cause is
+**not** established — two candidates remain and the app persists nothing about
+export failures, which is itself a defect.
+
+**This does not block merging phase B** — the export path is untouched by this
+branch — but it should be fixed before phase C, because phase C's whole purpose
+is judged by watching exported footage.
+
+---
+
 ## Where things stand
 
 ```
