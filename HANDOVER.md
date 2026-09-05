@@ -1,14 +1,17 @@
 # zoomcast — handover
 
-Updated 2026-09-05. **Phases 0–7 and phase A complete.** The tool records your
+Updated 2026-09-05. **Phases 0–7, A and B complete.** The tool records your
 screen, mic and system audio, plans zooms from real input telemetry, draws a
-synthetic cursor with real shapes and click ripples, lets you cut and scrub, and
-exports a finished MP4.
+synthetic cursor with real shapes and click ripples, composes the frame over a
+procedural or custom background, lets you cut and scrub, and exports a finished
+MP4 at a chosen aspect and resolution.
 
 Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
-tracked as phases B–F in
+tracked as phases C–F in
 `docs/specs/2026-09-04-composition-and-camera-design.md` §13, plus webcam PiP
 (the old phase 8), which is untouched and independent of all of them.
+
+**Phase C is next, and it is the one the user actually wants.**
 
 ## What this is
 
@@ -24,11 +27,11 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 179 passing, 26 files
+npm test              # 211 passing, 29 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
-npm run verify:parity # 5/5 at 43-45dB
+npm run verify:parity # 15/15 at 43-45dB, over three configurations
 npm run tune -- all   # zoom plan over every take on disk
 ```
 
@@ -92,8 +95,7 @@ Phases B–F are specified in `docs/specs/2026-09-04-composition-and-camera-desi
 
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
-| B | Background presets, blur, custom image, frame border, aspect/resolution, and the `style` UI that has never existed | — |
-| C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance | A, B |
+| C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance | A, B — both now done |
 | D | Directional motion blur | C |
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
@@ -162,7 +164,7 @@ unit tests could not have caught.
 | Command | Checks |
 | --- | --- |
 | `npm run verify:decode` | Every seek returns the frame that actually sits at that timestamp |
-| `npm run verify:parity` | Preview and export render identically |
+| `npm run verify:parity` | Preview and export render identically, across three configurations (default, styled, 1:1) — 15 comparisons |
 | `ZOOMCAST_SHOOT` | Renders arbitrary frame specs to PNG through the real compositor |
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
@@ -200,6 +202,51 @@ cat "$env:APPDATA\zoomcast\record-test.json"
 # Windows does not reach the launching shell
 cat "$env:APPDATA\zoomcast\main-error.log"
 ```
+
+## The compositor (phase B)
+
+`drawFrame` runs background → shadow → screen → ripples → cursor. Phase B
+widened the first three rather than adding passes.
+
+- `src/shared/style/backgrounds.ts` — six mesh gradient presets as pure data,
+  plus `gradientPreset()` and the blur LOD table.
+- `src/shared/style/frame.ts` — `FRAME_PRESETS` and `resolveFrame`.
+- `src/shared/style/aspect.ts` — `outputSizeFor`.
+- `src/renderer/gl/backgroundTexture.ts` — image decode, mipmaps, cover-fit size.
+- `src/renderer/ui/StylePanel.tsx` — background, frame and output controls.
+- `src/renderer/ui/controls.ts` — the four shared control styles.
+
+Things worth knowing before touching it:
+
+- **Every frame read must go through `resolveFrame`.** Reading `style.frame.*`
+  directly makes the presets silently do nothing, because "minimal" and
+  "hidden" override the individual fields while "default" defers to them.
+- **`outputSizeFor` has THREE call sites, not two.** Preview, export, and the
+  planner context — the zoom ceiling derives from output size, so a re-plan
+  after an aspect change would otherwise plan for the old shape.
+- **Kind-specific controls are hidden for a reason, not for tidiness.** Under a
+  non-default frame preset the individual fields are ignored, so an editable
+  control there would silently do nothing.
+- **Blur is image-only, and that was measured.** RMS difference out of 255:
+  mesh none→strong is 0.108 (a no-op — the mesh is smooth by construction),
+  image none→strong is 4.586.
+- **Blur is a mipmap LOD, not a kernel.** The first attempt was a 3x3 kernel;
+  at "strong" its taps land 27px apart, so a grid image rendered as three
+  distinct copies rather than one soft one. Nine taps cannot represent a 27px
+  radius. `textureLod` against a mipmapped texture is one fetch, correct at any
+  radius, and resolution-independent because LOD is relative to the texture.
+- **The border is a ring inside `SCREEN_FRAG`'s existing SDF.** Drawn as its own
+  quad it would square off the corners, because only that shader knows where the
+  rounded edge is.
+- **A background image is copied into the project directory, never referenced**
+  (spec §5), and addressed as `zc://app/@fs/...` through `bundleAssetUrl` —
+  one helper, because there are three `drawFrame` call sites.
+- **Export and shoot must `preloadBackgroundImage` before their loop.** Both
+  draw each frame once with no repaint, so a frame that fell back to the solid
+  colour while the image decoded is baked into the output. Preview redraws, so
+  it does not need to.
+- **Mesh distances are measured in square space** via `u_aspect`, or a preset
+  smears horizontally on 16:9 and vertically on 9:16.
 
 ## The cursor pipeline (phase A)
 
@@ -411,11 +458,23 @@ and rewrites the playhead/render loop wholesale. Do not add a fourth.
   silently lose it.**
 - **A `useMemo` cannot be refreshed by patching a ref.** If a value feeds a
   memo, the redraw that must see it has to happen after the re-render, i.e. in
-  an effect. See "three idioms" above.
+  an effect. See "three idioms" above. Phase B widened that effect to the whole
+  of `project.style` and `project.output` rather than adding a fourth idiom.
+- **The inspector panel is long.** Thirteen zoom fields, five cursor controls
+  and three style sections; `output` sits well below the fold. It scrolls, but
+  collapsible sections would be a real improvement whenever someone is in there
+  anyway.
 - **`ripplesAt` scans every prior click each frame.** O(clicks before t), so a
   10-minute take with ~1500 clicks costs ~27M trivial iterations over a 60fps
   export. Fine in practice; a binary search for the window start would make it
   O(active ripples) if it ever shows up in a profile.
+- **`verify:parity` runs the BUILT bundle.** Run `npm run build` before it, or
+  it silently tests the previous code. This cost a confusing round in phase B,
+  where a new aspect-ratio config reported PSNRs identical to the default
+  because it was still rendering at the old size.
+- **`verify:parity`'s preview PNGs are written to `dirname(out)`.** A config's
+  mp4 therefore has to live inside that config's own directory, or previews
+  from every configuration land in one place and the wrong pairs get compared.
 - **`src/renderer/shoot.ts` is a THIRD `drawFrame` call site.** The rule
   elsewhere in this file says "preview and export are two separate call sites",
   and for product code that is true — but `shoot.ts` is a fourth wall. It
