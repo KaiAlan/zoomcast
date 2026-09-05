@@ -4,7 +4,7 @@ import type { OpenedBundle } from "../shared/api";
 import { parseManifest } from "../shared/bundle/manifest";
 import { parseTelemetry } from "../shared/bundle/telemetry";
 import type { TelemetryEvent } from "../shared/bundle/types";
-import { defaultProject } from "../shared/project/defaults";
+import { normalizeProject } from "../shared/project/migrate";
 import type { Project } from "../shared/project/types";
 
 const PROJECT_FILE = "project.json";
@@ -37,10 +37,15 @@ export function openBundle(dir: string): OpenedBundle {
     }
   }
 
+  // Every read goes through normalizeProject: the old bare `as Project` cast
+  // was an unchecked assertion over disk data, safe only while the shape never
+  // changed. It changes now, and normalizeProject(null) is exactly
+  // defaultProject, so the missing-file case needs no separate branch.
   const projectPath = join(root, PROJECT_FILE);
-  const project: Project = existsSync(projectPath)
-    ? (JSON.parse(readFileSync(projectPath, "utf8")) as Project)
-    : defaultProject(manifest.id);
+  const project: Project = normalizeProject(
+    existsSync(projectPath) ? JSON.parse(readFileSync(projectPath, "utf8")) : null,
+    manifest.id,
+  );
 
   return {
     dir: root,
