@@ -254,13 +254,17 @@ export function Editor({
   }, []);
 
   // PreviewPlayer draws only on play/seek/toggle and nothing watches `project`,
-  // so a cursor edit is invisible on a paused preview without this. It is an
-  // effect rather than a seek inside onCursorChange because `cursorPath` is a
-  // useMemo on smoothing: only the re-render rebuilds it, so a synchronous
-  // seek would redraw the old path.
+  // so a style or output edit is invisible on a paused preview without this.
+  // It is an effect rather than a seek inside each handler because both
+  // `cursorPath` and `ctx` are useMemos on these values: only the re-render
+  // rebuilds them, so a synchronous seek would redraw with the old ones.
+  //
+  // Widened from style.cursor to the whole style deliberately — a third
+  // redraw idiom in this file is the thing HANDOVER warns against, and every
+  // style field reaches the renderer the same way.
   useEffect(() => {
     playerRef.current?.seek(playerRef.current.playheadMs);
-  }, [project.style.cursor]);
+  }, [project.style, project.output]);
 
   const onConfigChange = (config: ZoomConfig): void => {
     setProject((prev) => {
@@ -420,6 +424,11 @@ export function Editor({
           onCursorChange={(cursor) =>
             setProject((p) => ({ ...p, style: { ...p.style, cursor } }))
           }
+          style={project.style}
+          output={project.output}
+          dir={bundle.dir}
+          onStyleChange={(style) => setProject((p) => ({ ...p, style }))}
+          onOutputChange={(output) => setProject((p) => ({ ...p, output }))}
         />
       </div>
     </div>
