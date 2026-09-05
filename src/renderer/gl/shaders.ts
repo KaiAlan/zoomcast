@@ -30,11 +30,21 @@ void main() {
  * smears horizontally on 16:9 and vertically on 9:16, so the same preset would
  * look like two different gradients once aspect ratio became selectable.
  *
- * The blur samples the mesh at a 3x3 kernel rather than running a second pass
- * over a framebuffer. At this kernel size evaluating the mesh nine times is
- * cheaper than the round trip, because each evaluation is a handful of
- * reciprocals rather than a texture fetch. The image branch does pay for taps,
- * which is why its kernel is the same nine and not more.
+ * Blur is a mipmap LOD on the image branch, and nothing at all elsewhere.
+ *
+ * The first attempt was a 3x3 kernel over the sampled background. That is
+ * wrong twice over. On a mesh it is a measured no-op — the mesh is already
+ * smooth by construction, RMS 0.1/255 between "none" and "strong". On an image
+ * it does not blur at all: at "strong" the taps land 27px apart, so a grid
+ * renders as three distinct copies rather than a soft one. Nine taps cannot
+ * represent a 27px radius; only a wide kernel or a separable two-pass can, and
+ * both cost far more than this is worth for a static background.
+ *
+ * textureLod against a mipmapped texture is a real, hardware-filtered
+ * downsample, one instruction, correct at any radius, and resolution
+ * independent by construction — LOD is relative to the texture, so a 4K export
+ * and a 1080p preview blur the image by the same visual amount without any
+ * scaling arithmetic.
  */
 export const BG_FRAG = `#version 300 es
 precision highp float;
@@ -45,10 +55,9 @@ uniform vec2  u_points[${MESH_POINTS}];
 uniform vec3  u_colors[${MESH_POINTS}];
 uniform float u_falloff;
 uniform float u_aspect;      // output w/h, so distance is measured square
-uniform float u_blurPx;
-uniform vec2  u_texelPx;     // 1/outputW, 1/outputH
 uniform sampler2D u_image;
 uniform vec2  u_imageScale;  // cover-fit scale, applied about the centre
+uniform float u_lod;         // mipmap level; 0 is the full-resolution image
 out vec4 frag;
 
 vec3 mesh(vec2 uv) {
@@ -72,29 +81,13 @@ vec3 image(vec2 uv) {
   // Cover fit: scale about the centre so the short edge fills and the long
   // edge is cropped, never letterboxed.
   vec2 c = (uv - 0.5) * u_imageScale + 0.5;
-  return texture(u_image, c).rgb;
-}
-
-vec3 sample_bg(vec2 uv) {
-  if (u_mode == 1) return u_color;
-  if (u_mode == 2) return image(uv);
-  return mesh(uv);
+  return textureLod(u_image, c, u_lod).rgb;
 }
 
 void main() {
-  if (u_blurPx <= 0.0) {
-    frag = vec4(sample_bg(v_uv), 1.0);
-    return;
-  }
-
-  vec2 step = u_texelPx * u_blurPx;
-  vec3 sum = vec3(0.0);
-  for (int y = -1; y <= 1; y++) {
-    for (int x = -1; x <= 1; x++) {
-      sum += sample_bg(v_uv + vec2(float(x), float(y)) * step);
-    }
-  }
-  frag = vec4(sum / 9.0, 1.0);
+  if (u_mode == 1) frag = vec4(u_color, 1.0);
+  else if (u_mode == 2) frag = vec4(image(v_uv), 1.0);
+  else frag = vec4(mesh(v_uv), 1.0);
 }`;
 
 const SD_ROUND_RECT = `

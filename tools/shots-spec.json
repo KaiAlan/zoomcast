@@ -238,5 +238,89 @@
         "blur": "strong"
       }
     }
+  },
+  {
+    "zoom": {
+      "scale": 1,
+      "cx": 0.5,
+      "cy": 0.5
+    },
+    "outputSize": {
+      "w": 1280,
+      "h": 720
+    },
+    "style": {
+      "background": {
+        "kind": "image",
+        "preset": "aurora",
+        "color": "#402030",
+        "imageFile": "bgtest.png",
+        "blur": "none"
+      }
+    },
+    "backgroundImageUrl": "zc://app/@fs/C:/dev/zoomcast/tmp/bgtest.png"
+  },
+  {
+    "zoom": {
+      "scale": 1,
+      "cx": 0.5,
+      "cy": 0.5
+    },
+    "outputSize": {
+      "w": 720,
+      "h": 1280
+    },
+    "style": {
+      "background": {
+        "kind": "image",
+        "preset": "aurora",
+        "color": "#402030",
+        "imageFile": "bgtest.png",
+        "blur": "none"
+      }
+    },
+    "backgroundImageUrl": "zc://app/@fs/C:/dev/zoomcast/tmp/bgtest.png"
+  },
+  {
+    "zoom": {
+      "scale": 1,
+      "cx": 0.5,
+      "cy": 0.5
+    },
+    "outputSize": {
+      "w": 1280,
+      "h": 720
+    },
+    "style": {
+      "background": {
+        "kind": "image",
+        "preset": "aurora",
+        "color": "#402030",
+        "imageFile": "bgtest.png",
+        "blur": "strong"
+      }
+    },
+    "backgroundImageUrl": "zc://app/@fs/C:/dev/zoomcast/tmp/bgtest.png"
+  },
+  {
+    "zoom": {
+      "scale": 1,
+      "cx": 0.5,
+      "cy": 0.5
+    },
+    "outputSize": {
+      "w": 1280,
+      "h": 720
+    },
+    "style": {
+      "background": {
+        "kind": "image",
+        "preset": "aurora",
+        "color": "#402030",
+        "imageFile": "bgtest.png",
+        "blur": "moderate"
+      }
+    },
+    "backgroundImageUrl": "zc://app/@fs/C:/dev/zoomcast/tmp/bgtest.png"
   }
 ]

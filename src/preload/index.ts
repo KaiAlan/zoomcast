@@ -22,6 +22,9 @@ const api: ZoomcastApi = {
   saveProject: (dir: string, project: Project) =>
     ipcRenderer.invoke("bundle:save", dir, project) as Promise<void>,
 
+  chooseBackgroundImage: (dir: string) =>
+    ipcRenderer.invoke("background:choose", dir) as Promise<string | null>,
+
   audioChunk: (role: "mic" | "system", chunk: Uint8Array) =>
     ipcRenderer.invoke("audio:chunk", role, chunk) as Promise<void>,
 

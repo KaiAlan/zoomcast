@@ -5,10 +5,11 @@ import type { CursorStyle, StyleConfig } from "../../shared/project/types";
 import type { ZoomState } from "../../shared/zoom/interpolate";
 import type { Size } from "../../shared/zoom/types";
 import {
-  BLUR_RADIUS_PX,
+  BLUR_LOD,
   MESH_POINTS,
   gradientPreset,
 } from "../../shared/style/backgrounds";
+import { BackgroundTextureCache } from "./backgroundTexture";
 import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
 import {
@@ -29,6 +30,13 @@ export type FrameState = {
   sourceSize: Size;
   cursor?: { sample: CursorSample; style: CursorStyle };
   ripples?: Ripple[];
+  /**
+   * Fully-resolved zc:// URL of the background image, when the style selects
+   * one. Built by the caller rather than here, because turning a project dir
+   * plus a basename into a URL is renderer-shell knowledge, and a file:// URL
+   * cannot be fetched from the custom scheme at all.
+   */
+  backgroundImageUrl?: string;
 };
 
 type Program = {
@@ -113,6 +121,7 @@ export class Renderer {
   private readonly cursorProgram: Program;
   private readonly rippleProgram: Program;
   private readonly cursorTextures = new CursorTextureCache();
+  private readonly backgroundTextures = new BackgroundTextureCache();
   private readonly tex: WebGLTexture;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -148,8 +157,7 @@ export class Renderer {
       "u_color",
       "u_falloff",
       "u_aspect",
-      "u_blurPx",
-      "u_texelPx",
+      "u_lod",
       "u_image",
       "u_imageScale",
     ];
@@ -204,7 +212,7 @@ export class Renderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(this.vao);
 
-    this.drawBackground(style, out);
+    this.drawBackground(style, out, state.backgroundImageUrl);
 
     const quad = screenQuad(src, out, style.paddingFactor, state.zoom);
 
@@ -243,7 +251,7 @@ export class Renderer {
     );
   }
 
-  private drawBackground(style: StyleConfig, out: Size): void {
+  private drawBackground(style: StyleConfig, out: Size, imageUrl?: string): void {
     const gl = this.gl;
     const bg = style.background;
 
@@ -258,13 +266,35 @@ export class Renderer {
     gl.useProgram(this.bg.program);
     gl.uniform4f(this.bg.uniforms.u_rect ?? null, 0, 0, 1, 1);
 
-    // Quoted at 1080p and scaled by output height, so the blur keeps the same
-    // apparent size at 4K export as in the preview — the same reasoning that
-    // keeps the cursor a constant apparent size.
-    gl.uniform1f(this.bg.uniforms.u_blurPx ?? null, BLUR_RADIUS_PX[bg.blur] * (out.h / 1080));
-    gl.uniform2f(this.bg.uniforms.u_texelPx ?? null, 1 / out.w, 1 / out.h);
+    if (bg.kind === "image" && imageUrl !== undefined) {
+      const tex = this.backgroundTextures.get(gl, imageUrl);
+      const size = this.backgroundTextures.sizeOf(imageUrl);
 
-    if (bg.kind === "color") {
+      if (tex !== null && size !== null) {
+        // Cover fit, expressed as a scale on the sampling coordinate about the
+        // centre: scaling UP the coordinate crops, so the axis that is
+        // relatively too LARGE gets the >1 factor. Fills the frame on both
+        // axes, crops the overflow, never letterboxes.
+        const imageAspect = size.w / size.h;
+        const outAspect = out.w / out.h;
+        const sx = imageAspect > outAspect ? outAspect / imageAspect : 1;
+        const sy = imageAspect > outAspect ? 1 : imageAspect / outAspect;
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.uniform1i(this.bg.uniforms.u_image ?? null, 1);
+        gl.uniform2f(this.bg.uniforms.u_imageScale ?? null, sx, sy);
+        // Blur is image-only: on a mesh it is a measured no-op.
+        gl.uniform1f(this.bg.uniforms.u_lod ?? null, BLUR_LOD[bg.blur]);
+        gl.uniform1i(this.bg.uniforms.u_mode ?? null, 2);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        return;
+      }
+      // Falls through to the solid colour while the image decodes, or forever
+      // if it failed to load.
+    }
+
+    if (bg.kind === "color" || bg.kind === "image") {
       const [r, g, b] = hexToRgb(bg.color);
       gl.uniform1i(this.bg.uniforms.u_mode ?? null, 1);
       gl.uniform3f(this.bg.uniforms.u_color ?? null, r, g, b);
@@ -422,6 +452,17 @@ export class Renderer {
   }
 
   /** Read the drawn frame back as tightly packed RGBA, top row first. */
+  /**
+   * Decode a background image before rendering starts.
+   *
+   * Export renders every frame in a loop with no repaint, so a frame that fell
+   * back to the solid colour is baked into the file. Preview does not need
+   * this, because it redraws.
+   */
+  async preloadBackgroundImage(url: string): Promise<void> {
+    await this.backgroundTextures.preload(this.gl, url);
+  }
+
   readPixels(out: Size): Uint8Array {
     const gl = this.gl;
     const buf = new Uint8Array(out.w * out.h * 4);
@@ -448,5 +489,6 @@ export class Renderer {
     gl.deleteProgram(this.cursorProgram.program);
     gl.deleteProgram(this.rippleProgram.program);
     this.cursorTextures.dispose(gl);
+    this.backgroundTextures.dispose(gl);
   }
 }

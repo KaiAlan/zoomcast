@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultProject } from "../project/defaults";
-import { BLUR_RADIUS_PX, GRADIENT_PRESETS, MESH_POINTS, gradientPreset } from "./backgrounds";
+import { BLUR_LOD, GRADIENT_PRESETS, MESH_POINTS, gradientPreset } from "./backgrounds";
 
 describe("GRADIENT_PRESETS", () => {
   it("ships a curated set, not an exhaustive one", () => {
@@ -76,10 +76,10 @@ describe("gradientPreset", () => {
   });
 });
 
-describe("BLUR_RADIUS_PX", () => {
+describe("BLUR_LOD", () => {
   it("is zero at none and strictly increasing", () => {
-    expect(BLUR_RADIUS_PX.none).toBe(0);
-    expect(BLUR_RADIUS_PX.moderate).toBeGreaterThan(BLUR_RADIUS_PX.none);
-    expect(BLUR_RADIUS_PX.strong).toBeGreaterThan(BLUR_RADIUS_PX.moderate);
+    expect(BLUR_LOD.none).toBe(0);
+    expect(BLUR_LOD.moderate).toBeGreaterThan(BLUR_LOD.none);
+    expect(BLUR_LOD.strong).toBeGreaterThan(BLUR_LOD.moderate);
   });
 });

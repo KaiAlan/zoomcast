@@ -51,6 +51,15 @@ export type ZoomcastApi = {
   openBundle: (dir: string) => Promise<OpenedBundle>;
   saveProject: (dir: string, project: Project) => Promise<void>;
 
+  /**
+   * Pick a background image and copy it into the project directory.
+   *
+   * Returns the BASENAME written, not the source path — the file is copied so
+   * the project does not break when the original moves. Null if cancelled, or
+   * if the copy failed (which is logged main-side).
+   */
+  chooseBackgroundImage: (dir: string) => Promise<string | null>;
+
   /** Used only by the hidden audio-capture renderer. */
   audioChunk: (role: "mic" | "system", chunk: Uint8Array) => Promise<void>;
 

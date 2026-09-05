@@ -33,6 +33,8 @@ export async function exportClip(opts: {
    * data" true by construction instead of by discipline.
    */
   clicks: TelemetryEvent[];
+  /** Resolved by the caller, so preview and export cannot disagree. */
+  backgroundImageUrl?: string;
   mediaDir: string;
   renderer: Renderer;
   source: VideoSource;
@@ -43,6 +45,15 @@ export async function exportClip(opts: {
 }): Promise<void> {
   const { manifest, project, cursorPath, clicks, renderer, source, outFile, onProgress } =
     opts;
+  const { backgroundImageUrl } = opts;
+
+  // Decode before the loop, never inside it. Export writes each frame once
+  // with no repaint, so a frame that fell back to the solid colour while the
+  // image was still decoding is baked into the file. The preview can afford
+  // the fallback because it redraws; this cannot.
+  if (backgroundImageUrl !== undefined) {
+    await renderer.preloadBackgroundImage(backgroundImageUrl);
+  }
 
   const output = { w: project.output.width, h: project.output.height };
   const sourceSize = { w: manifest.video.width, h: manifest.video.height };
@@ -95,6 +106,7 @@ export async function exportClip(opts: {
           sourceSize,
           cursor: sample === null ? undefined : { sample, style: project.style.cursor },
           ripples: ripplesAt(clicks, frame.tSourceMs, RIPPLE_DURATION_MS),
+          backgroundImageUrl,
         });
       } finally {
         videoFrame.close();

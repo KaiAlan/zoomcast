@@ -1,10 +1,13 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
+import { copyFileSync } from "node:fs";
+import { extname, join } from "node:path";
 import type { ExportStartOptions } from "../shared/api";
 import type { Project } from "../shared/project/types";
 import { openBundle, saveProject } from "./bundleIo";
 import { isRecording } from "./capture/SessionController";
 import { ExportSession } from "./exportRunner";
+import { logDiag } from "./log";
 import { listRecordings, recordHotkeyLabel, toggleRecording } from "./recording";
 
 const sessions = new Map<string, ExportSession>();
@@ -24,6 +27,37 @@ export function registerIpc(): void {
 
   ipcMain.handle("bundle:save", (_event, dir: string, project: Project) => {
     saveProject(dir, project);
+  });
+
+  ipcMain.handle("background:choose", async (_event, dir: string) => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const options = {
+      title: "choose a background image",
+      properties: ["openFile" as const],
+      filters: [{ name: "images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    };
+
+    const result =
+      win === undefined
+        ? await dialog.showOpenDialog(options)
+        : await dialog.showOpenDialog(win, options);
+
+    const src = result.canceled ? undefined : result.filePaths[0];
+    if (src === undefined) return null;
+
+    // Copied into the project, never referenced: spec §5, so a project does not
+    // break when the source file is moved, renamed or deleted. Timestamped so
+    // replacing the image cannot collide with a texture still cached under the
+    // old name.
+    const name = `background-${Date.now()}${extname(src).toLowerCase()}`;
+    try {
+      copyFileSync(src, join(dir, name));
+    } catch (err) {
+      logDiag("background:choose", err);
+      return null;
+    }
+
+    return name;
   });
 
   ipcMain.handle("recording:list", () => listRecordings());

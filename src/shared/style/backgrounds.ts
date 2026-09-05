@@ -116,14 +116,20 @@ export function gradientPreset(name: string): GradientPreset {
 }
 
 /**
- * Blur radius in output pixels, quoted at 1080p.
+ * Blur as a mipmap level on the background image.
  *
- * The renderer scales this by output height, so the blur keeps the same
- * apparent size at 4K export as in a 1080p preview — the same reasoning that
- * keeps the cursor a constant apparent size.
+ * Each level is a halving, so 2 samples a quarter-size image and 4 a
+ * sixteenth. Expressed as a LOD rather than a pixel radius because LOD is
+ * relative to the texture: a 4K export and a 1080p preview then blur the image
+ * by the same visual amount with no scaling arithmetic, and the cost is one
+ * hardware-filtered fetch at any strength.
+ *
+ * Applies to image backgrounds only. On a procedural mesh a blur is a measured
+ * no-op — RMS 0.1 out of 255 between "none" and "strong" — because the mesh is
+ * already smooth by construction, so the control is not offered there.
  */
-export const BLUR_RADIUS_PX: Record<BlurStrength, number> = {
+export const BLUR_LOD: Record<BlurStrength, number> = {
   none: 0,
-  moderate: 16,
-  strong: 40,
+  moderate: 2.5,
+  strong: 4.5,
 };

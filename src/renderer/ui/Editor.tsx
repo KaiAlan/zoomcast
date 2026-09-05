@@ -3,6 +3,7 @@ import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
+import { bundleAssetUrl } from "../media/assetUrl";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
@@ -82,9 +83,16 @@ export function Editor({
     [bundle.telemetry],
   );
 
+  // Resolved once here so both render paths use the same URL. Undefined unless
+  // the style actually selects an image.
+  const backgroundImageUrl = useMemo(
+    () => bundleAssetUrl(bundle.dir, project.style.background.imageFile),
+    [bundle.dir, project.style.background.imageFile],
+  );
+
   // Latest values for the render loop, which must not be re-created per frame.
-  const live = useRef({ project, ctx, cursorPath, clicks });
-  live.current = { project, ctx, cursorPath, clicks };
+  const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl });
+  live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl };
 
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
@@ -118,7 +126,7 @@ export function Editor({
       const source = sourceRef.current;
       if (source === null || disposed) return;
 
-      const { project: p, ctx: c, cursorPath, clicks } = live.current;
+      const { project: p, ctx: c, cursorPath, clicks, backgroundImageUrl } = live.current;
       const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
       const sample = cursorAt(cursorPath, tSource);
 
@@ -132,6 +140,7 @@ export function Editor({
           sourceSize: c.source,
           cursor: sample === null ? undefined : { sample, style: p.style.cursor },
           ripples: ripplesAt(clicks, tSource, RIPPLE_DURATION_MS),
+          backgroundImageUrl,
         });
       } finally {
         frame.close();
@@ -183,6 +192,7 @@ export function Editor({
               project: live.current.project,
               cursorPath: live.current.cursorPath,
               clicks: live.current.clicks,
+              backgroundImageUrl: live.current.backgroundImageUrl,
               mediaDir: bundle.dir.replace(/\\/g, "/"),
               renderer,
               source,
@@ -291,6 +301,7 @@ export function Editor({
           project,
           cursorPath: live.current.cursorPath,
           clicks: live.current.clicks,
+          backgroundImageUrl: live.current.backgroundImageUrl,
           mediaDir: bundle.dir.replace(/\\/g, "/"),
           renderer,
           source,

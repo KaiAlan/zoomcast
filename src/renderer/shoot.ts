@@ -16,6 +16,8 @@ export type ShotSpec = {
   video?: string;
   /** Source time to decode, in ms. */
   tMs?: number;
+  /** Resolved zc:// URL for an image background, when style.background wants one. */
+  backgroundImageUrl?: string;
 };
 
 declare global {
@@ -106,6 +108,12 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
       screen = makeTestImage(sourceSize, spec.image ?? "grid");
     }
 
+    if (spec.backgroundImageUrl !== undefined) {
+      // Decode first: shoot draws each spec exactly once, with no repaint, so
+      // the solid-colour fallback would be baked into the PNG.
+      await renderer.preloadBackgroundImage(spec.backgroundImageUrl);
+    }
+
     try {
       renderer.drawFrame({
         screen,
@@ -113,6 +121,7 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
         style,
         outputSize,
         sourceSize,
+        backgroundImageUrl: spec.backgroundImageUrl,
       });
       return canvas.toDataURL("image/png");
     } finally {
