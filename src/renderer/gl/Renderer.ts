@@ -9,6 +9,7 @@ import {
   MESH_POINTS,
   gradientPreset,
 } from "../../shared/style/backgrounds";
+import { resolveFrame } from "../../shared/style/frame";
 import { BackgroundTextureCache } from "./backgroundTexture";
 import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
@@ -39,12 +40,22 @@ export type FrameState = {
   backgroundImageUrl?: string;
 };
 
+type ResolvedFrame = ReturnType<typeof resolveFrame>;
+
 type Program = {
   program: WebGLProgram;
   uniforms: Record<string, WebGLUniformLocation | null>;
 };
 
 const MAX_SHARPEN = 0.6;
+
+/** #rgb, #rrggbb or #rrggbbaa. Alpha defaults to 1 when not given. */
+function hexToRgba(hex: string): [number, number, number, number] {
+  const [r, g, b] = hexToRgb(hex);
+  const h = hex.replace("#", "");
+  const a = h.length === 8 ? Number.parseInt(h.slice(6, 8), 16) / 255 : 1;
+  return [r, g, b, a];
+}
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
@@ -178,6 +189,8 @@ export class Renderer {
       "u_radiusPx",
       "u_sharpen",
       "u_texel",
+      "u_borderPx",
+      "u_borderColor",
     ]);
     this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow"]);
     this.rippleProgram = link(gl, RIPPLE_FRAG, ["u_progress"]);
@@ -216,8 +229,12 @@ export class Renderer {
 
     const quad = screenQuad(src, out, style.paddingFactor, state.zoom);
 
-    this.drawShadow(quad, out, style);
-    this.drawScreen(quad, out, src, style, state.screen);
+    // Resolved once: every frame read must go through this or the presets
+    // silently do nothing.
+    const frame = resolveFrame(style.frame);
+
+    this.drawShadow(quad, out, frame);
+    this.drawScreen(quad, out, src, frame, state.screen);
 
     // Ripples are their own toggle, independent of cursor visibility: a click
     // near the ends of the path can outlive the cursor sample that produced
@@ -319,10 +336,10 @@ export class Renderer {
   private drawShadow(
     quad: { x: number; y: number; w: number; h: number },
     out: Size,
-    style: StyleConfig,
+    frame: ResolvedFrame,
   ): void {
     const gl = this.gl;
-    const { blurPx, opacity, offsetYPx } = style.frame.shadow;
+    const { blurPx, opacity, offsetYPx } = frame.shadow;
     if (opacity <= 0) return;
 
     const pad = blurPx * 2;
@@ -332,7 +349,7 @@ export class Renderer {
     gl.useProgram(this.shadow.program);
     gl.uniform2f(this.shadow.uniforms.u_spanPx ?? null, spanW, spanH);
     gl.uniform2f(this.shadow.uniforms.u_halfPx ?? null, quad.w / 2, quad.h / 2);
-    gl.uniform1f(this.shadow.uniforms.u_radiusPx ?? null, style.frame.cornerRadiusPx);
+    gl.uniform1f(this.shadow.uniforms.u_radiusPx ?? null, frame.cornerRadiusPx);
     gl.uniform1f(this.shadow.uniforms.u_blurPx ?? null, Math.max(blurPx, 1));
     gl.uniform1f(this.shadow.uniforms.u_opacity ?? null, opacity);
 
@@ -352,7 +369,7 @@ export class Renderer {
     quad: { x: number; y: number; w: number; h: number },
     out: Size,
     src: Size,
-    style: StyleConfig,
+    frame: ResolvedFrame,
     source: TexImageSource,
   ): void {
     const gl = this.gl;
@@ -368,7 +385,12 @@ export class Renderer {
     gl.useProgram(this.screen.program);
     gl.uniform1i(this.screen.uniforms.u_tex ?? null, 0);
     gl.uniform2f(this.screen.uniforms.u_quadPx ?? null, quad.w, quad.h);
-    gl.uniform1f(this.screen.uniforms.u_radiusPx ?? null, style.frame.cornerRadiusPx);
+    gl.uniform1f(this.screen.uniforms.u_radiusPx ?? null, frame.cornerRadiusPx);
+
+    const borderPx = frame.border.visible ? frame.border.widthPx : 0;
+    const [br, bg2, bb, ba] = hexToRgba(frame.border.color);
+    gl.uniform1f(this.screen.uniforms.u_borderPx ?? null, borderPx);
+    gl.uniform4f(this.screen.uniforms.u_borderColor ?? null, br, bg2, bb, ba);
     gl.uniform1f(this.screen.uniforms.u_sharpen ?? null, sharpen);
     gl.uniform2f(this.screen.uniforms.u_texel ?? null, 1 / src.w, 1 / src.h);
 

@@ -125,6 +125,8 @@ uniform vec2  u_quadPx;
 uniform float u_radiusPx;
 uniform float u_sharpen;
 uniform vec2  u_texel;
+uniform float u_borderPx;
+uniform vec4  u_borderColor;
 out vec4 frag;
 ${SD_ROUND_RECT}
 void main() {
@@ -140,7 +142,20 @@ void main() {
 
   vec2 p = (v_uv - 0.5) * u_quadPx;
   float d = sdRoundRect(p, u_quadPx * 0.5, u_radiusPx);
-  frag = vec4(c, 1.0 - smoothstep(-1.0, 1.0, d));
+  float alpha = 1.0 - smoothstep(-1.0, 1.0, d);
+
+  // The border is a ring just inside the same SDF, not a separate quad. Drawn
+  // as its own quad it would square off the corners, because only this shader
+  // knows where the rounded edge actually is. d is negative inside, so the
+  // ring is the band from -u_borderPx to 0, feathered by the same 1px the
+  // corner mask uses so the two edges match.
+  if (u_borderPx > 0.0) {
+    float inner = smoothstep(-u_borderPx - 1.0, -u_borderPx + 1.0, d);
+    float ring = inner * alpha;
+    c = mix(c, u_borderColor.rgb, ring * u_borderColor.a);
+  }
+
+  frag = vec4(c, alpha);
 }`;
 
 export const CURSOR_FRAG = `#version 300 es
