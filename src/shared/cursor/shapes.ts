@@ -16,6 +16,15 @@ const V = 32;
  * Extraction gets pixel-accurate shapes and a fixed-size bitmap — the one
  * thing that cannot survive being zoomed, which is the entire reason v1
  * decision #6 chose to draw the cursor rather than capture it.
+ *
+ * EVERY SUBPATH MUST BE CLOSED. cursorTexture renders all eight shapes with one
+ * recipe — stroke black, then fill white — and Canvas2D's fill() encloses zero
+ * area on an open subpath, so a bare polyline paints nothing and only the black
+ * stroke survives. That is not hypothetical: ibeam was three open lines and
+ * rendered as a solid black glyph, and the four resize cursors were two closed
+ * heads joined by an open stem, which rendered as a black bar between two white
+ * arrowheads. Nothing caught it because the fixture emits no cursor events, so
+ * only `arrow` had ever been drawn. shapes.test.ts now asserts closure.
  */
 export const CURSOR_SHAPES: Record<CursorShape, CursorArt> = {
   arrow: {
@@ -24,7 +33,7 @@ export const CURSOR_SHAPES: Record<CursorShape, CursorArt> = {
     viewBox: V,
   },
   ibeam: {
-    path: "M12 4 L20 4 M16 4 L16 28 M12 28 L20 28",
+    path: "M10 4 L22 4 L22 6.5 L18 6.5 L18 25.5 L22 25.5 L22 28 L10 28 L10 25.5 L14 25.5 L14 6.5 L10 6.5 Z",
     hotspot: { x: 16, y: 16 },
     viewBox: V,
   },
@@ -37,22 +46,22 @@ export const CURSOR_SHAPES: Record<CursorShape, CursorArt> = {
     viewBox: V,
   },
   ns: {
-    path: "M16 3 L11 10 L21 10 Z M16 29 L11 22 L21 22 Z M16 10 L16 22",
+    path: "M16 3 L21 10 L18 10 L18 22 L21 22 L16 29 L11 22 L14 22 L14 10 L11 10 Z",
     hotspot: { x: 16, y: 16 },
     viewBox: V,
   },
   ew: {
-    path: "M3 16 L10 11 L10 21 Z M29 16 L22 11 L22 21 Z M10 16 L22 16",
+    path: "M3 16 L10 11 L10 14 L22 14 L22 11 L29 16 L22 21 L22 18 L10 18 L10 21 Z",
     hotspot: { x: 16, y: 16 },
     viewBox: V,
   },
   nwse: {
-    path: "M4 4 L14 4 L4 14 Z M28 28 L18 28 L28 18 Z M8 8 L24 24",
+    path: "M5 5 L14 7 L12 9 L23 20 L25 18 L27 27 L18 25 L20 23 L9 12 L7 14 Z",
     hotspot: { x: 16, y: 16 },
     viewBox: V,
   },
   nesw: {
-    path: "M28 4 L18 4 L28 14 Z M4 28 L14 28 L4 18 Z M24 8 L8 24",
+    path: "M27 5 L18 7 L20 9 L9 20 L7 18 L5 27 L14 25 L12 23 L23 12 L25 14 Z",
     hotspot: { x: 16, y: 16 },
     viewBox: V,
   },
