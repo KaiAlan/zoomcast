@@ -227,12 +227,14 @@ export class Renderer {
     const gl = this.gl;
     gl.useProgram(this.bg.program);
 
+    // INTERIM, replaced in this phase's Task 3 by the mesh gradient. Background
+    // lost its `from`/`to`/`angle` fields when it widened from a union to a
+    // flat record, and named presets do not exist yet, so every kind renders
+    // flat for exactly as long as it takes Tasks 2 and 3 to land.
     const bgStyle = style.background;
-    const from =
-      bgStyle.kind === "gradient" ? hexToRgb(bgStyle.from) : hexToRgb(bgStyle.color);
-    const to =
-      bgStyle.kind === "gradient" ? hexToRgb(bgStyle.to) : hexToRgb(bgStyle.color);
-    const angle = bgStyle.kind === "gradient" ? (bgStyle.angle * Math.PI) / 180 : 0;
+    const from = hexToRgb(bgStyle.color);
+    const to = from;
+    const angle = 0;
 
     gl.uniform3f(this.bg.uniforms.u_from ?? null, from[0], from[1], from[2]);
     gl.uniform3f(this.bg.uniforms.u_to ?? null, to[0], to[1], to[2]);
@@ -248,7 +250,7 @@ export class Renderer {
     style: StyleConfig,
   ): void {
     const gl = this.gl;
-    const { blurPx, opacity, offsetYPx } = style.shadow;
+    const { blurPx, opacity, offsetYPx } = style.frame.shadow;
     if (opacity <= 0) return;
 
     const pad = blurPx * 2;
@@ -258,7 +260,7 @@ export class Renderer {
     gl.useProgram(this.shadow.program);
     gl.uniform2f(this.shadow.uniforms.u_spanPx ?? null, spanW, spanH);
     gl.uniform2f(this.shadow.uniforms.u_halfPx ?? null, quad.w / 2, quad.h / 2);
-    gl.uniform1f(this.shadow.uniforms.u_radiusPx ?? null, style.cornerRadiusPx);
+    gl.uniform1f(this.shadow.uniforms.u_radiusPx ?? null, style.frame.cornerRadiusPx);
     gl.uniform1f(this.shadow.uniforms.u_blurPx ?? null, Math.max(blurPx, 1));
     gl.uniform1f(this.shadow.uniforms.u_opacity ?? null, opacity);
 
@@ -294,7 +296,7 @@ export class Renderer {
     gl.useProgram(this.screen.program);
     gl.uniform1i(this.screen.uniforms.u_tex ?? null, 0);
     gl.uniform2f(this.screen.uniforms.u_quadPx ?? null, quad.w, quad.h);
-    gl.uniform1f(this.screen.uniforms.u_radiusPx ?? null, style.cornerRadiusPx);
+    gl.uniform1f(this.screen.uniforms.u_radiusPx ?? null, style.frame.cornerRadiusPx);
     gl.uniform1f(this.screen.uniforms.u_sharpen ?? null, sharpen);
     gl.uniform2f(this.screen.uniforms.u_texel ?? null, 1 / src.w, 1 / src.h);
 

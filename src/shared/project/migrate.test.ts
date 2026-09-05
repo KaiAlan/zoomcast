@@ -35,8 +35,9 @@ describe("normalizeProject", () => {
     const p = normalizeProject(PRE_CURSOR, "b");
     expect(p.cuts).toEqual([{ startMs: 100, endMs: 600 }]);
     expect(p.zoom.keyframes).toHaveLength(1);
-    expect(p.style.shadow.blurPx).toBe(48);
-    expect(p.style.background).toEqual(PRE_CURSOR.style.background);
+    expect(p.style.frame.shadow.blurPx).toBe(48);
+    // from/to/angle are gone with the union; kind survives the rename.
+    expect(p.style.background.kind).toBe("gradient");
     expect(p.audio.systemGainDb).toBe(-6);
     expect(p.output.bitrateMbps).toBe(12);
   });
@@ -80,10 +81,93 @@ describe("normalizeProject", () => {
     expect(p.style.cursor.sizePct).toBe(100);
   });
 
-  it("drops a background whose kind is not a known arm", () => {
-    // Partially merging across union arms would yield a shape matching neither.
-    const p = normalizeProject({ style: { background: { kind: "mesh", preset: "x" } } }, "b");
-    expect(p.style.background).toEqual(defaultProject("b").style.background);
+  it("resets an unknown background kind but keeps the other kinds' settings", () => {
+    // Background stopped being a union in phase B precisely so that toggling
+    // kind does not discard the settings of the kinds you are not on. So only
+    // the bad field resets. An unrecognised preset NAME is left alone on
+    // purpose: gradientPreset() resolves unknown names to a default at render
+    // time, so keeping it costs nothing and survives a downgrade.
+    const p = normalizeProject(
+      { style: { background: { kind: "hologram", preset: "x", color: "#abcdef" } } },
+      "b",
+    );
+    expect(p.style.background.kind).toBe(defaultProject("b").style.background.kind);
+    expect(p.style.background.preset).toBe("x");
+    expect(p.style.background.color).toBe("#abcdef");
+  });
+
+  it("moves the loose frame fields under style.frame", () => {
+    // Phase B grouped cornerRadiusPx and shadow so a preset can set them
+    // together. PRE_CURSOR carries them at the old top level.
+    const p = normalizeProject(PRE_CURSOR, "b");
+    expect(p.style.frame.cornerRadiusPx).toBe(12);
+    expect(p.style.frame.shadow).toEqual({ blurPx: 48, opacity: 0.35, offsetYPx: 16 });
+    expect(p.style.frame.preset).toBe("default");
+  });
+
+  it("prefers the new frame location over the legacy one when both exist", () => {
+    const p = normalizeProject(
+      {
+        style: {
+          cornerRadiusPx: 12,
+          shadow: { blurPx: 48, opacity: 0.35, offsetYPx: 16 },
+          frame: { cornerRadiusPx: 40, shadow: { blurPx: 4, opacity: 0.1, offsetYPx: 2 } },
+        },
+      },
+      "b",
+    );
+    expect(p.style.frame.cornerRadiusPx).toBe(40);
+    expect(p.style.frame.shadow.blurPx).toBe(4);
+  });
+
+  it("renames the old solid background kind and keeps its colour", () => {
+    const p = normalizeProject({ style: { background: { kind: "solid", color: "#123456" } } }, "b");
+    expect(p.style.background.kind).toBe("color");
+    expect(p.style.background.color).toBe("#123456");
+  });
+
+  it("falls back to the default preset for an old two-stop gradient", () => {
+    // from/to/angle have no faithful mesh equivalent, so the colours are lost
+    // on purpose rather than approximated into something that is neither.
+    const p = normalizeProject(
+      { style: { background: { kind: "gradient", from: "#1b1d23", to: "#0d0e11", angle: 135 } } },
+      "b",
+    );
+    expect(p.style.background.kind).toBe("gradient");
+    expect(p.style.background.preset).toBe(defaultProject("b").style.background.preset);
+  });
+
+  it("never invents a blur an old project did not ask for", () => {
+    expect(normalizeProject(PRE_CURSOR, "b").style.background.blur).toBe("none");
+    expect(normalizeProject({ style: { background: { blur: "wat" } } }, "b").style.background.blur)
+      .toBe("none");
+  });
+
+  it("defaults output.aspect to native, so existing exports are unchanged", () => {
+    const p = normalizeProject(PRE_CURSOR, "b");
+    expect(p.output.aspect).toBe("native");
+    expect(p.output.width).toBe(1920);
+    expect(p.output.height).toBe(1080);
+  });
+
+  it("rejects an unknown enum value rather than passing it to the renderer", () => {
+    const p = normalizeProject(
+      {
+        style: { frame: { preset: "fancy" }, background: { kind: "hologram" } },
+        output: { aspect: "21:9" },
+      },
+      "b",
+    );
+    expect(p.style.frame.preset).toBe("default");
+    expect(p.style.background.kind).toBe("gradient");
+    expect(p.output.aspect).toBe("native");
+  });
+
+  it("keeps a null imageFile null rather than coercing it to a string", () => {
+    expect(normalizeProject({ style: { background: { imageFile: 42 } } }, "b")
+      .style.background.imageFile).toBeNull();
+    expect(normalizeProject({ style: { background: { imageFile: "bg-1.png" } } }, "b")
+      .style.background.imageFile).toBe("bg-1.png");
   });
 
   it("keeps the caller's bundleId when the file disagrees", () => {

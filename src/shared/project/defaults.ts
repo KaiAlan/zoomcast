@@ -9,9 +9,19 @@ export function defaultProject(bundleId: string): Project {
     zoom: { config: { ...DEFAULT_ZOOM_CONFIG }, keyframes: [] },
     style: {
       paddingFactor: 0.85,
-      cornerRadiusPx: 12,
-      shadow: { blurPx: 48, opacity: 0.35, offsetYPx: 16 },
-      background: { kind: "gradient", from: "#1b1d23", to: "#0d0e11", angle: 135 },
+      frame: {
+        preset: "default",
+        cornerRadiusPx: 12,
+        shadow: { blurPx: 48, opacity: 0.35, offsetYPx: 16 },
+        border: { visible: false, widthPx: 1, color: "#ffffff22" },
+      },
+      background: {
+        kind: "gradient",
+        preset: "aurora",
+        color: "#0d0e11",
+        imageFile: null,
+        blur: "none",
+      },
       cursor: {
         visible: true,
         sizePct: 100,
@@ -28,6 +38,6 @@ export function defaultProject(bundleId: string): Project {
       marginPx: 32,
     },
     audio: { micGainDb: 0, systemGainDb: -6, syncNudgeMs: 0 },
-    output: { width: 1920, height: 1080, fps: 60, bitrateMbps: 12 },
+    output: { width: 1920, height: 1080, aspect: "native", fps: 60, bitrateMbps: 12 },
   };
 }

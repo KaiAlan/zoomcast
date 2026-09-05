@@ -126,26 +126,26 @@ and phase C will touch the zoom half while leaving style alone.
 
 ---
 
-## A note on the biggest risk in this phase
+## A note on the biggest risk in this phase — now half-handled
 
-`src/main/bundleIo.ts:41` is:
+This plan was written assuming `bundleIo` still did a bare
+`JSON.parse(...) as Project`, an unchecked assertion over disk data that was
+safe only while the persisted shape never changed. Phase B changes that shape.
 
-```ts
-const project: Project = existsSync(projectPath)
-  ? (JSON.parse(readFileSync(projectPath, "utf8")) as Project)
-  : defaultProject(manifest.id);
-```
+**That is no longer the state of the code.** Phase A's final review found the
+same gap independently, and `src/shared/project/migrate.ts` now exists:
+`normalizeProject(raw, bundleId)` merges field-by-field over `defaultProject`,
+rejecting NaN and wrong-typed fields, and `bundleIo` routes every read through
+it. So Task 1 below is no longer "write a migration" — it is **extend the
+migration that exists** to cover the new fields, and update its tests.
 
-That `as Project` is an unchecked assertion over data read from disk. It has been
-harmless because the shape never changed. **Phase B changes it**, and there are
-already 11 recordings on this machine with the old shape. Without Task 1, opening
-any of them after this phase reads `style.frame.cornerRadiusPx` off `undefined`
-and the editor throws — for a file the user cannot easily hand-edit.
+The rule it established is what matters here, and it is now in `HANDOVER.md`:
+**anyone adding a field to `Project` must add it to `normalizeProject` too, or
+old projects silently lose it.** Every task in this phase that touches the
+persisted shape is therefore also a `migrate.ts` change.
 
-The spec does not mention migration; §6 shows only the target shape. **This is a
-gap in the spec, not in the implementation**, and Task 1 fills it. Task 1 must
-land and be reviewed before any other task, because every later task's types
-depend on it.
+Task 1 still must land and be reviewed before any other task, because every
+later task's types depend on it.
 
 ---
 
@@ -154,10 +154,14 @@ depend on it.
 **Files:**
 - Modify: `src/shared/project/types.ts`
 - Modify: `src/shared/project/defaults.ts`
-- Create: `src/shared/project/migrate.ts`
-- Create: `src/shared/project/migrate.test.ts`
-- Modify: `src/main/bundleIo.ts:39-42`
+- Modify: `src/shared/project/migrate.ts` — **exists already**; extend it
+- Modify: `src/shared/project/migrate.test.ts` — **exists already**; extend it
 - Modify: `src/shared/project/defaults.test.ts`
+
+`bundleIo` already routes through `normalizeProject`, so it needs no change this
+time. The existing tests pin the pre-phase-A shape (a project.json with no
+`style.cursor`); keep every one of them passing — an old file must survive BOTH
+migrations, not just the newest.
 
 **Interfaces:**
 - Consumes: nothing from this phase.
