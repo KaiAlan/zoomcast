@@ -7,6 +7,7 @@ import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
 import type { AudioInput } from "../../shared/export/ffmpegArgs";
 import type { Project } from "../../shared/project/types";
+import { outputSizeFor } from "../../shared/style/aspect";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import type { Renderer } from "../gl/Renderer";
 import type { VideoSource } from "./VideoSource";
@@ -55,7 +56,12 @@ export async function exportClip(opts: {
     await renderer.preloadBackgroundImage(backgroundImageUrl);
   }
 
-  const output = { w: project.output.width, h: project.output.height };
+  // Same helper the preview uses. Two call sites constructing this
+  // separately is exactly the divergence verify:parity exists to catch.
+  const output = outputSizeFor(project.output, {
+    w: manifest.video.width,
+    h: manifest.video.height,
+  });
   const sourceSize = { w: manifest.video.width, h: manifest.video.height };
 
   const frames = planExportFrames(

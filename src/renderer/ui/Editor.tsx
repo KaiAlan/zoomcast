@@ -3,6 +3,7 @@ import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
+import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
@@ -50,7 +51,10 @@ export function Editor({
   const ctx: PlanContext = useMemo(
     () => ({
       source: { w: manifest.video.width, h: manifest.video.height },
-      output: { w: project.output.width, h: project.output.height },
+      output: outputSizeFor(project.output, {
+        w: manifest.video.width,
+        h: manifest.video.height,
+      }),
       paddingFactor: project.style.paddingFactor,
       durationMs: manifest.durationMs,
     }),
@@ -99,7 +103,12 @@ export function Editor({
     (config: ZoomConfig, existing: Project) => {
       const generated = planZoom(bundle.telemetry, config, {
         source: { w: manifest.video.width, h: manifest.video.height },
-        output: { w: existing.output.width, h: existing.output.height },
+        // The zoom ceiling derives from the output size, so a re-plan after an
+        // aspect change must see the new shape or it plans for the old one.
+        output: outputSizeFor(existing.output, {
+          w: manifest.video.width,
+          h: manifest.video.height,
+        }),
         paddingFactor: existing.style.paddingFactor,
         durationMs: manifest.durationMs,
       });
