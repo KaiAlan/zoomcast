@@ -5,6 +5,18 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/**
+ * Export frame rate, restricted to the rates the UI offers.
+ *
+ * Not clamped to the nearest: an out-of-set value means a project written by an
+ * older build, when this was a free number field stepping by 30 from 60 — so 0
+ * was two clicks away, and planExportFrames at 0 emits no frames while ffmpeg
+ * gets `-r 0`. Such a project must not load into a UI that cannot show it.
+ */
+function exportFps(raw: unknown, fallback: number): number {
+  return raw === 30 || raw === 60 ? raw : fallback;
+}
+
 function num(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
@@ -137,7 +149,7 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
       height: num(output.height, base.output.height),
       // "native" keeps every existing export exactly as it was.
       aspect: oneOf(output.aspect, ASPECTS, "native"),
-      fps: num(output.fps, base.output.fps),
+      fps: exportFps(output.fps, base.output.fps),
       bitrateMbps: num(output.bitrateMbps, base.output.bitrateMbps),
     },
   };

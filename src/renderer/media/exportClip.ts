@@ -54,6 +54,19 @@ export async function exportClip(opts: {
   // the fallback because it redraws; this cannot.
   if (backgroundImageUrl !== undefined) {
     await renderer.preloadBackgroundImage(backgroundImageUrl);
+
+    // And insist it worked. Preloading without checking still bakes the
+    // fallback colour into every frame of the file — silently, and for the
+    // user-facing path rather than a diagnostic harness. Failing here costs
+    // the user a re-export; not failing costs them a finished video with the
+    // wrong background.
+    if (renderer.backgroundImageFailed(backgroundImageUrl)) {
+      throw new Error(
+        "the background image could not be decoded, so the export would have " +
+          "silently used the fallback colour instead. Re-pick the background " +
+          "and try again.",
+      );
+    }
   }
 
   // Same helper the preview uses. Two call sites constructing this
@@ -92,7 +105,7 @@ export async function exportClip(opts: {
   try {
     for (const frame of frames) {
       if (opts.signal?.cancelled === true) {
-        await window.zoomcast.exportCancel(id);
+        await window.zoomcast.exportCancel(id, `cancelled by user at frame ${frame.index}`);
         return;
       }
 
@@ -128,7 +141,10 @@ export async function exportClip(opts: {
     await window.zoomcast.exportFinish(id);
     onProgress({ done: frames.length, total: frames.length });
   } catch (err) {
-    await window.zoomcast.exportCancel(id);
+    await window.zoomcast.exportCancel(
+      id,
+      err instanceof Error ? (err.stack ?? err.message) : String(err),
+    );
     throw err;
   }
 }

@@ -61,49 +61,103 @@ describe("screenQuad", () => {
 });
 
 /**
- * The camera must not teleport.
+ * Three properties, because no one of them pins the clamp on its own.
  *
- * `maxComfortableZoom` is `source.w / (output.w * paddingFactor)`, which equals
- * `1 / paddingFactor` whenever output matches source — exactly the scale at
- * which the quad's width reaches the output's. Any discontinuity parked there
- * is hit by every zoom that reaches the ceiling, which on a 1080p-into-1080p
- * take is every zoom.
+ * Continuity catches the bug that shipped: a clamp written as two gated
+ * regimes collapsed to a zero-width range at exactly the crossover, pinning
+ * the quad while the unclamped value was hundreds of pixels away, and
+ * releasing one float later. Measured at 229px in a single frame.
  *
- * Property, not pinned values: sweep the scale finely and require each step to
- * move the quad a little. Pinning positions would pass against a curve that
- * jumps between the pinned points.
+ * But continuity alone cannot catch a clamp that is simply MISSING — deleting
+ * one is perfectly continuous, just wrong. So "covers" and "nested" pin what
+ * the clamps are actually for, on both axes. A re-review proved the need: with
+ * only continuity, deleting the y clamp entirely still passed.
+ *
+ * Sweeping both cx and cy matters for the same reason. cy = 0.5 is precisely
+ * the case where the vertical clamp never binds.
  */
-describe("screenQuad continuity", () => {
-  const THRESHOLD = 1 / PAD;
+describe("screenQuad clamping", () => {
   const CENTRES = [0, 0.05, 0.07005, 0.2, 0.5, 0.8, 0.95, 1];
+  const OUTPUTS = [
+    { name: "16:9 native", size: HD },
+    { name: "9:16", size: { w: 608, h: 1080 } },
+    { name: "1:1", size: { w: 1080, h: 1080 } },
+    { name: "4:3", size: { w: 1440, h: 1080 } },
+    { name: "wide banner", size: { w: 1920, h: 600 } },
+  ];
+
+  /** Past the ceiling too: the function must hold up beyond what a plan asks. */
+  const scales = (output: { w: number; h: number }): number[] => {
+    const ceiling = (HD.w / (output.w * PAD)) * 1.3;
+    const steps = 400;
+    return Array.from({ length: steps + 1 }, (_, i) => 1 + (i / steps) * (ceiling - 1));
+  };
 
   it("never moves the quad far in one small step of scale", () => {
-    const STEPS = 4000;
-    // 4000 steps across the whole zoom range: a continuous path moves well
-    // under a pixel per step, so 2px is loose and still catches a teleport.
-    const MAX_STEP_PX = 2;
+    for (const { name, size } of OUTPUTS) {
+      for (const cx of CENTRES) {
+        for (const cy of CENTRES) {
+          let prev = screenQuad(HD, size, PAD, { scale: 1, cx, cy });
 
-    for (const cx of CENTRES) {
-      let worst = 0;
-      let worstAt = 0;
-      let prev = screenQuad(HD, HD, PAD, { scale: THRESHOLD, cx, cy: 0.5 });
+          for (const scale of scales(size)) {
+            const q = screenQuad(HD, size, PAD, { scale, cx, cy });
+            const moved = Math.hypot(q.x - prev.x, q.y - prev.y);
 
-      for (let i = 1; i <= STEPS; i++) {
-        const scale = THRESHOLD - (i / STEPS) * (THRESHOLD - 1);
-        const q = screenQuad(HD, HD, PAD, { scale, cx, cy: 0.5 });
-        const moved = Math.hypot(q.x - prev.x, q.y - prev.y);
-
-        if (moved > worst) {
-          worst = moved;
-          worstAt = scale;
+            // Loose against legitimate motion at this sweep density (worst
+            // honest step measured at 5.1px), tight against the failure: the
+            // bug moved 229px in a single frame.
+            expect(
+              moved,
+              `${name} cx=${cx} cy=${cy} jumped ${moved.toFixed(1)}px at scale ${scale.toFixed(5)}`,
+            ).toBeLessThan(30);
+            prev = q;
+          }
         }
-        prev = q;
       }
+    }
+  });
 
-      expect(
-        worst,
-        `cx=${cx} moved ${worst.toFixed(1)}px in one step at scale ${worstAt.toFixed(6)}`,
-      ).toBeLessThan(MAX_STEP_PX);
+  it("reveals no background on an axis the quad covers", () => {
+    for (const { name, size } of OUTPUTS) {
+      for (const cx of CENTRES) {
+        for (const cy of CENTRES) {
+          for (const scale of scales(size)) {
+            const q = screenQuad(HD, size, PAD, { scale, cx, cy });
+            const slack = 1e-6;
+
+            if (q.w >= size.w) {
+              expect(q.x, `${name} cx=${cx} left edge`).toBeLessThanOrEqual(slack);
+              expect(q.x + q.w, `${name} cx=${cx} right edge`).toBeGreaterThanOrEqual(size.w - slack);
+            }
+            if (q.h >= size.h) {
+              expect(q.y, `${name} cy=${cy} top edge`).toBeLessThanOrEqual(slack);
+              expect(q.y + q.h, `${name} cy=${cy} bottom edge`).toBeGreaterThanOrEqual(size.h - slack);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps the quad inside the frame on an axis where it fits", () => {
+    for (const { name, size } of OUTPUTS) {
+      for (const cx of CENTRES) {
+        for (const cy of CENTRES) {
+          for (const scale of scales(size)) {
+            const q = screenQuad(HD, size, PAD, { scale, cx, cy });
+            const slack = 1e-6;
+
+            if (q.w < size.w) {
+              expect(q.x, `${name} cx=${cx} pokes off the left`).toBeGreaterThanOrEqual(-slack);
+              expect(q.x + q.w, `${name} cx=${cx} pokes off the right`).toBeLessThanOrEqual(size.w + slack);
+            }
+            if (q.h < size.h) {
+              expect(q.y, `${name} cy=${cy} pokes off the top`).toBeGreaterThanOrEqual(-slack);
+              expect(q.y + q.h, `${name} cy=${cy} pokes off the bottom`).toBeLessThanOrEqual(size.h + slack);
+            }
+          }
+        }
+      }
     }
   });
 
@@ -112,8 +166,9 @@ describe("screenQuad continuity", () => {
     // the fix this crossing moved the screen 229px right and 110px up on the
     // real take 2026-09-05T13-13-31 (cx 0.07005, cy 0.86782).
     const zoom = { cx: 0.07005, cy: 0.86782 };
-    const at = screenQuad(HD, HD, PAD, { ...zoom, scale: THRESHOLD });
-    const justBelow = screenQuad(HD, HD, PAD, { ...zoom, scale: THRESHOLD * (1 - 1e-7) });
+    const ceiling = 1 / PAD;
+    const at = screenQuad(HD, HD, PAD, { ...zoom, scale: ceiling });
+    const justBelow = screenQuad(HD, HD, PAD, { ...zoom, scale: ceiling * (1 - 1e-7) });
 
     expect(Math.abs(justBelow.x - at.x)).toBeLessThan(1);
     expect(Math.abs(justBelow.y - at.y)).toBeLessThan(1);

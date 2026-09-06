@@ -15,8 +15,24 @@ describe("hexToRgb", () => {
     expect(hexToRgb("0D0E11")).toEqual(hexToRgb("#0d0e11"));
   });
 
+  /**
+   * This CHANGED behaviour, and it changed how the app looks.
+   *
+   * The old implementation ran parseInt over all eight digits and then
+   * shifted, so #rrggbbaa yielded (gg, bb, aa) — the blue channel silently
+   * received the alpha byte. Every frame preset uses eight-digit hex, so the
+   * default border #ffffff22 rendered as (1, 1, 0.133): a yellow-tinted white.
+   * FRAME_PRESETS.minimal's #ffffff1a was (1, 1, 0.102).
+   *
+   * The corrected value is white, as written. Recorded here rather than left
+   * as a silent improvement, because the fix shipped inside a commit described
+   * as an extraction and anyone comparing old shots to new ones will see the
+   * borders change.
+   */
   it("ignores the alpha byte of an eight-digit hex", () => {
     expect(hexToRgb("#ffffff22")).toEqual([1, 1, 1]);
+    expect(hexToRgb("#ffffff1a")).toEqual([1, 1, 1]);
+    expect(hexToRgb("#ffffffcc")).toEqual([1, 1, 1]);
   });
 
   /**

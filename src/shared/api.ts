@@ -2,6 +2,7 @@ import type { ExportArgsOptions } from "./export/ffmpegArgs";
 import type { Manifest } from "./bundle/manifest";
 import type { TelemetryEvent } from "./bundle/types";
 import type { Project } from "./project/types";
+import type { Settings } from "./settings/types";
 
 /** Media served over the private zc:// scheme, ready to hand to fetch(). */
 export type BundleMedia = {
@@ -70,11 +71,20 @@ export type ZoomcastApi = {
   isRecording: () => Promise<boolean>;
   recording: RecordingEvents;
 
+  /** App-level settings. Separate from Project, which lives inside a bundle. */
+  getSettings: () => Promise<Settings>;
+  setSettings: (settings: Settings) => Promise<void>;
+
   pickExportTarget: (suggested: string) => Promise<string | null>;
   /** Starts ffmpeg and returns a session id to push frames into. */
   exportStart: (opts: ExportStartOptions) => Promise<string>;
   /** Resolves once ffmpeg has taken the frame — this is the backpressure. */
   exportFrame: (id: string, frame: Uint8Array) => Promise<void>;
   exportFinish: (id: string) => Promise<void>;
-  exportCancel: (id: string) => Promise<void>;
+  /**
+   * Abandon an export. `reason` is required rather than optional because
+   * cancel is the only path that leaves a truncated file, and it used to leave
+   * no trace of why anywhere.
+   */
+  exportCancel: (id: string, reason: string) => Promise<void>;
 };

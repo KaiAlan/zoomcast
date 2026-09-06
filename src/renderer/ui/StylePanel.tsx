@@ -30,6 +30,9 @@ type Props = {
 const BACKGROUND_KINDS: BackgroundKind[] = ["gradient", "color", "image", "hidden"];
 const BLURS: BlurStrength[] = ["none", "moderate", "strong"];
 const FRAME_PRESET_NAMES: FramePreset[] = ["default", "minimal", "hidden"];
+/** Kept as strings because SelectRow is generic over string values. */
+const EXPORT_FPS_CHOICES = ["30", "60"] as const;
+
 const ASPECTS: AspectChoice[] = ["native", ...(Object.keys(ASPECT_RATIOS) as AspectChoice[])];
 
 /** A number field that accepts anything numeric and lets the model clamp. */
@@ -271,11 +274,16 @@ export function StylePanel({ style, output, dir, onStyleChange, onOutputChange }
           onChange={(height) => onOutputChange({ ...output, height })}
         />
 
-        <NumberRow
+        {/*
+          A choice, not a NumberRow. The field stepped by 30 from a default of
+          60, so 0 was two clicks away — and planExportFrames at 0 emits no
+          frames while ffmpeg gets `-r 0`.
+        */}
+        <SelectRow
           label="fps"
-          value={output.fps}
-          step={30}
-          onChange={(fps) => onOutputChange({ ...output, fps })}
+          value={String(output.fps)}
+          options={EXPORT_FPS_CHOICES}
+          onChange={(fps) => onOutputChange({ ...output, fps: Number(fps) })}
         />
       </div>
     </div>

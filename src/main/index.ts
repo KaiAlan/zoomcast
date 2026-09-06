@@ -5,6 +5,7 @@ import { startedHidden } from "./autostart";
 import {
   registerEditorOpener,
   registerRecordingControls,
+  registerSettingsOpener,
   teardownRecordingControls,
 } from "./recording";
 import { registerDisplayMediaHandler } from "./capture/AudioRecorder";
@@ -125,6 +126,30 @@ function createWindow(show = true, route = ""): BrowserWindow {
   void win.loadURL(rendererUrl(route));
 
   return win;
+}
+
+let settingsWindow: BrowserWindow | null = null;
+
+/**
+ * One settings window, focused if it already exists.
+ *
+ * Smaller than the editor and not resizable to editor proportions: it holds one
+ * control today and a handful later, and a 1400x900 window for that reads as a
+ * mistake.
+ */
+function openSettings(): void {
+  if (settingsWindow !== null && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return;
+  }
+
+  settingsWindow = createWindow(true, "#settings");
+  settingsWindow.setMenuBarVisibility(false);
+  settingsWindow.setSize(620, 380);
+  settingsWindow.center();
+  settingsWindow.on("closed", () => {
+    settingsWindow = null;
+  });
 }
 
 /**
@@ -326,6 +351,7 @@ void app.whenReady().then(async () => {
   registerDisplayMediaHandler();
   registerIpc();
   registerEditorOpener(showEditor);
+  registerSettingsOpener(openSettings);
 
   app.on("second-instance", showEditor);
 
@@ -410,7 +436,12 @@ app.on("before-quit", (event) => {
   // Finish the take rather than leaving a bundle with no manifest.
   event.preventDefault();
   void abortRecording().finally(() => {
-    app.exit(0);
+    // Carry the exit code rather than hardcoding 0. This handler runs on EVERY
+    // quit path, so a hardcoded zero silently overrode process.exitCode
+    // everywhere — including runRecordTest's own failure path, which wrote
+    // {ok: false} and then exited 0, so anything shelling out to
+    // ZOOMCAST_RECORD_TEST and checking the status saw success on failure.
+    app.exit(process.exitCode === undefined ? 0 : Number(process.exitCode));
   });
 });
 

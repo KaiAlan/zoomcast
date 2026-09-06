@@ -27,9 +27,18 @@ export type RecordedVideoInfo = {
  * ddagrab is preferred — it is GPU-side Desktop Duplication and can hand frames
  * straight to a hardware encoder on the same adapter.
  *
- * gdigrab is the fallback and is genuinely worse: GDI readback is CPU-bound,
- * realistically caps around 30fps at 1080p, and cannot capture protected or
- * some hardware-composited surfaces. It exists because DDA is not always
+ * gdigrab is the fallback and is genuinely worse: GDI readback is CPU-bound
+ * and cannot capture protected or some hardware-composited surfaces.
+ *
+ * Measured at 1080p on 2026-09-06, counting real frames rather than trusting
+ * avg_frame_rate (which reports a nominal container rate and is how a bogus
+ * "44fps" figure got into these notes once): bare ffmpeg reaches 21.9fps when
+ * asked for 30 and 28.6fps when asked for 60. Inside the app, where ffmpeg
+ * competes with Electron, audio capture and telemetry, it lands at 27-30fps
+ * whichever is requested.
+ *
+ * So asking for more than you expect is worth something, but ~28fps is the
+ * ceiling here. Anything better needs ddagrab. It exists because DDA is not always
  * available — on this machine's hybrid AMD/NVIDIA setup, neither adapter
  * enumerates a DXGI output at all ("Failed to enumerate DXGI output 0"), even
  * though GDI capture of the same desktop works fine.

@@ -16,6 +16,7 @@
     "verify:decode": "tsx tools/verify-decode.ts",
     "verify:parity": "npm run build && tsx tools/verify-parity.ts",
     "tune": "tsx tools/tune-planner.ts",
+    "bench:encoders": "tsx tools/bench-encoders.ts",
     "icon": "tsx tools/make-icon.ts",
     "dist": "npm run build && electron-builder --win"
   },

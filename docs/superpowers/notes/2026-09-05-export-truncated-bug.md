@@ -299,3 +299,30 @@ judged on real footage.
 - Zoom keyframes at `t = 0` still cannot be eased into, so a take still *opens*
   at whatever scale the planner chose. The jump is gone; the hard-cut-in at the
   first frame is not. That belongs to the phase C camera work.
+
+---
+
+# Encoders measured 2026-09-06 — h264_amf is the fast path after all
+
+`npm run bench:encoders` (`tools/bench-encoders.ts`), 600 frames of 1920x1080
+at 60fps, encode only — no GL render, no IPC, so these are ceilings rather than
+export rates:
+
+| encoder | time | rate |
+| --- | --- | --- |
+| libx264 | 12.6s | 47.6fps, 0.79x realtime |
+| **h264_amf** | **6.8s** | **88.7fps, 1.48x realtime** |
+
+So `h264_amf` is roughly **1.9x faster than libx264** here, and the button's
+choice of it is correct. The "~8fps, 0.13x realtime" figure recorded above was
+wrong by about a factor of eleven and must not be carried forward — every
+inference drawn from it (that an export is a multi-minute window, that a long
+window gave transient failures room to happen, that hardware might be the slow
+path) rested on it.
+
+It also removes the last support for the "opened the file mid-export" theory:
+at 88.7fps a 27s take is not a multi-minute window.
+
+`h264_amf` now has an automated guard. `tests/e2e/export.e2e.test.ts` runs over
+every encoder ffmpeg reports, so both paths are exercised on every `npm test`,
+and both pass.

@@ -1,6 +1,7 @@
 # zoomcast — handover
 
-Updated 2026-09-05. **Phases 0–7, A and B complete.** The tool records your
+Updated 2026-09-06. **Phases 0–7, A and B complete; B is merged to main.**
+Phase C has started — its export half is underway on `feat/phase-c-export`. The tool records your
 screen, mic and system audio, plans zooms from real input telemetry, draws a
 synthetic cursor with real shapes and click ripples, composes the frame over a
 procedural or custom background, lets you cut and scrub, and exports a finished
@@ -27,7 +28,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 221 passing, 30 files
+npm test              # 237 passing, 32 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -93,10 +94,18 @@ Phases C–G are specified in `docs/specs/2026-09-04-composition-and-camera-desi
 §13. None has a written plan yet.
 
 **Start any new session at
-`docs/superpowers/plans/2026-09-05-phase-b-handoff.md`.** It carries the order of
-work — the phase B re-review, then merge, then a "Phase C — start here" section
-that opens with three blocking questions for the user about a broken export and
-holds the debugging state so none of it has to be re-derived.
+`docs/superpowers/plans/2026-09-06-phase-c-export-diagnostics.md`.** Tasks 1–6
+are done; task 7 (reproduce the head-of-file jump against a saved project) is
+open, though the jump's root cause was found and fixed independently.
+`docs/superpowers/plans/2026-09-05-phase-b-handoff.md` is now history — its
+review happened, its fixes landed, and its three blocking questions were
+answered.
+
+**Phase C's camera half has no plan yet**, and it is the larger part: the
+follow-cursor camera, retuned transitions, the preview loop rewrite, and the
+two design problems the export investigation surfaced — a keyframe at `t = 0`
+that cannot be eased into, and a zoom ceiling that exactly cancels the
+composition.
 
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
@@ -105,6 +114,19 @@ holds the debugging state so none of it has to be re-derived.
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
+
+**Export is now diagnosable.** `export:start` logs the resolved settings,
+`export:finish` logs success or the failure with ffmpeg's stderr tail, and
+`exportCancel` takes a required reason — cancel is the only path that truncates
+a file. Exporting also writes `project.json`, so a bundle can be re-exported
+identically. Both live in `%APPDATA%\zoomcast\main-error.log`.
+
+**Encoders measured** (`npm run bench:encoders`, 600 frames of 1080p60, encode
+only): libx264 47.6fps / 0.79x realtime, **h264_amf 88.7fps / 1.48x realtime**.
+h264_amf is ~1.9x faster, so the export button's choice is right. The note's old
+"~8fps, 0.13x realtime" claim was wrong by roughly eleven times; every inference
+that rested on exports being multi-minute is void. `h264_amf` now has an
+automated guard: the export e2e runs over every encoder ffmpeg reports.
 
 **Open bug: export produced a truncated mp4 once, and has not reproduced.**
 On 2026-09-06 the same take exported cleanly through the real button — the
@@ -170,10 +192,28 @@ Also worth doing early:
 ## Known limitation: no working ddagrab on this machine
 
 The spec was built around DXGI Desktop Duplication (`ddagrab`) for zero-copy GPU
-capture. **It does not work here.** Neither the AMD adapter driving the panel nor
-the NVIDIA adapter enumerates a DXGI output — `Failed to enumerate DXGI output 0`
-— even though GDI capture of the same desktop works fine from the same process.
-Looks like a hybrid-graphics/driver quirk, not permissions.
+capture. **It does not work here** — but the diagnosis is more specific than
+what this section said until 2026-09-06, which was that neither adapter
+enumerates an output:
+
+| adapter | output | result |
+| --- | --- | --- |
+| 0 (AMD, drives the panel) | 0 | **`Selected output not supported`** |
+| 0 | 1 | `Failed to enumerate DXGI output 1` — correct, one display |
+| 1 (NVIDIA RTX 3050) | 0 | `Failed to enumerate DXGI output 0` — normal, no display attached |
+| 2 | any | no such adapter |
+
+The panel's output **is** enumerated; ddagrab rejects that specific output.
+Pixel format is ruled out: `output_fmt` of 8bit, `auto` and `x2bgr10`, with and
+without `scale_d3d11` to nv12 or p010, all fail identically on ffmpeg 9.0.1.
+
+The untested suspect is Windows' per-application GPU preference — on MSHybrid
+laptops Desktop Duplication fails with exactly this error when the calling
+process is bound to the GPU that does not own the output. Try pinning
+ffmpeg.exe to "Power saving" in Settings → Display → Graphics, which is
+reversible and needs no elevation, before touching
+`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`. Full write-up in
+`docs/superpowers/plans/2026-09-06-capture-frame-rate-and-settings.md` Task 7.
 
 `probeBackend()` in `src/main/capture/ScreenSource.ts` tries `ddagrab` first and
 falls back to `gdigrab`, so this is transparent downstream: the manifest records
@@ -319,6 +359,28 @@ Each of these cost real time; none is hypothetical.
   held for less than its own two transitions (the camera never arrives), and a
   zoom-out followed 140ms later by a zoom-in elsewhere (a flinch, not two
   shots). Both were found in real footage that no unit test would have caught.
+
+**Capture frame rate — what it is, and what it is not**
+
+- **gdigrab tops out around 28fps at 1080p here, whatever it is asked for.**
+  Counting real frames on 2026-09-06: bare ffmpeg reaches 21.9fps at 30
+  requested and 28.6fps at 60; inside the app, where ffmpeg competes with
+  Electron, audio capture and telemetry, it lands at 27-30fps either way. The
+  request was raised from a hardcoded 30 to a setting defaulting to 60 because
+  it is never worse and sometimes better — **not** because it delivers 60.
+- **Never read an achieved frame rate off `avg_frame_rate`.** It reports a
+  nominal container rate. Doing so produced a confident "44fps" that was wrong
+  by more than half and briefly justified this whole change on a false premise.
+  Use `ffprobe -count_frames` and divide by the real duration.
+- **Every take now logs `capture:rate`** with requested vs achieved, in
+  `main-error.log`. Capture had the export path's blind spot: nothing recorded
+  what was asked for, so a take at half the expected rate left no way to tell
+  whether the request or the machine was at fault.
+- **Settings live in `%APPDATA%\zoomcast\settings.json`**, normalised on load
+  by `normalizeSettings` exactly as projects are. They are app-level and
+  deliberately not part of `Project`: capture rate applies before any project
+  exists. Anyone adding a field must add it to `normalizeSettings` too. The
+  window is a `#settings` route, opened from the tray.
 
 **Camera geometry**
 

@@ -60,6 +60,13 @@ export function registerEditorOpener(open: () => void): void {
   openEditor = open;
 }
 
+/** Same indirection as the editor opener, for the same reason. */
+let openSettings: (() => void) | null = null;
+
+export function registerSettingsOpener(open: () => void): void {
+  openSettings = open;
+}
+
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(channel, payload);
@@ -151,6 +158,10 @@ function updateTray(): void {
       {
         label: "Show editor",
         click: () => openEditor?.(),
+      },
+      {
+        label: "Settings…",
+        click: () => openSettings?.(),
       },
       { type: "separator" },
       {

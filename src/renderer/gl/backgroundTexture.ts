@@ -66,7 +66,10 @@ export class BackgroundTextureCache {
       });
 
       const tex = gl.createTexture();
-      if (tex === null) return;
+      // Not a bare return: that skipped the catch below, so the failure was
+      // neither recorded nor reported and `get` restarted a fresh Image() on
+      // every frame — the exact storm the `failed` set exists to stop.
+      if (tex === null) throw new Error(`could not create a texture for ${url}`);
 
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
@@ -82,6 +85,10 @@ export class BackgroundTextureCache {
 
       this.textures.set(url, tex);
       this.sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight });
+      // preload() deliberately retries a URL that failed before, so a success
+      // has to clear the flag — otherwise failedToLoad stays true forever and
+      // a caller that checks it rejects a background that decoded fine.
+      this.failed.delete(url);
     } catch (err) {
       // A missing or corrupt image is a degraded background, not a crash: the
       // renderer keeps falling back to the solid colour. Recorded so it is not

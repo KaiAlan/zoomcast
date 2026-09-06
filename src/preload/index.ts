@@ -7,6 +7,7 @@ import type {
   ZoomcastApi,
 } from "../shared/api";
 import type { Project } from "../shared/project/types";
+import type { Settings } from "../shared/settings/types";
 
 /** Subscribe to a main-process push, returning an unsubscribe function. */
 function on<T>(channel: string, fn: (payload: T) => void): () => void {
@@ -40,6 +41,10 @@ const api: ZoomcastApi = {
     onError: (fn) => on<string>("recording:error", fn),
   },
 
+  getSettings: () => ipcRenderer.invoke("settings:get") as Promise<Settings>,
+  setSettings: (settings: Settings) =>
+    ipcRenderer.invoke("settings:set", settings) as Promise<void>,
+
   pickExportTarget: (suggested: string) =>
     ipcRenderer.invoke("export:pick", suggested) as Promise<string | null>,
   exportStart: (opts: ExportStartOptions) =>
@@ -47,7 +52,8 @@ const api: ZoomcastApi = {
   exportFrame: (id: string, frame: Uint8Array) =>
     ipcRenderer.invoke("export:frame", id, frame) as Promise<void>,
   exportFinish: (id: string) => ipcRenderer.invoke("export:finish", id) as Promise<void>,
-  exportCancel: (id: string) => ipcRenderer.invoke("export:cancel", id) as Promise<void>,
+  exportCancel: (id: string, reason: string) =>
+    ipcRenderer.invoke("export:cancel", id, reason) as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld("zoomcast", api);
