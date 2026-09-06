@@ -92,7 +92,7 @@ export async function exportClip(opts: {
   try {
     for (const frame of frames) {
       if (opts.signal?.cancelled === true) {
-        await window.zoomcast.exportCancel(id);
+        await window.zoomcast.exportCancel(id, `cancelled by user at frame ${frame.index}`);
         return;
       }
 
@@ -128,7 +128,10 @@ export async function exportClip(opts: {
     await window.zoomcast.exportFinish(id);
     onProgress({ done: frames.length, total: frames.length });
   } catch (err) {
-    await window.zoomcast.exportCancel(id);
+    await window.zoomcast.exportCancel(
+      id,
+      err instanceof Error ? (err.stack ?? err.message) : String(err),
+    );
     throw err;
   }
 }

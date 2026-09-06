@@ -76,5 +76,10 @@ export type ZoomcastApi = {
   /** Resolves once ffmpeg has taken the frame — this is the backpressure. */
   exportFrame: (id: string, frame: Uint8Array) => Promise<void>;
   exportFinish: (id: string) => Promise<void>;
-  exportCancel: (id: string) => Promise<void>;
+  /**
+   * Abandon an export. `reason` is required rather than optional because
+   * cancel is the only path that leaves a truncated file, and it used to leave
+   * no trace of why anywhere.
+   */
+  exportCancel: (id: string, reason: string) => Promise<void>;
 };

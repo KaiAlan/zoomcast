@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { copyFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import type { ExportStartOptions } from "../shared/api";
+import { formatExportFailure, formatExportStart } from "../shared/export/diagnostics";
 import type { Project } from "../shared/project/types";
 import { openBundle, saveProject } from "./bundleIo";
 import { isRecording } from "./capture/SessionController";
@@ -82,6 +83,7 @@ export function registerIpc(): void {
 
   ipcMain.handle("export:start", (_event, opts: ExportStartOptions) => {
     const id = randomUUID();
+    logDiag("export:start", `${id} ${formatExportStart(opts)}`);
     sessions.set(id, ExportSession.start(opts));
     return id;
   });
@@ -97,13 +99,27 @@ export function registerIpc(): void {
     if (session === undefined) throw new Error(`no export session ${id}`);
     try {
       await session.finish();
+      logDiag("export:finish", `${id} ok`);
+    } catch (err) {
+      logDiag(
+        "export:finish",
+        `${id} ${formatExportFailure(String(err), session.stderrTail())}`,
+      );
+      throw err;
     } finally {
       sessions.delete(id);
     }
   });
 
-  ipcMain.handle("export:cancel", (_event, id: string) => {
-    sessions.get(id)?.cancel();
+  ipcMain.handle("export:cancel", (_event, id: string, reason: string) => {
+    const session = sessions.get(id);
+    if (session !== undefined) {
+      logDiag(
+        "export:cancel",
+        `${id} ${formatExportFailure(reason, session.stderrTail())}`,
+      );
+      session.cancel();
+    }
     sessions.delete(id);
   });
 }

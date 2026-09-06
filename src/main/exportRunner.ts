@@ -69,6 +69,16 @@ export class ExportSession {
     this.child.stdin?.end();
     this.child.kill();
   }
+
+  /**
+   * What ffmpeg has said so far.
+   *
+   * Read on cancel: cancel is the only path that leaves a truncated file, and
+   * ffmpeg's explanation for it was being discarded with the session.
+   */
+  stderrTail(): string {
+    return this.stderr;
+  }
 }
 
 /** Convenience wrapper used by the end-to-end test. */

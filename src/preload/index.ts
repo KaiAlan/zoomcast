@@ -47,7 +47,8 @@ const api: ZoomcastApi = {
   exportFrame: (id: string, frame: Uint8Array) =>
     ipcRenderer.invoke("export:frame", id, frame) as Promise<void>,
   exportFinish: (id: string) => ipcRenderer.invoke("export:finish", id) as Promise<void>,
-  exportCancel: (id: string) => ipcRenderer.invoke("export:cancel", id) as Promise<void>,
+  exportCancel: (id: string, reason: string) =>
+    ipcRenderer.invoke("export:cancel", id, reason) as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld("zoomcast", api);
