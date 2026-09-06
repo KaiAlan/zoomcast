@@ -31,9 +31,21 @@ export function screenQuad(
   let x = focusX - zoom.cx * w + (output.w / 2 - focusX) * k;
   let y = focusY - zoom.cy * h + (output.h / 2 - focusY) * k;
 
-  // Once the quad is larger than the frame, never let an edge reveal background.
-  if (w >= output.w) x = clamp(x, output.w - w, 0);
-  if (h >= output.h) y = clamp(y, output.h - h, 0);
+  // Keep the quad and the frame nested, whichever of the two is larger: below
+  // the crossover this reads as "keep the quad inside the frame", above it as
+  // "never let an edge reveal background".
+  //
+  // Both bounds must be written as ONE continuous range. Gating on
+  // `w >= output.w` instead makes the range [output.w - w, 0] collapse to zero
+  // width at exactly w === output.w, pinning x to 0 there while the unclamped x
+  // is hundreds of pixels away — and one float below the crossover the clamp
+  // released and the camera teleported. That crossover sits at scale
+  // 1 / paddingFactor, which is exactly where maxComfortableZoom lands whenever
+  // output matches source, so every zoom reaching the ceiling jumped on its way
+  // out. Measured at 229px on take 2026-09-05T13-13-31. The continuity
+  // properties in layout.test.ts are what hold this closed.
+  x = clamp(x, Math.min(0, output.w - w), Math.max(0, output.w - w));
+  y = clamp(y, Math.min(0, output.h - h), Math.max(0, output.h - h));
 
   return { x, y, w, h };
 }

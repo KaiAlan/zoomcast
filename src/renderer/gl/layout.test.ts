@@ -59,3 +59,63 @@ describe("screenQuad", () => {
     expect(base.w).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The camera must not teleport.
+ *
+ * `maxComfortableZoom` is `source.w / (output.w * paddingFactor)`, which equals
+ * `1 / paddingFactor` whenever output matches source — exactly the scale at
+ * which the quad's width reaches the output's. Any discontinuity parked there
+ * is hit by every zoom that reaches the ceiling, which on a 1080p-into-1080p
+ * take is every zoom.
+ *
+ * Property, not pinned values: sweep the scale finely and require each step to
+ * move the quad a little. Pinning positions would pass against a curve that
+ * jumps between the pinned points.
+ */
+describe("screenQuad continuity", () => {
+  const THRESHOLD = 1 / PAD;
+  const CENTRES = [0, 0.05, 0.07005, 0.2, 0.5, 0.8, 0.95, 1];
+
+  it("never moves the quad far in one small step of scale", () => {
+    const STEPS = 4000;
+    // 4000 steps across the whole zoom range: a continuous path moves well
+    // under a pixel per step, so 2px is loose and still catches a teleport.
+    const MAX_STEP_PX = 2;
+
+    for (const cx of CENTRES) {
+      let worst = 0;
+      let worstAt = 0;
+      let prev = screenQuad(HD, HD, PAD, { scale: THRESHOLD, cx, cy: 0.5 });
+
+      for (let i = 1; i <= STEPS; i++) {
+        const scale = THRESHOLD - (i / STEPS) * (THRESHOLD - 1);
+        const q = screenQuad(HD, HD, PAD, { scale, cx, cy: 0.5 });
+        const moved = Math.hypot(q.x - prev.x, q.y - prev.y);
+
+        if (moved > worst) {
+          worst = moved;
+          worstAt = scale;
+        }
+        prev = q;
+      }
+
+      expect(
+        worst,
+        `cx=${cx} moved ${worst.toFixed(1)}px in one step at scale ${worstAt.toFixed(6)}`,
+      ).toBeLessThan(MAX_STEP_PX);
+    }
+  });
+
+  it("does not jump as the quad stops covering the output", () => {
+    // The zoom-out's first eased frame lands a hair below the ceiling. Before
+    // the fix this crossing moved the screen 229px right and 110px up on the
+    // real take 2026-09-05T13-13-31 (cx 0.07005, cy 0.86782).
+    const zoom = { cx: 0.07005, cy: 0.86782 };
+    const at = screenQuad(HD, HD, PAD, { ...zoom, scale: THRESHOLD });
+    const justBelow = screenQuad(HD, HD, PAD, { ...zoom, scale: THRESHOLD * (1 - 1e-7) });
+
+    expect(Math.abs(justBelow.x - at.x)).toBeLessThan(1);
+    expect(Math.abs(justBelow.y - at.y)).toBeLessThan(1);
+  });
+});
