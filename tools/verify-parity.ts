@@ -58,6 +58,32 @@ const CONFIGS: Array<{ name: string; style?: Partial<Project["style"]>; output?:
         imageFile: null,
         blur: "none",
       },
+      // "default" is the only preset that reads these fields. Under "minimal"
+      // resolveFrame returns the preset's own values and every line below is
+      // dead — which is what this config used to do, leaving the border pass
+      // guarded by a 1px ring at 10% alpha rather than the 3px opaque one it
+      // appears to ask for.
+      frame: {
+        preset: "default",
+        cornerRadiusPx: 12,
+        shadow: { blurPx: 48, opacity: 0.35, offsetYPx: 16 },
+        border: { visible: true, widthPx: 3, color: "#ffffffcc" },
+      },
+    },
+  },
+  { name: "square", output: { aspect: "1:1" } },
+  {
+    // The one branch that never binds the background program at all, so a
+    // divergence in the skip path itself has nowhere else to show up.
+    name: "hidden",
+    style: {
+      background: {
+        kind: "hidden",
+        preset: "aurora",
+        color: "#402030",
+        imageFile: null,
+        blur: "none",
+      },
       frame: {
         preset: "minimal",
         cornerRadiusPx: 12,
@@ -66,18 +92,50 @@ const CONFIGS: Array<{ name: string; style?: Partial<Project["style"]>; output?:
       },
     },
   },
-  { name: "square", output: { aspect: "1:1" } },
 ];
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 
+/** Key-sorted JSON, so a comparison is about values rather than key order. */
+function stable(value: unknown): string {
+  return JSON.stringify(value, (_k, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort())
+      : v,
+  );
+}
+
 /**
- * A scratch copy of the fixture carrying a project.json for this config.
+ * Fail if a field survives `defaultProject` but not `normalizeProject`.
  *
- * Built through normalizeProject rather than by hand, so a field added to
- * Project without a migration entry fails here as well as in the app.
+ * This used to be claimed as a side effect of building the project through
+ * `normalizeProject(null, ...)`, which does not hold: that call returns early
+ * at `if (!isRecord(raw)) return base`, so the field-by-field body never runs
+ * and `defaultProject` passes through untouched. A missing migration entry
+ * then produced two identically-wrong renders, and parity compared them and
+ * agreed.
+ *
+ * Writing the project out and reading it back is what actually exercises the
+ * migration, which is also exactly what the app does on load.
  */
+function assertSurvivesMigration(project: Project): void {
+  const roundTripped = normalizeProject(
+    JSON.parse(JSON.stringify(project)) as unknown,
+    project.bundleId,
+  );
+
+  if (stable(roundTripped) !== stable(project)) {
+    throw new Error(
+      "project.json does not survive normalizeProject — a field in the Project " +
+        "type is missing from normalizeProject in src/shared/project/migrate.ts, " +
+        "so real projects silently lose it on load.\n" +
+        `wrote: ${stable(project)}\nread back: ${stable(roundTripped)}`,
+    );
+  }
+}
+
+/** A scratch copy of the fixture carrying a project.json for this config. */
 function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string } {
   const dir = join(OUT, config.name);
   cpSync(BUNDLE, dir, { recursive: true });
@@ -88,6 +146,8 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
     style: { ...base.style, ...config.style },
     output: { ...base.output, ...config.output },
   };
+
+  assertSurvivesMigration(project);
 
   writeFileSync(join(dir, "project.json"), `${JSON.stringify(project, null, 2)}\n`, "utf8");
   // The mp4 lives INSIDE dir because the parity mode writes its preview PNGs

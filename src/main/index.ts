@@ -342,8 +342,11 @@ void app.whenReady().then(async () => {
       await runParity();
     } catch (err) {
       console.error("parity run failed:", err);
-      process.exitCode = 1;
-      app.quit();
+      // app.exit, not quit: a graceful quit does not carry process.exitCode
+      // through, so every headless failure reported success to whatever spawned
+      // it. verify-decode checks `shoot.status !== 0`, so a shoot that threw
+      // was invisible to it.
+      app.exit(1);
     }
     return;
   }
@@ -353,8 +356,11 @@ void app.whenReady().then(async () => {
       await runUiShot();
     } catch (err) {
       console.error("ui shot failed:", err);
-      process.exitCode = 1;
-      app.quit();
+      // app.exit, not quit: a graceful quit does not carry process.exitCode
+      // through, so every headless failure reported success to whatever spawned
+      // it. verify-decode checks `shoot.status !== 0`, so a shoot that threw
+      // was invisible to it.
+      app.exit(1);
     }
     return;
   }
@@ -364,8 +370,11 @@ void app.whenReady().then(async () => {
       await runShoot();
     } catch (err) {
       console.error("shoot failed:", err);
-      process.exitCode = 1;
-      app.quit();
+      // app.exit, not quit: a graceful quit does not carry process.exitCode
+      // through, so every headless failure reported success to whatever spawned
+      // it. verify-decode checks `shoot.status !== 0`, so a shoot that threw
+      // was invisible to it.
+      app.exit(1);
     }
     return;
   }
@@ -375,8 +384,11 @@ void app.whenReady().then(async () => {
       await runRecordTest();
     } catch (err) {
       console.error("record test failed:", err);
-      process.exitCode = 1;
-      app.quit();
+      // app.exit, not quit: a graceful quit does not carry process.exitCode
+      // through, so every headless failure reported success to whatever spawned
+      // it. verify-decode checks `shoot.status !== 0`, so a shoot that threw
+      // was invisible to it.
+      app.exit(1);
     }
     return;
   }
