@@ -89,9 +89,16 @@ export function Editor({
 
   // Resolved once here so both render paths use the same URL. Undefined unless
   // the style actually selects an image.
+  // Gated on kind, not just on imageFile: Background is a flat record that
+  // remembers every kind's settings, so a project that once used an image
+  // keeps its imageFile after switching to a gradient. Resolving it anyway
+  // made export await a decode of an image it was never going to draw.
   const backgroundImageUrl = useMemo(
-    () => bundleAssetUrl(bundle.dir, project.style.background.imageFile),
-    [bundle.dir, project.style.background.imageFile],
+    () =>
+      project.style.background.kind === "image"
+        ? bundleAssetUrl(bundle.dir, project.style.background.imageFile)
+        : undefined,
+    [bundle.dir, project.style.background.kind, project.style.background.imageFile],
   );
 
   // Latest values for the render loop, which must not be re-created per frame.
@@ -280,6 +287,32 @@ export function Editor({
     playerRef.current?.seek(playerRef.current.playheadMs);
   };
 
+  /**
+   * Output changes must re-plan, not just re-render.
+   *
+   * `maxComfortableZoom` is derived from the output size, so every keyframe's
+   * scale belongs to the output it was planned against. Changing the aspect
+   * with a bare setProject updated the context, the ceiling and the timeline
+   * readout while leaving every keyframe carrying a scale computed for the old
+   * shape — which is precisely what applyPlan's own comment says must not
+   * happen. The same applies to paddingFactor if a control for it ever lands,
+   * since it feeds the ceiling too.
+   */
+  const onOutputChange = (output: Project["output"]): void => {
+    setProject((prev) => {
+      const withOutput = { ...prev, output };
+      const next = {
+        ...withOutput,
+        zoom: {
+          ...withOutput.zoom,
+          keyframes: applyPlan(withOutput.zoom.config, withOutput),
+        },
+      };
+      live.current = { ...live.current, project: next };
+      return next;
+    });
+  };
+
   const addCut = (): void => {
     const start = playheadMs;
     const end = Math.min(start + 500, outDuration);
@@ -428,7 +461,7 @@ export function Editor({
           output={project.output}
           dir={bundle.dir}
           onStyleChange={(style) => setProject((p) => ({ ...p, style }))}
-          onOutputChange={(output) => setProject((p) => ({ ...p, output }))}
+          onOutputChange={onOutputChange}
         />
       </div>
     </div>

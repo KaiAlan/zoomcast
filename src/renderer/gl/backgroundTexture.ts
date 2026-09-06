@@ -10,14 +10,34 @@
 export class BackgroundTextureCache {
   private readonly textures = new Map<string, WebGLTexture>();
   private readonly pending = new Map<string, Promise<void>>();
+  private readonly failed = new Set<string>();
 
   /** Null until the image has decoded. Never throws, never blocks. */
   get(gl: WebGL2RenderingContext, url: string): WebGLTexture | null {
     const held = this.textures.get(url);
     if (held !== undefined) return held;
 
+    // A failure has to be remembered, because nothing else here stops a retry:
+    // `load` records success in `textures` and clears `pending` in a finally,
+    // so a URL that cannot decode used to start a fresh Image() on every
+    // single get — 60 a second in preview, one per frame in export, all of
+    // them long after preload had already resolved.
+    if (this.failed.has(url)) return null;
+
     if (!this.pending.has(url)) this.pending.set(url, this.load(gl, url));
     return null;
+  }
+
+  /**
+   * Whether this URL was tried and cannot be decoded.
+   *
+   * Preview treats that as a degraded background and carries on redrawing.
+   * Anything that renders once with no repaint — export, and the shoot
+   * harness — should treat it as a failure instead, or it bakes the fallback
+   * colour into its output and reports success.
+   */
+  failedToLoad(url: string): boolean {
+    return this.failed.has(url);
   }
 
   /**
@@ -62,9 +82,14 @@ export class BackgroundTextureCache {
 
       this.textures.set(url, tex);
       this.sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight });
-    } catch {
+    } catch (err) {
       // A missing or corrupt image is a degraded background, not a crash: the
-      // renderer keeps falling back to the solid colour.
+      // renderer keeps falling back to the solid colour. Recorded so it is not
+      // retried, and reported once so a background that silently never appears
+      // is diagnosable — spec §5 copies the image into the bundle precisely so
+      // this should not happen, which makes it worth hearing about when it does.
+      this.failed.add(url);
+      console.error("background image failed to load", url, err);
     } finally {
       this.pending.delete(url);
     }
@@ -83,5 +108,6 @@ export class BackgroundTextureCache {
     this.textures.clear();
     this.pending.clear();
     this.sizes.clear();
+    this.failed.clear();
   }
 }

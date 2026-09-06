@@ -9,6 +9,7 @@ import {
   MESH_POINTS,
   gradientPreset,
 } from "../../shared/style/backgrounds";
+import { hexToRgb, hexToRgba } from "../../shared/style/color";
 import { resolveFrame } from "../../shared/style/frame";
 import { BackgroundTextureCache } from "./backgroundTexture";
 import { CursorTextureCache, padFor } from "./cursorTexture";
@@ -48,27 +49,6 @@ type Program = {
 };
 
 const MAX_SHARPEN = 0.6;
-
-/** #rgb, #rrggbb or #rrggbbaa. Alpha defaults to 1 when not given. */
-function hexToRgba(hex: string): [number, number, number, number] {
-  const [r, g, b] = hexToRgb(hex);
-  const h = hex.replace("#", "");
-  const a = h.length === 8 ? Number.parseInt(h.slice(6, 8), 16) / 255 : 1;
-  return [r, g, b, a];
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const full =
-    h.length === 3
-      ? h
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : h;
-  const n = Number.parseInt(full, 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
-}
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -473,18 +453,27 @@ export class Renderer {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  /** Read the drawn frame back as tightly packed RGBA, top row first. */
   /**
    * Decode a background image before rendering starts.
    *
    * Export renders every frame in a loop with no repaint, so a frame that fell
    * back to the solid colour is baked into the file. Preview does not need
    * this, because it redraws.
+   *
+   * This resolves whether or not the decode worked — a broken background must
+   * not take down the editor. Callers that render once should ask
+   * `backgroundImageFailed` afterwards.
    */
   async preloadBackgroundImage(url: string): Promise<void> {
     await this.backgroundTextures.preload(this.gl, url);
   }
 
+  /** Whether a preloaded background image could not be decoded. */
+  backgroundImageFailed(url: string): boolean {
+    return this.backgroundTextures.failedToLoad(url);
+  }
+
+  /** Read the drawn frame back as tightly packed RGBA, top row first. */
   readPixels(out: Size): Uint8Array {
     const gl = this.gl;
     const buf = new Uint8Array(out.w * out.h * 4);
