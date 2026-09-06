@@ -28,7 +28,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 228 passing, 31 files
+npm test              # 237 passing, 32 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -192,10 +192,28 @@ Also worth doing early:
 ## Known limitation: no working ddagrab on this machine
 
 The spec was built around DXGI Desktop Duplication (`ddagrab`) for zero-copy GPU
-capture. **It does not work here.** Neither the AMD adapter driving the panel nor
-the NVIDIA adapter enumerates a DXGI output — `Failed to enumerate DXGI output 0`
-— even though GDI capture of the same desktop works fine from the same process.
-Looks like a hybrid-graphics/driver quirk, not permissions.
+capture. **It does not work here** — but the diagnosis is more specific than
+what this section said until 2026-09-06, which was that neither adapter
+enumerates an output:
+
+| adapter | output | result |
+| --- | --- | --- |
+| 0 (AMD, drives the panel) | 0 | **`Selected output not supported`** |
+| 0 | 1 | `Failed to enumerate DXGI output 1` — correct, one display |
+| 1 (NVIDIA RTX 3050) | 0 | `Failed to enumerate DXGI output 0` — normal, no display attached |
+| 2 | any | no such adapter |
+
+The panel's output **is** enumerated; ddagrab rejects that specific output.
+Pixel format is ruled out: `output_fmt` of 8bit, `auto` and `x2bgr10`, with and
+without `scale_d3d11` to nv12 or p010, all fail identically on ffmpeg 9.0.1.
+
+The untested suspect is Windows' per-application GPU preference — on MSHybrid
+laptops Desktop Duplication fails with exactly this error when the calling
+process is bound to the GPU that does not own the output. Try pinning
+ffmpeg.exe to "Power saving" in Settings → Display → Graphics, which is
+reversible and needs no elevation, before touching
+`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`. Full write-up in
+`docs/superpowers/plans/2026-09-06-capture-frame-rate-and-settings.md` Task 7.
 
 `probeBackend()` in `src/main/capture/ScreenSource.ts` tries `ddagrab` first and
 falls back to `gdigrab`, so this is transparent downstream: the manifest records
@@ -341,6 +359,28 @@ Each of these cost real time; none is hypothetical.
   held for less than its own two transitions (the camera never arrives), and a
   zoom-out followed 140ms later by a zoom-in elsewhere (a flinch, not two
   shots). Both were found in real footage that no unit test would have caught.
+
+**Capture frame rate — what it is, and what it is not**
+
+- **gdigrab tops out around 28fps at 1080p here, whatever it is asked for.**
+  Counting real frames on 2026-09-06: bare ffmpeg reaches 21.9fps at 30
+  requested and 28.6fps at 60; inside the app, where ffmpeg competes with
+  Electron, audio capture and telemetry, it lands at 27-30fps either way. The
+  request was raised from a hardcoded 30 to a setting defaulting to 60 because
+  it is never worse and sometimes better — **not** because it delivers 60.
+- **Never read an achieved frame rate off `avg_frame_rate`.** It reports a
+  nominal container rate. Doing so produced a confident "44fps" that was wrong
+  by more than half and briefly justified this whole change on a false premise.
+  Use `ffprobe -count_frames` and divide by the real duration.
+- **Every take now logs `capture:rate`** with requested vs achieved, in
+  `main-error.log`. Capture had the export path's blind spot: nothing recorded
+  what was asked for, so a take at half the expected rate left no way to tell
+  whether the request or the machine was at fault.
+- **Settings live in `%APPDATA%\zoomcast\settings.json`**, normalised on load
+  by `normalizeSettings` exactly as projects are. They are app-level and
+  deliberately not part of `Project`: capture rate applies before any project
+  exists. Anyone adding a field must add it to `normalizeSettings` too. The
+  window is a `#settings` route, opened from the tray.
 
 **Camera geometry**
 
