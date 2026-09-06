@@ -94,9 +94,15 @@ Phases C–G are specified in `docs/specs/2026-09-04-composition-and-camera-desi
 §13. None has a written plan yet.
 
 **Start any new session at
-`docs/superpowers/plans/2026-09-06-phase-c-export-diagnostics.md`.** Tasks 1–6
-are done; task 7 (reproduce the head-of-file jump against a saved project) is
-open, though the jump's root cause was found and fixed independently.
+`docs/superpowers/plans/2026-09-06-phase-c-camera.md`.** That is the rest of
+phase C — the follow camera, the opening shot, retuned transitions and the
+preview loop — and it is unstarted.
+
+Two plans are done and merged:
+`2026-09-06-phase-c-export-diagnostics.md` (tasks 1–6; task 7 is open but its
+subject, the head-of-file jump, was root-caused and fixed independently) and
+`2026-09-06-capture-frame-rate-and-settings.md` (tasks 1–6; task 7, ddagrab,
+is deliberately open).
 `docs/superpowers/plans/2026-09-05-phase-b-handoff.md` is now history — its
 review happened, its fixes landed, and its three blocking questions were
 answered.
