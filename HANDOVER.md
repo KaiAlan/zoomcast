@@ -27,11 +27,11 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 211 passing, 29 files
+npm test              # 221 passing, 30 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
-npm run verify:parity # 15/15 at 43-45dB, over three configurations
+npm run verify:parity # 20/20 at 43-45dB, over four configurations (builds first)
 npm run tune -- all   # zoom plan over every take on disk
 ```
 
@@ -106,13 +106,26 @@ holds the debugging state so none of it has to be re-derived.
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
 
-**Open bug, unfixed: export produces a truncated mp4.** A real export from the
-phase B build wrote an `mdat` with no `moov` and is unplayable. Diagnosis, what
-was reproduced, and what was ruled out are in
-`docs/superpowers/notes/2026-09-05-export-truncated-bug.md`. The short version:
-the same take exports fine through `libx264`, and the real export button is the
-only path that uses `h264_amf` — which nothing has ever tested. **Read that file
+**Open bug: export produced a truncated mp4 once, and has not reproduced.**
+On 2026-09-06 the same take exported cleanly through the real button — the
+`h264_amf` path — at 1606 frames in ~50s, and the file plays. So the encoder
+has now been exercised in anger successfully, and the note's old "~8fps, 0.13x
+realtime" figure is contradicted by a measured ~32fps; do not carry it forward.
+The truncation remains unexplained. Full state, including what the user's own
+answers ruled out, is in
+`docs/superpowers/notes/2026-09-05-export-truncated-bug.md`. **Read that file
 before touching the export path.**
+
+The app still records nothing about an export — not the failure, not the
+settings — which is why that investigation has restarted from zero twice.
+`docs/superpowers/plans/2026-09-06-phase-c-export-diagnostics.md` is the plan
+that fixes it, and it is unstarted.
+
+**Fixed 2026-09-06: the head of an exported file jumped.** The first ~1.03s
+rendered full-bleed and then the picture moved 229px in one frame. Root cause
+was the `screenQuad` clamp discontinuity described under "Camera geometry"
+below — not the planner, not the easing, and not the VFR capture, all of which
+were measured and cleared.
 
 **C is the one the user actually wants.** The zoom complaint is measured, with a
 specific signature, in `docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md`
@@ -306,6 +319,47 @@ Each of these cost real time; none is hypothetical.
   held for less than its own two transitions (the camera never arrives), and a
   zoom-out followed 140ms later by a zoom-in elsewhere (a flinch, not two
   shots). Both were found in real footage that no unit test would have caught.
+
+**Camera geometry**
+
+- **A clamp written as two regimes is a teleport waiting to happen.**
+  `screenQuad` clamped `x` to `[output.w - w, 0]` only when `w >= output.w`.
+  That range has zero width at exactly `w === output.w`, so `x` was pinned to 0
+  there while the unclamped value was hundreds of pixels away — and one float
+  below the crossover the clamp released and the camera jumped. Measured at
+  **229px in a single frame** on a real take. Worse, the crossover sits at
+  `1 / paddingFactor`, which is exactly where `maxComfortableZoom` lands
+  whenever output matches source, so every zoom that reached the ceiling hit
+  it. Both bounds now go through one continuous `clamp(x, min(0, d), max(0, d))`.
+  The continuity properties in `layout.test.ts` are what hold it closed: they
+  sweep the scale and bound the per-step movement, because pinned positions
+  pass happily against a curve that jumps between the pinned points.
+- **At the zoom ceiling the composition is exactly invisible.** `1/0.85` is both
+  the ceiling and the scale at which the screen fills the padded frame, so a
+  zoomed-in take shows no background, no border and no shadow. That is a design
+  question for phase C, not a bug — but it means judging the compositor on a
+  zoomed take tells you nothing.
+- **A keyframe at `t = 0` cannot be eased into**, since its transition would
+  have to start at −600ms. Takes therefore *open* at whatever scale the planner
+  chose, as a hard cut on frame one.
+
+**Headless modes and their exit codes**
+
+- **`app.quit()` does not carry `process.exitCode`.** All four headless failure
+  paths set `process.exitCode = 1` and then quit gracefully — and every one of
+  them exited **0**. `verify-decode` checks `shoot.status !== 0`, so a shoot
+  that threw was invisible to it. Use `app.exit(1)`, which is now what they all
+  do.
+- **`ZOOMCAST_SHOOT` fails loudly when a declared background image does not
+  decode.** It used to fall back to the solid colour and emit a plausible PNG,
+  which meant the only coverage of the image branch, the cover-fit arithmetic
+  and the LOD blur could render no image at all and still look like a pass.
+- **`npm run fixture` generates `tmp/bgtest.png`**, which the shot specs point
+  at. It is gitignored, so before this nothing created it and every fresh
+  checkout silently rendered those shots without an image.
+- **`npm run verify:parity` builds first now.** It runs the BUILT bundle, and
+  forgetting the build had already produced a confusing round on the phase B
+  branch where a new config reported PSNRs identical to the default.
 
 **The cursor pipeline**
 
