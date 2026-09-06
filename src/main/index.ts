@@ -410,7 +410,12 @@ app.on("before-quit", (event) => {
   // Finish the take rather than leaving a bundle with no manifest.
   event.preventDefault();
   void abortRecording().finally(() => {
-    app.exit(0);
+    // Carry the exit code rather than hardcoding 0. This handler runs on EVERY
+    // quit path, so a hardcoded zero silently overrode process.exitCode
+    // everywhere — including runRecordTest's own failure path, which wrote
+    // {ok: false} and then exited 0, so anything shelling out to
+    // ZOOMCAST_RECORD_TEST and checking the status saw success on failure.
+    app.exit(process.exitCode === undefined ? 0 : Number(process.exitCode));
   });
 });
 
