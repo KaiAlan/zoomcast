@@ -61,7 +61,7 @@ two — or neither — produced it. Fixing the camera is the next plan's job.
 | `src/shared/export/diagnostics.ts` | **Create.** Pure formatting of export log lines. No electron, no fs. |
 | `src/shared/export/diagnostics.test.ts` | **Create.** Node tests for the formatter. |
 | `src/shared/api.ts` | **Modify.** `exportCancel` gains a `reason`. |
-| `src/preload/index.mts` | **Modify.** Pass the reason through. |
+| `src/preload/index.ts` | **Modify.** Pass the reason through. |
 | `src/main/ipc.ts` | **Modify.** Log start, finish and cancel via `logDiag`. |
 | `src/main/exportRunner.ts` | **Modify.** Expose the ffmpeg stderr tail for the cancel log. |
 | `src/renderer/media/exportClip.ts` | **Modify.** Pass a reason on cancel. |
@@ -274,7 +274,7 @@ state and nowhere else, so `main-error.log` has no export entry at all.
 
 **Files:**
 - Modify: `src/shared/api.ts`
-- Modify: `src/preload/index.mts`
+- Modify: `src/preload/index.ts`
 - Modify: `src/main/ipc.ts`
 - Modify: `src/renderer/media/exportClip.ts`
 
@@ -298,7 +298,7 @@ In `src/shared/api.ts`, replace the `exportCancel` line:
 
 - [ ] **Step 2: Pass it through the preload**
 
-In `src/preload/index.mts`:
+In `src/preload/index.ts`:
 
 ```ts
   exportCancel: (id: string, reason: string) =>
@@ -385,7 +385,7 @@ Expected: typecheck silent, 217 tests passing (211 + Task 1's 6).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/shared/api.ts src/preload/index.mts src/main/ipc.ts src/renderer/media/exportClip.ts
+git add src/shared/api.ts src/preload/index.ts src/main/ipc.ts src/renderer/media/exportClip.ts
 git commit -m "fix(phase-c): export failures now reach main-error.log"
 ```
 
