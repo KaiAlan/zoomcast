@@ -12,9 +12,14 @@ import {
   ScreenSource,
 } from "./ScreenSource";
 import { TelemetryRecorder } from "./TelemetryRecorder";
+import { loadSettings } from "../settingsStore";
 
+/**
+ * ddagrab is GPU-side and delivers close to what it is asked for, so it is not
+ * user-tunable — there is no trade-off to offer. gdigrab is CPU-bound readback
+ * and gets whatever it manages, which is why the setting exists.
+ */
 const DDAGRAB_FPS = 60;
-const GDIGRAB_FPS = 30;
 const GOP_SECONDS = 0.5;
 
 export type RecordingResult = {
@@ -81,7 +86,7 @@ export async function startRecording(): Promise<void> {
   cachedBackend ??= await probeBackend(1);
 
   const backend = cachedBackend;
-  const requestedFps = backend === "ddagrab" ? DDAGRAB_FPS : GDIGRAB_FPS;
+  const requestedFps = backend === "ddagrab" ? DDAGRAB_FPS : loadSettings().captureFps;
 
   // Audio first: device warm-up costs a few hundred milliseconds, and starting
   // it after the screen would silently clip the head of every take. Starting it
@@ -146,6 +151,16 @@ export async function stopRecording(): Promise<RecordingResult> {
   const recorded = await probeRecording(join(session.dir, "screen.mp4"));
 
   const fps = recorded.fps > 0 ? recorded.fps : session.requestedFps;
+
+  // Requested vs achieved, on every take. Capture had the same blind spot the
+  // export path did: nothing recorded what was asked for, so a recording that
+  // came out at half the requested rate left no way to tell whether the
+  // request or the machine was at fault.
+  logDiag(
+    "capture:rate",
+    `backend=${session.backend} requested=${session.requestedFps} achieved=${fps.toFixed(2)} ` +
+      `size=${recorded.width}x${recorded.height} durationMs=${recorded.durationMs}`,
+  );
 
   // The manifest describes what was actually captured, not what was requested.
   // gdigrab in particular rarely sustains the frame rate it is asked for, and

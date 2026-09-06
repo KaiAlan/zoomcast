@@ -37,30 +37,36 @@ decision, both recorded under "Why 60" below.
 - Baseline before starting: 230 tests / 31 files, typecheck silent,
   `verify:decode` 6/6, `verify:parity` 20/20.
 
-## Why 60
+## Why 60 — and what it does not buy
 
-Measured on the development machine, 1080p, gdigrab, on 2026-09-06:
+**Corrected 2026-09-06, after implementing it.** The original version of this
+section claimed gdigrab reaches 44fps when asked for 60. That was wrong: the
+number came from ffprobe's `avg_frame_rate`, which reports a nominal container
+rate, not frames actually captured. Counting real frames:
 
-| requested | actually recorded |
-| --- | --- |
-| 30 (what the app asks for today) | 27.3fps |
-| **60** | **44fps** |
+| requested | bare ffmpeg (7s) | inside the app |
+| --- | --- | --- |
+| 30 | 21.9fps | 27.95fps |
+| 60 | **28.6fps** | 27.1 / 27.8 / 30.2fps (three runs) |
 
-`GDIGRAB_FPS = 30` in `src/main/capture/SessionController.ts:17` caps every
-recording, and `src/main/capture/ScreenSource.ts`'s comment explains the choice:
-gdigrab "realistically caps around 30fps at 1080p". That is measurably wrong
-here — it manages 44 when asked for 60.
+So `GDIGRAB_FPS = 30` was still leaving something on the table — about a third
+more frames in isolation — and asking for 60 is never worse. But **gdigrab
+tops out around 28fps at 1080p on this machine**, and inside the app, where
+ffmpeg competes with Electron, audio capture and telemetry, the request barely
+moves the result at all.
 
-This matters beyond frame rate. The phase C evidence note
+**This setting does not deliver 60fps capture, and must not be described as
+though it does.** Real 60fps needs ddagrab (Task 7). The honest value of this
+work is the settings surface and an honest default, not a frame-rate win.
+
+It also settles a phase C question. The evidence note
 (`docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md`) attributes part
-of the user's "the motion isn't smooth" to the source being captured at 17.7fps,
-and marks it **not fixable by tuning**. That conclusion rested on the 30fps
-request. It should be revisited once this lands.
+of "the motion isn't smooth" to a 17.7fps source and marks it not fixable by
+tuning. That conclusion **stands**: the ceiling is the capture backend, not the
+requested rate.
 
-**The costs are real and should not be hidden.** Roughly 1.6x the frames means
-roughly 1.6x the file size and more CPU during capture, on a path that is
-already CPU-bound because it is GDI readback. That is exactly why 30 stays
-available rather than being removed.
+**The costs are real.** More frames means more file size and more CPU on a path
+that is already CPU-bound, which is why 30 stays available.
 
 ## Decisions
 
