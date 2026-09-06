@@ -8,7 +8,6 @@ import { runExport } from "../../src/main/exportRunner";
 
 const FIXTURE = join(process.cwd(), "tests", "fixtures", "basic");
 const TMP = join(process.cwd(), "tmp");
-const OUT = join(TMP, "e2e-export.mp4");
 
 const probe = (
   file: string,
@@ -33,8 +32,27 @@ const probe = (
     { encoding: "utf8" },
   ).trim();
 
-describe("export end to end", () => {
+/**
+ * The encoders ffmpeg on this machine can actually use.
+ *
+ * The export button hardcodes h264_amf and every automated check hardcoded
+ * libx264, so the encoder users actually get was the one nothing had ever
+ * tested — the same shape as phase A shipping five broken cursor shapes
+ * because the fixture emitted no cursor events.
+ */
+function availableEncoders(): string[] {
+  const listed = execFileSync("ffmpeg", ["-v", "error", "-encoders"], {
+    encoding: "utf8",
+  });
+  return ["libx264", "h264_amf"].filter((e) => listed.includes(e));
+}
+
+describe.each(availableEncoders())("export end to end (%s)", (encoder) => {
   it("produces a playable mp4 with video and mixed, cut-aware audio", async () => {
+    // Each encoder writes its own file: sharing one path would race, and the
+    // second run would assert against the first one's output.
+    const OUT = join(TMP, `e2e-export-${encoder}.mp4`);
+
     mkdirSync(TMP, { recursive: true });
     rmSync(OUT, { force: true });
 
@@ -51,7 +69,7 @@ describe("export end to end", () => {
       height,
       fps,
       bitrateMbps: 2,
-      encoder: "libx264",
+      encoder,
       durationMs,
       cuts,
       audio: [
