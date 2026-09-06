@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "fixture": "tsx tools/make-fixture.ts",
     "verify:decode": "tsx tools/verify-decode.ts",
-    "verify:parity": "tsx tools/verify-parity.ts",
+    "verify:parity": "npm run build && tsx tools/verify-parity.ts",
     "tune": "tsx tools/tune-planner.ts",
     "icon": "tsx tools/make-icon.ts",
     "dist": "npm run build && electron-builder --win"

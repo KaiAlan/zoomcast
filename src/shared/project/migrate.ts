@@ -13,6 +13,21 @@ function bool(v: unknown, fallback: boolean): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
 
+function str(v: unknown, fallback: string): string {
+  return typeof v === "string" ? v : fallback;
+}
+
+function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof v === "string" && (allowed as readonly string[]).includes(v)
+    ? (v as T)
+    : fallback;
+}
+
+const BACKGROUND_KINDS = ["gradient", "color", "image", "hidden"] as const;
+const BLUR_STRENGTHS = ["none", "moderate", "strong"] as const;
+const FRAME_PRESETS = ["default", "minimal", "hidden"] as const;
+const ASPECTS = ["native", "16:9", "4:3", "1:1", "9:16"] as const;
+
 /**
  * Bring any persisted project up to the current shape.
  *
@@ -37,9 +52,24 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
   if (!isRecord(raw)) return base;
 
   const style = isRecord(raw.style) ? raw.style : {};
-  const shadow = isRecord(style.shadow) ? style.shadow : {};
-  const background = isRecord(style.background) ? style.background : undefined;
   const cursor = isRecord(style.cursor) ? style.cursor : {};
+
+  // Phase B grouped the loose frame fields under style.frame so a preset can
+  // set them as a group. Read the new location first, then the old one.
+  const frame = isRecord(style.frame) ? style.frame : {};
+  const legacyShadow = isRecord(style.shadow) ? style.shadow : {};
+  const shadow = isRecord(frame.shadow) ? frame.shadow : legacyShadow;
+  const border = isRecord(frame.border) ? frame.border : {};
+
+  // Phase B widened Background from a union to a flat record. Neither legacy
+  // field survives: gradients are named presets now, and "solid" was renamed
+  // "color". An old solid keeps its colour; an old two-stop gradient falls back
+  // to the default preset, because there is no faithful mesh equivalent of it.
+  const bg = isRecord(style.background) ? style.background : {};
+  const legacyKind = str(bg.kind, "");
+  const bgKind = legacyKind === "solid"
+    ? "color"
+    : oneOf(bg.kind, BACKGROUND_KINDS, base.style.background.kind);
   const output = isRecord(raw.output) ? raw.output : {};
   const audio = isRecord(raw.audio) ? raw.audio : {};
   const zoom = isRecord(raw.zoom) ? raw.zoom : {};
@@ -60,19 +90,32 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     },
     style: {
       paddingFactor: num(style.paddingFactor, base.style.paddingFactor),
-      cornerRadiusPx: num(style.cornerRadiusPx, base.style.cornerRadiusPx),
-      shadow: {
-        blurPx: num(shadow.blurPx, base.style.shadow.blurPx),
-        opacity: num(shadow.opacity, base.style.shadow.opacity),
-        offsetYPx: num(shadow.offsetYPx, base.style.shadow.offsetYPx),
+      frame: {
+        preset: oneOf(frame.preset, FRAME_PRESETS, base.style.frame.preset),
+        cornerRadiusPx: num(
+          frame.cornerRadiusPx ?? style.cornerRadiusPx,
+          base.style.frame.cornerRadiusPx,
+        ),
+        shadow: {
+          blurPx: num(shadow.blurPx, base.style.frame.shadow.blurPx),
+          opacity: num(shadow.opacity, base.style.frame.shadow.opacity),
+          offsetYPx: num(shadow.offsetYPx, base.style.frame.shadow.offsetYPx),
+        },
+        border: {
+          visible: bool(border.visible, base.style.frame.border.visible),
+          widthPx: num(border.widthPx, base.style.frame.border.widthPx),
+          color: str(border.color, base.style.frame.border.color),
+        },
       },
-      // Background is a discriminated union; a partial merge across kinds would
-      // produce a shape matching neither arm. Take it whole or not at all.
-      background:
-        background !== undefined &&
-        (background.kind === "solid" || background.kind === "gradient")
-          ? (background as Project["style"]["background"])
-          : base.style.background,
+      background: {
+        kind: bgKind,
+        preset: str(bg.preset, base.style.background.preset),
+        // An old { kind: "solid", color } keeps its colour through the rename.
+        color: str(bg.color, base.style.background.color),
+        imageFile: typeof bg.imageFile === "string" ? bg.imageFile : null,
+        // Never invent a blur an old project did not ask for.
+        blur: oneOf(bg.blur, BLUR_STRENGTHS, "none"),
+      },
       cursor: {
         visible: bool(cursor.visible, base.style.cursor.visible),
         sizePct: num(cursor.sizePct, base.style.cursor.sizePct),
@@ -92,6 +135,8 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     output: {
       width: num(output.width, base.output.width),
       height: num(output.height, base.output.height),
+      // "native" keeps every existing export exactly as it was.
+      aspect: oneOf(output.aspect, ASPECTS, "native"),
       fps: num(output.fps, base.output.fps),
       bitrateMbps: num(output.bitrateMbps, base.output.bitrateMbps),
     },

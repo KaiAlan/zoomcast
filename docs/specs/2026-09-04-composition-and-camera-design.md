@@ -315,10 +315,18 @@ leave speed out. It is the one item here that is genuinely optional.
 | D | Motion blur | C |
 | E | Timeline: draggable zoom segments, segment/global popover, real cuts, undo/redo | C |
 | F | Clip speed | E |
+| G | UI revamp: the whole editor surface | E |
 
 A leads because it is the loudest defect, is self-contained, and nothing
 depends on it. C waits for both A and B so the camera is tuned once, against
 the finished composited look rather than raw full-bleed footage.
+
+G was added 2026-09-05 at the user's request and is deliberately last of the
+feature phases. A revamp needs to know what it is presenting: E is what settles
+the timeline's shape, and until draggable segments, real cut regions and
+undo/redo exist, any layout would be redesigned again as they land. It has no
+spec section yet — it needs its own brainstorm rather than a task list, because
+unlike A–F it is not a defect with a known fix.
 
 ## 14. Testing
 

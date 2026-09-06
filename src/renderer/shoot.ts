@@ -16,6 +16,8 @@ export type ShotSpec = {
   video?: string;
   /** Source time to decode, in ms. */
   tMs?: number;
+  /** Resolved zc:// URL for an image background, when style.background wants one. */
+  backgroundImageUrl?: string;
 };
 
 declare global {
@@ -106,6 +108,23 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
       screen = makeTestImage(sourceSize, spec.image ?? "grid");
     }
 
+    if (spec.backgroundImageUrl !== undefined) {
+      // Decode first: shoot draws each spec exactly once, with no repaint, so
+      // the solid-colour fallback would be baked into the PNG.
+      await renderer.preloadBackgroundImage(spec.backgroundImageUrl);
+
+      // And then insist it worked. A missing file used to fall back to the
+      // solid colour and emit a perfectly plausible PNG, so the only shots
+      // exercising the image branch, the cover-fit arithmetic and the LOD blur
+      // could all render no image at all and still look like a passing run.
+      if (renderer.backgroundImageFailed(spec.backgroundImageUrl)) {
+        throw new Error(
+          `background image did not decode: ${spec.backgroundImageUrl}\n` +
+            "Run `npm run fixture` to generate the scratch images the shot specs reference.",
+        );
+      }
+    }
+
     try {
       renderer.drawFrame({
         screen,
@@ -113,6 +132,7 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
         style,
         outputSize,
         sourceSize,
+        backgroundImageUrl: spec.backgroundImageUrl,
       });
       return canvas.toDataURL("image/png");
     } finally {

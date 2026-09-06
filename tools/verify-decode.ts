@@ -26,6 +26,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ShotSpec } from "../src/renderer/shoot";
 
 const ROOT = process.cwd();
 const OUT = join(ROOT, "tmp", "verify-decode");
@@ -65,13 +66,30 @@ const refPath = (frameIndex: number): string =>
 
 // ------------------------------------------------------------------ renders
 
-const specs = TIMES_MS.map((tMs) => ({
+/**
+ * Full-bleed, undecorated renders: this tool compares against ffmpeg's decode
+ * of the same frame, so anything the compositor adds is noise in the score.
+ *
+ * Typed as ShotSpec on purpose. These specs are JSON.stringify'd into an env
+ * var and re-parsed as `unknown[]` on the other side, so nothing type-checks
+ * them end to end — this annotation is the only thing standing between a
+ * renamed style field and a guard that silently renders something else. It has
+ * happened once already: `cornerRadiusPx` and `shadow` moved under
+ * `style.frame` in phase B and this file kept writing them at the top level,
+ * where nothing read them, so every frame here was drawn with the DEFAULT
+ * preset's 12px radius and 48px shadow while asking for neither.
+ */
+const specs: ShotSpec[] = TIMES_MS.map((tMs) => ({
   zoom: { scale: 1, cx: 0.5, cy: 0.5 },
   outputSize: { w: 1920, h: 1080 },
   style: {
     paddingFactor: 1,
-    cornerRadiusPx: 0,
-    shadow: { blurPx: 0, opacity: 0, offsetYPx: 0 },
+    frame: {
+      preset: "hidden",
+      cornerRadiusPx: 0,
+      shadow: { blurPx: 0, opacity: 0, offsetYPx: 0 },
+      border: { visible: false, widthPx: 0, color: "#00000000" },
+    },
   },
   video: `zc://app/@fs/${FIXTURE.replace(/\\/g, "/")}`,
   tMs,

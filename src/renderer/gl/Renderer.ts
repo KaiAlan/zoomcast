@@ -4,6 +4,14 @@ import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
 import type { CursorStyle, StyleConfig } from "../../shared/project/types";
 import type { ZoomState } from "../../shared/zoom/interpolate";
 import type { Size } from "../../shared/zoom/types";
+import {
+  BLUR_LOD,
+  MESH_POINTS,
+  gradientPreset,
+} from "../../shared/style/backgrounds";
+import { hexToRgb, hexToRgba } from "../../shared/style/color";
+import { resolveFrame } from "../../shared/style/frame";
+import { BackgroundTextureCache } from "./backgroundTexture";
 import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
 import {
@@ -24,7 +32,16 @@ export type FrameState = {
   sourceSize: Size;
   cursor?: { sample: CursorSample; style: CursorStyle };
   ripples?: Ripple[];
+  /**
+   * Fully-resolved zc:// URL of the background image, when the style selects
+   * one. Built by the caller rather than here, because turning a project dir
+   * plus a basename into a URL is renderer-shell knowledge, and a file:// URL
+   * cannot be fetched from the custom scheme at all.
+   */
+  backgroundImageUrl?: string;
 };
+
+type ResolvedFrame = ReturnType<typeof resolveFrame>;
 
 type Program = {
   program: WebGLProgram;
@@ -32,19 +49,6 @@ type Program = {
 };
 
 const MAX_SHARPEN = 0.6;
-
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const full =
-    h.length === 3
-      ? h
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : h;
-  const n = Number.parseInt(full, 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
-}
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -108,6 +112,7 @@ export class Renderer {
   private readonly cursorProgram: Program;
   private readonly rippleProgram: Program;
   private readonly cursorTextures = new CursorTextureCache();
+  private readonly backgroundTextures = new BackgroundTextureCache();
   private readonly tex: WebGLTexture;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -136,7 +141,21 @@ export class Renderer {
     gl.bindVertexArray(null);
     this.vao = vao;
 
-    this.bg = link(gl, BG_FRAG, ["u_from", "u_to", "u_angle"]);
+    // Array uniforms are looked up per element, never as a block: asking for
+    // "u_points" alone returns null and every point silently stays at zero.
+    const bgUniforms = [
+      "u_mode",
+      "u_color",
+      "u_falloff",
+      "u_aspect",
+      "u_lod",
+      "u_image",
+      "u_imageScale",
+    ];
+    for (let i = 0; i < MESH_POINTS; i++) {
+      bgUniforms.push(`u_points[${i}]`, `u_colors[${i}]`);
+    }
+    this.bg = link(gl, BG_FRAG, bgUniforms);
     this.shadow = link(gl, SHADOW_FRAG, [
       "u_spanPx",
       "u_halfPx",
@@ -150,6 +169,8 @@ export class Renderer {
       "u_radiusPx",
       "u_sharpen",
       "u_texel",
+      "u_borderPx",
+      "u_borderColor",
     ]);
     this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow"]);
     this.rippleProgram = link(gl, RIPPLE_FRAG, ["u_progress"]);
@@ -184,12 +205,16 @@ export class Renderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(this.vao);
 
-    this.drawBackground(style);
+    this.drawBackground(style, out, state.backgroundImageUrl);
 
     const quad = screenQuad(src, out, style.paddingFactor, state.zoom);
 
-    this.drawShadow(quad, out, style);
-    this.drawScreen(quad, out, src, style, state.screen);
+    // Resolved once: every frame read must go through this or the presets
+    // silently do nothing.
+    const frame = resolveFrame(style.frame);
+
+    this.drawShadow(quad, out, frame);
+    this.drawScreen(quad, out, src, frame, state.screen);
 
     // Ripples are their own toggle, independent of cursor visibility: a click
     // near the ends of the path can outlive the cursor sample that produced
@@ -223,21 +248,67 @@ export class Renderer {
     );
   }
 
-  private drawBackground(style: StyleConfig): void {
+  private drawBackground(style: StyleConfig, out: Size, imageUrl?: string): void {
     const gl = this.gl;
+    const bg = style.background;
+
+    // "hidden" is a flat black ground, which is what an export wants when the
+    // result is going to be composited downstream.
+    if (bg.kind === "hidden") {
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+
     gl.useProgram(this.bg.program);
-
-    const bgStyle = style.background;
-    const from =
-      bgStyle.kind === "gradient" ? hexToRgb(bgStyle.from) : hexToRgb(bgStyle.color);
-    const to =
-      bgStyle.kind === "gradient" ? hexToRgb(bgStyle.to) : hexToRgb(bgStyle.color);
-    const angle = bgStyle.kind === "gradient" ? (bgStyle.angle * Math.PI) / 180 : 0;
-
-    gl.uniform3f(this.bg.uniforms.u_from ?? null, from[0], from[1], from[2]);
-    gl.uniform3f(this.bg.uniforms.u_to ?? null, to[0], to[1], to[2]);
-    gl.uniform1f(this.bg.uniforms.u_angle ?? null, angle);
     gl.uniform4f(this.bg.uniforms.u_rect ?? null, 0, 0, 1, 1);
+
+    if (bg.kind === "image" && imageUrl !== undefined) {
+      const tex = this.backgroundTextures.get(gl, imageUrl);
+      const size = this.backgroundTextures.sizeOf(imageUrl);
+
+      if (tex !== null && size !== null) {
+        // Cover fit, expressed as a scale on the sampling coordinate about the
+        // centre: scaling UP the coordinate crops, so the axis that is
+        // relatively too LARGE gets the >1 factor. Fills the frame on both
+        // axes, crops the overflow, never letterboxes.
+        const imageAspect = size.w / size.h;
+        const outAspect = out.w / out.h;
+        const sx = imageAspect > outAspect ? outAspect / imageAspect : 1;
+        const sy = imageAspect > outAspect ? 1 : imageAspect / outAspect;
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.uniform1i(this.bg.uniforms.u_image ?? null, 1);
+        gl.uniform2f(this.bg.uniforms.u_imageScale ?? null, sx, sy);
+        // Blur is image-only: on a mesh it is a measured no-op.
+        gl.uniform1f(this.bg.uniforms.u_lod ?? null, BLUR_LOD[bg.blur]);
+        gl.uniform1i(this.bg.uniforms.u_mode ?? null, 2);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        return;
+      }
+      // Falls through to the solid colour while the image decodes, or forever
+      // if it failed to load.
+    }
+
+    if (bg.kind === "color" || bg.kind === "image") {
+      const [r, g, b] = hexToRgb(bg.color);
+      gl.uniform1i(this.bg.uniforms.u_mode ?? null, 1);
+      gl.uniform3f(this.bg.uniforms.u_color ?? null, r, g, b);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      return;
+    }
+
+    const preset = gradientPreset(bg.preset);
+    gl.uniform1i(this.bg.uniforms.u_mode ?? null, 0);
+    gl.uniform1f(this.bg.uniforms.u_falloff ?? null, preset.falloff);
+    gl.uniform1f(this.bg.uniforms.u_aspect ?? null, out.w / out.h);
+
+    preset.points.forEach((pt, i) => {
+      const [r, g, b] = hexToRgb(pt.color);
+      gl.uniform2f(this.bg.uniforms[`u_points[${i}]`] ?? null, pt.x, pt.y);
+      gl.uniform3f(this.bg.uniforms[`u_colors[${i}]`] ?? null, r, g, b);
+    });
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -245,10 +316,10 @@ export class Renderer {
   private drawShadow(
     quad: { x: number; y: number; w: number; h: number },
     out: Size,
-    style: StyleConfig,
+    frame: ResolvedFrame,
   ): void {
     const gl = this.gl;
-    const { blurPx, opacity, offsetYPx } = style.shadow;
+    const { blurPx, opacity, offsetYPx } = frame.shadow;
     if (opacity <= 0) return;
 
     const pad = blurPx * 2;
@@ -258,7 +329,7 @@ export class Renderer {
     gl.useProgram(this.shadow.program);
     gl.uniform2f(this.shadow.uniforms.u_spanPx ?? null, spanW, spanH);
     gl.uniform2f(this.shadow.uniforms.u_halfPx ?? null, quad.w / 2, quad.h / 2);
-    gl.uniform1f(this.shadow.uniforms.u_radiusPx ?? null, style.cornerRadiusPx);
+    gl.uniform1f(this.shadow.uniforms.u_radiusPx ?? null, frame.cornerRadiusPx);
     gl.uniform1f(this.shadow.uniforms.u_blurPx ?? null, Math.max(blurPx, 1));
     gl.uniform1f(this.shadow.uniforms.u_opacity ?? null, opacity);
 
@@ -278,7 +349,7 @@ export class Renderer {
     quad: { x: number; y: number; w: number; h: number },
     out: Size,
     src: Size,
-    style: StyleConfig,
+    frame: ResolvedFrame,
     source: TexImageSource,
   ): void {
     const gl = this.gl;
@@ -294,7 +365,12 @@ export class Renderer {
     gl.useProgram(this.screen.program);
     gl.uniform1i(this.screen.uniforms.u_tex ?? null, 0);
     gl.uniform2f(this.screen.uniforms.u_quadPx ?? null, quad.w, quad.h);
-    gl.uniform1f(this.screen.uniforms.u_radiusPx ?? null, style.cornerRadiusPx);
+    gl.uniform1f(this.screen.uniforms.u_radiusPx ?? null, frame.cornerRadiusPx);
+
+    const borderPx = frame.border.visible ? frame.border.widthPx : 0;
+    const [br, bg2, bb, ba] = hexToRgba(frame.border.color);
+    gl.uniform1f(this.screen.uniforms.u_borderPx ?? null, borderPx);
+    gl.uniform4f(this.screen.uniforms.u_borderColor ?? null, br, bg2, bb, ba);
     gl.uniform1f(this.screen.uniforms.u_sharpen ?? null, sharpen);
     gl.uniform2f(this.screen.uniforms.u_texel ?? null, 1 / src.w, 1 / src.h);
 
@@ -377,6 +453,26 @@ export class Renderer {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
+  /**
+   * Decode a background image before rendering starts.
+   *
+   * Export renders every frame in a loop with no repaint, so a frame that fell
+   * back to the solid colour is baked into the file. Preview does not need
+   * this, because it redraws.
+   *
+   * This resolves whether or not the decode worked — a broken background must
+   * not take down the editor. Callers that render once should ask
+   * `backgroundImageFailed` afterwards.
+   */
+  async preloadBackgroundImage(url: string): Promise<void> {
+    await this.backgroundTextures.preload(this.gl, url);
+  }
+
+  /** Whether a preloaded background image could not be decoded. */
+  backgroundImageFailed(url: string): boolean {
+    return this.backgroundTextures.failedToLoad(url);
+  }
+
   /** Read the drawn frame back as tightly packed RGBA, top row first. */
   readPixels(out: Size): Uint8Array {
     const gl = this.gl;
@@ -404,5 +500,6 @@ export class Renderer {
     gl.deleteProgram(this.cursorProgram.program);
     gl.deleteProgram(this.rippleProgram.program);
     this.cursorTextures.dispose(gl);
+    this.backgroundTextures.dispose(gl);
   }
 }

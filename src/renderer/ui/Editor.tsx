@@ -3,6 +3,8 @@ import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
+import { outputSizeFor } from "../../shared/style/aspect";
+import { bundleAssetUrl } from "../media/assetUrl";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
@@ -49,7 +51,10 @@ export function Editor({
   const ctx: PlanContext = useMemo(
     () => ({
       source: { w: manifest.video.width, h: manifest.video.height },
-      output: { w: project.output.width, h: project.output.height },
+      output: outputSizeFor(project.output, {
+        w: manifest.video.width,
+        h: manifest.video.height,
+      }),
       paddingFactor: project.style.paddingFactor,
       durationMs: manifest.durationMs,
     }),
@@ -82,16 +87,35 @@ export function Editor({
     [bundle.telemetry],
   );
 
+  // Resolved once here so both render paths use the same URL. Undefined unless
+  // the style actually selects an image.
+  // Gated on kind, not just on imageFile: Background is a flat record that
+  // remembers every kind's settings, so a project that once used an image
+  // keeps its imageFile after switching to a gradient. Resolving it anyway
+  // made export await a decode of an image it was never going to draw.
+  const backgroundImageUrl = useMemo(
+    () =>
+      project.style.background.kind === "image"
+        ? bundleAssetUrl(bundle.dir, project.style.background.imageFile)
+        : undefined,
+    [bundle.dir, project.style.background.kind, project.style.background.imageFile],
+  );
+
   // Latest values for the render loop, which must not be re-created per frame.
-  const live = useRef({ project, ctx, cursorPath, clicks });
-  live.current = { project, ctx, cursorPath, clicks };
+  const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl });
+  live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl };
 
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
     (config: ZoomConfig, existing: Project) => {
       const generated = planZoom(bundle.telemetry, config, {
         source: { w: manifest.video.width, h: manifest.video.height },
-        output: { w: existing.output.width, h: existing.output.height },
+        // The zoom ceiling derives from the output size, so a re-plan after an
+        // aspect change must see the new shape or it plans for the old one.
+        output: outputSizeFor(existing.output, {
+          w: manifest.video.width,
+          h: manifest.video.height,
+        }),
         paddingFactor: existing.style.paddingFactor,
         durationMs: manifest.durationMs,
       });
@@ -118,7 +142,7 @@ export function Editor({
       const source = sourceRef.current;
       if (source === null || disposed) return;
 
-      const { project: p, ctx: c, cursorPath, clicks } = live.current;
+      const { project: p, ctx: c, cursorPath, clicks, backgroundImageUrl } = live.current;
       const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
       const sample = cursorAt(cursorPath, tSource);
 
@@ -132,6 +156,7 @@ export function Editor({
           sourceSize: c.source,
           cursor: sample === null ? undefined : { sample, style: p.style.cursor },
           ripples: ripplesAt(clicks, tSource, RIPPLE_DURATION_MS),
+          backgroundImageUrl,
         });
       } finally {
         frame.close();
@@ -183,6 +208,7 @@ export function Editor({
               project: live.current.project,
               cursorPath: live.current.cursorPath,
               clicks: live.current.clicks,
+              backgroundImageUrl: live.current.backgroundImageUrl,
               mediaDir: bundle.dir.replace(/\\/g, "/"),
               renderer,
               source,
@@ -235,13 +261,17 @@ export function Editor({
   }, []);
 
   // PreviewPlayer draws only on play/seek/toggle and nothing watches `project`,
-  // so a cursor edit is invisible on a paused preview without this. It is an
-  // effect rather than a seek inside onCursorChange because `cursorPath` is a
-  // useMemo on smoothing: only the re-render rebuilds it, so a synchronous
-  // seek would redraw the old path.
+  // so a style or output edit is invisible on a paused preview without this.
+  // It is an effect rather than a seek inside each handler because both
+  // `cursorPath` and `ctx` are useMemos on these values: only the re-render
+  // rebuilds them, so a synchronous seek would redraw with the old ones.
+  //
+  // Widened from style.cursor to the whole style deliberately — a third
+  // redraw idiom in this file is the thing HANDOVER warns against, and every
+  // style field reaches the renderer the same way.
   useEffect(() => {
     playerRef.current?.seek(playerRef.current.playheadMs);
-  }, [project.style.cursor]);
+  }, [project.style, project.output]);
 
   const onConfigChange = (config: ZoomConfig): void => {
     setProject((prev) => {
@@ -255,6 +285,32 @@ export function Editor({
     });
 
     playerRef.current?.seek(playerRef.current.playheadMs);
+  };
+
+  /**
+   * Output changes must re-plan, not just re-render.
+   *
+   * `maxComfortableZoom` is derived from the output size, so every keyframe's
+   * scale belongs to the output it was planned against. Changing the aspect
+   * with a bare setProject updated the context, the ceiling and the timeline
+   * readout while leaving every keyframe carrying a scale computed for the old
+   * shape — which is precisely what applyPlan's own comment says must not
+   * happen. The same applies to paddingFactor if a control for it ever lands,
+   * since it feeds the ceiling too.
+   */
+  const onOutputChange = (output: Project["output"]): void => {
+    setProject((prev) => {
+      const withOutput = { ...prev, output };
+      const next = {
+        ...withOutput,
+        zoom: {
+          ...withOutput.zoom,
+          keyframes: applyPlan(withOutput.zoom.config, withOutput),
+        },
+      };
+      live.current = { ...live.current, project: next };
+      return next;
+    });
   };
 
   const addCut = (): void => {
@@ -291,6 +347,7 @@ export function Editor({
           project,
           cursorPath: live.current.cursorPath,
           clicks: live.current.clicks,
+          backgroundImageUrl: live.current.backgroundImageUrl,
           mediaDir: bundle.dir.replace(/\\/g, "/"),
           renderer,
           source,
@@ -400,6 +457,11 @@ export function Editor({
           onCursorChange={(cursor) =>
             setProject((p) => ({ ...p, style: { ...p.style, cursor } }))
           }
+          style={project.style}
+          output={project.output}
+          dir={bundle.dir}
+          onStyleChange={(style) => setProject((p) => ({ ...p, style }))}
+          onOutputChange={onOutputChange}
         />
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { MESH_POINTS } from "../../shared/style/backgrounds";
+
 /**
  * All geometry is a unit quad. `u_rect` places it in output space using a
  * top-left origin (x, y, w, h all normalised 0..1), and the vertex shader
@@ -15,17 +17,77 @@ void main() {
   gl_Position = vec4(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
 }`;
 
+/**
+ * Background: mesh gradient, solid colour, or an image.
+ *
+ * The mesh is inverse-distance weighting over MESH_POINTS coloured control
+ * points — cheap, unconditionally smooth, and free of the banding a two-stop
+ * linear gradient shows across a dark palette. u_mode picks the branch; the
+ * loop bound is a compile-time constant so the program stays branch-free
+ * inside it.
+ *
+ * Distances are measured in square space via u_aspect. Without that a preset
+ * smears horizontally on 16:9 and vertically on 9:16, so the same preset would
+ * look like two different gradients once aspect ratio became selectable.
+ *
+ * Blur is a mipmap LOD on the image branch, and nothing at all elsewhere.
+ *
+ * The first attempt was a 3x3 kernel over the sampled background. That is
+ * wrong twice over. On a mesh it is a measured no-op — the mesh is already
+ * smooth by construction, RMS 0.1/255 between "none" and "strong". On an image
+ * it does not blur at all: at "strong" the taps land 27px apart, so a grid
+ * renders as three distinct copies rather than a soft one. Nine taps cannot
+ * represent a 27px radius; only a wide kernel or a separable two-pass can, and
+ * both cost far more than this is worth for a static background.
+ *
+ * textureLod against a mipmapped texture is a real, hardware-filtered
+ * downsample, one instruction, correct at any radius, and resolution
+ * independent by construction — LOD is relative to the texture, so a 4K export
+ * and a 1080p preview blur the image by the same visual amount without any
+ * scaling arithmetic.
+ */
 export const BG_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
-uniform vec3  u_from;
-uniform vec3  u_to;
-uniform float u_angle;
+uniform int   u_mode;        // 0 = mesh, 1 = solid, 2 = image
+uniform vec3  u_color;
+uniform vec2  u_points[${MESH_POINTS}];
+uniform vec3  u_colors[${MESH_POINTS}];
+uniform float u_falloff;
+uniform float u_aspect;      // output w/h, so distance is measured square
+uniform sampler2D u_image;
+uniform vec2  u_imageScale;  // cover-fit scale, applied about the centre
+uniform float u_lod;         // mipmap level; 0 is the full-resolution image
 out vec4 frag;
+
+vec3 mesh(vec2 uv) {
+  vec2 p = vec2(uv.x * u_aspect, uv.y);
+  vec3 acc = vec3(0.0);
+  float wsum = 0.0;
+
+  for (int i = 0; i < ${MESH_POINTS}; i++) {
+    vec2 d = p - vec2(u_points[i].x * u_aspect, u_points[i].y);
+    // The epsilon keeps the weight finite exactly at a control point, where
+    // the distance is zero and the reciprocal would otherwise be infinite.
+    float w = 1.0 / (dot(d, d) * u_falloff + 0.0005);
+    acc += u_colors[i] * w;
+    wsum += w;
+  }
+
+  return acc / wsum;
+}
+
+vec3 image(vec2 uv) {
+  // Cover fit: scale about the centre so the short edge fills and the long
+  // edge is cropped, never letterboxed.
+  vec2 c = (uv - 0.5) * u_imageScale + 0.5;
+  return textureLod(u_image, c, u_lod).rgb;
+}
+
 void main() {
-  vec2 dir = vec2(cos(u_angle), sin(u_angle));
-  float t = clamp(dot(v_uv - 0.5, dir) + 0.5, 0.0, 1.0);
-  frag = vec4(mix(u_from, u_to, t), 1.0);
+  if (u_mode == 1) frag = vec4(u_color, 1.0);
+  else if (u_mode == 2) frag = vec4(image(v_uv), 1.0);
+  else frag = vec4(mesh(v_uv), 1.0);
 }`;
 
 const SD_ROUND_RECT = `
@@ -63,6 +125,8 @@ uniform vec2  u_quadPx;
 uniform float u_radiusPx;
 uniform float u_sharpen;
 uniform vec2  u_texel;
+uniform float u_borderPx;
+uniform vec4  u_borderColor;
 out vec4 frag;
 ${SD_ROUND_RECT}
 void main() {
@@ -78,7 +142,20 @@ void main() {
 
   vec2 p = (v_uv - 0.5) * u_quadPx;
   float d = sdRoundRect(p, u_quadPx * 0.5, u_radiusPx);
-  frag = vec4(c, 1.0 - smoothstep(-1.0, 1.0, d));
+  float alpha = 1.0 - smoothstep(-1.0, 1.0, d);
+
+  // The border is a ring just inside the same SDF, not a separate quad. Drawn
+  // as its own quad it would square off the corners, because only this shader
+  // knows where the rounded edge actually is. d is negative inside, so the
+  // ring is the band from -u_borderPx to 0, feathered by the same 1px the
+  // corner mask uses so the two edges match.
+  if (u_borderPx > 0.0) {
+    float inner = smoothstep(-u_borderPx - 1.0, -u_borderPx + 1.0, d);
+    float ring = inner * alpha;
+    c = mix(c, u_borderColor.rgb, ring * u_borderColor.a);
+  }
+
+  frag = vec4(c, alpha);
 }`;
 
 export const CURSOR_FRAG = `#version 300 es

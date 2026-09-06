@@ -169,3 +169,33 @@ const manifest = {
 writeFileSync(join(OUT, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
 
 console.log(`fixture written to ${OUT}`);
+
+// ------------------------------------------------- scratch background image
+
+/**
+ * The image background's only coverage, generated rather than assumed.
+ *
+ * `tools/shots-spec.json` points its four image-background shots at
+ * `tmp/bgtest.png` — the sole exercise anywhere of the image branch, the
+ * cover-fit arithmetic and the LOD blur. `tmp/` is gitignored and nothing
+ * created that file, so on any fresh checkout the decode failed, the renderer
+ * fell back to the solid colour, and all four shots emitted plausible
+ * plum-coloured PNGs. Nothing failed. That is the same shape as phase A
+ * shipping five broken cursor shapes because the fixture emitted no cursor
+ * events.
+ *
+ * testsrc2 is deliberately detailed: a flat image cannot show whether a blur
+ * LOD did anything. The 1400x1000 size is deliberately NOT the output's aspect
+ * ratio, so cover fit has to actually crop.
+ */
+const TMP = join(process.cwd(), "tmp");
+mkdirSync(TMP, { recursive: true });
+
+const BG_TEST = join(TMP, "bgtest.png");
+execFileSync(
+  "ffmpeg",
+  ["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1400x1000", "-frames:v", "1", BG_TEST],
+  { stdio: "inherit" },
+);
+
+console.log(`scratch background written to ${BG_TEST}`);

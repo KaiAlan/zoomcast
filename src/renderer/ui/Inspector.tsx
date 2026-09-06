@@ -1,11 +1,22 @@
-import type { CursorStyle } from "../../shared/project/types";
+import type {
+  CursorStyle,
+  OutputConfig,
+  StyleConfig,
+} from "../../shared/project/types";
 import type { ZoomConfig } from "../../shared/zoom/types";
+import { fieldLabel, numberInput, row, sectionHeader } from "./controls";
+import { StylePanel } from "./StylePanel";
 
 type Props = {
   config: ZoomConfig;
   onChange: (next: ZoomConfig) => void;
   cursor: CursorStyle;
   onCursorChange: (next: CursorStyle) => void;
+  style: StyleConfig;
+  output: OutputConfig;
+  dir: string;
+  onStyleChange: (next: StyleConfig) => void;
+  onOutputChange: (next: OutputConfig) => void;
 };
 
 /** The knobs worth reaching for while tuning; the rest live in project.json. */
@@ -25,29 +36,17 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number }> = [
   { key: "transitionMs", label: "transition (ms)", step: 50 },
 ];
 
-const row: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  padding: "5px 0",
-};
-
-const fieldLabel: React.CSSProperties = { fontSize: 13, opacity: 0.8 };
-
-const sectionHeader: React.CSSProperties = { fontSize: 13, opacity: 0.55, marginBottom: 8 };
-
-const numberInput: React.CSSProperties = {
-  width: 92,
-  background: "#0f1115",
-  color: "#e6e6e6",
-  border: "1px solid #2a2e38",
-  borderRadius: 4,
-  padding: "4px 6px",
-  fontVariantNumeric: "tabular-nums",
-};
-
-export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
+export function Inspector({
+  config,
+  onChange,
+  cursor,
+  onCursorChange,
+  style,
+  output,
+  dir,
+  onStyleChange,
+  onOutputChange,
+}: Props) {
   return (
     <div>
       <div style={sectionHeader}>zoom planner</div>
@@ -139,6 +138,14 @@ export function Inspector({ config, onChange, cursor, onCursorChange }: Props) {
           />
         </label>
       </div>
+
+      <StylePanel
+        style={style}
+        output={output}
+        dir={dir}
+        onStyleChange={onStyleChange}
+        onOutputChange={onOutputChange}
+      />
     </div>
   );
 }
