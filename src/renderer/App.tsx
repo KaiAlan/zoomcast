@@ -3,6 +3,7 @@ import type { OpenedBundle } from "../shared/api";
 import { installAudioHooks } from "./audio";
 import { installShootHook } from "./shoot";
 import { Editor } from "./ui/Editor";
+import { SettingsWindow } from "./ui/SettingsWindow";
 import { Welcome } from "./ui/Welcome";
 
 /** The headless screenshot harness, used by tools/verify-decode.ts. */
@@ -23,6 +24,7 @@ export function App() {
 
   const isShoot = window.location.hash === "#shoot";
   const isAudio = window.location.hash === "#audio";
+  const isSettings = window.location.hash === "#settings";
 
   // The hidden audio-capture window renders nothing; it only exposes hooks.
   useEffect(() => {
@@ -54,6 +56,7 @@ export function App() {
 
   if (isAudio) return null;
   if (isShoot) return <ShootHarness />;
+  if (isSettings) return <SettingsWindow />;
   if (bundle !== null) {
     return <Editor bundle={bundle} onBack={() => setBundle(null)} />;
   }

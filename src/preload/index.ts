@@ -7,6 +7,7 @@ import type {
   ZoomcastApi,
 } from "../shared/api";
 import type { Project } from "../shared/project/types";
+import type { Settings } from "../shared/settings/types";
 
 /** Subscribe to a main-process push, returning an unsubscribe function. */
 function on<T>(channel: string, fn: (payload: T) => void): () => void {
@@ -39,6 +40,10 @@ const api: ZoomcastApi = {
     onStopped: (fn) => on<RecordingResult>("recording:stopped", fn),
     onError: (fn) => on<string>("recording:error", fn),
   },
+
+  getSettings: () => ipcRenderer.invoke("settings:get") as Promise<Settings>,
+  setSettings: (settings: Settings) =>
+    ipcRenderer.invoke("settings:set", settings) as Promise<void>,
 
   pickExportTarget: (suggested: string) =>
     ipcRenderer.invoke("export:pick", suggested) as Promise<string | null>,

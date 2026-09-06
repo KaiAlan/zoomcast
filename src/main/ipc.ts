@@ -6,6 +6,8 @@ import type { ExportStartOptions } from "../shared/api";
 import { formatExportFailure, formatExportStart } from "../shared/export/diagnostics";
 import type { Project } from "../shared/project/types";
 import { openBundle, saveProject } from "./bundleIo";
+import { loadSettings, saveSettings } from "./settingsStore";
+import type { Settings } from "../shared/settings/types";
 import { isRecording } from "./capture/SessionController";
 import { ExportSession } from "./exportRunner";
 import { logDiag } from "./log";
@@ -59,6 +61,11 @@ export function registerIpc(): void {
     }
 
     return name;
+  });
+
+  ipcMain.handle("settings:get", () => loadSettings());
+  ipcMain.handle("settings:set", (_event, settings: Settings) => {
+    saveSettings(settings);
   });
 
   ipcMain.handle("recording:list", () => listRecordings());

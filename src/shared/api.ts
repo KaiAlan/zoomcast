@@ -2,6 +2,7 @@ import type { ExportArgsOptions } from "./export/ffmpegArgs";
 import type { Manifest } from "./bundle/manifest";
 import type { TelemetryEvent } from "./bundle/types";
 import type { Project } from "./project/types";
+import type { Settings } from "./settings/types";
 
 /** Media served over the private zc:// scheme, ready to hand to fetch(). */
 export type BundleMedia = {
@@ -69,6 +70,10 @@ export type ZoomcastApi = {
   toggleRecording: () => Promise<void>;
   isRecording: () => Promise<boolean>;
   recording: RecordingEvents;
+
+  /** App-level settings. Separate from Project, which lives inside a bundle. */
+  getSettings: () => Promise<Settings>;
+  setSettings: (settings: Settings) => Promise<void>;
 
   pickExportTarget: (suggested: string) => Promise<string | null>;
   /** Starts ffmpeg and returns a session id to push frames into. */

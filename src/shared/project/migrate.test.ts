@@ -176,3 +176,23 @@ describe("normalizeProject", () => {
     expect(normalizeProject({ ...PRE_CURSOR, bundleId: "stale" }, "real").bundleId).toBe("real");
   });
 });
+
+describe("output.fps normalisation", () => {
+  it("keeps the two offered rates", () => {
+    for (const fps of [30, 60]) {
+      expect(normalizeProject({ output: { fps } }, "b").output.fps).toBe(fps);
+    }
+  });
+
+  /**
+   * fps was a free number field stepping by 30 from a default of 60, so 0 was
+   * two clicks away — and planExportFrames at 0 emits no frames while ffmpeg
+   * gets `-r 0`. A project carrying such a value must not load into a UI that
+   * has no way to show or correct it.
+   */
+  it("replaces a rate the UI cannot offer", () => {
+    for (const bad of [0, 7, 24, 144, -30, Number.NaN, "60", null]) {
+      expect(normalizeProject({ output: { fps: bad } }, "b").output.fps).toBe(60);
+    }
+  });
+});
