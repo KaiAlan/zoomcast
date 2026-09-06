@@ -1,6 +1,7 @@
 # zoomcast — handover
 
-Updated 2026-09-05. **Phases 0–7, A and B complete.** The tool records your
+Updated 2026-09-06. **Phases 0–7, A and B complete; B is merged to main.**
+Phase C has started — its export half is underway on `feat/phase-c-export`. The tool records your
 screen, mic and system audio, plans zooms from real input telemetry, draws a
 synthetic cursor with real shapes and click ripples, composes the frame over a
 procedural or custom background, lets you cut and scrub, and exports a finished
@@ -27,7 +28,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 221 passing, 30 files
+npm test              # 228 passing, 31 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -93,10 +94,18 @@ Phases C–G are specified in `docs/specs/2026-09-04-composition-and-camera-desi
 §13. None has a written plan yet.
 
 **Start any new session at
-`docs/superpowers/plans/2026-09-05-phase-b-handoff.md`.** It carries the order of
-work — the phase B re-review, then merge, then a "Phase C — start here" section
-that opens with three blocking questions for the user about a broken export and
-holds the debugging state so none of it has to be re-derived.
+`docs/superpowers/plans/2026-09-06-phase-c-export-diagnostics.md`.** Tasks 1–6
+are done; task 7 (reproduce the head-of-file jump against a saved project) is
+open, though the jump's root cause was found and fixed independently.
+`docs/superpowers/plans/2026-09-05-phase-b-handoff.md` is now history — its
+review happened, its fixes landed, and its three blocking questions were
+answered.
+
+**Phase C's camera half has no plan yet**, and it is the larger part: the
+follow-cursor camera, retuned transitions, the preview loop rewrite, and the
+two design problems the export investigation surfaced — a keyframe at `t = 0`
+that cannot be eased into, and a zoom ceiling that exactly cancels the
+composition.
 
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
@@ -105,6 +114,19 @@ holds the debugging state so none of it has to be re-derived.
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
+
+**Export is now diagnosable.** `export:start` logs the resolved settings,
+`export:finish` logs success or the failure with ffmpeg's stderr tail, and
+`exportCancel` takes a required reason — cancel is the only path that truncates
+a file. Exporting also writes `project.json`, so a bundle can be re-exported
+identically. Both live in `%APPDATA%\zoomcast\main-error.log`.
+
+**Encoders measured** (`npm run bench:encoders`, 600 frames of 1080p60, encode
+only): libx264 47.6fps / 0.79x realtime, **h264_amf 88.7fps / 1.48x realtime**.
+h264_amf is ~1.9x faster, so the export button's choice is right. The note's old
+"~8fps, 0.13x realtime" claim was wrong by roughly eleven times; every inference
+that rested on exports being multi-minute is void. `h264_amf` now has an
+automated guard: the export e2e runs over every encoder ffmpeg reports.
 
 **Open bug: export produced a truncated mp4 once, and has not reproduced.**
 On 2026-09-06 the same take exported cleanly through the real button — the
