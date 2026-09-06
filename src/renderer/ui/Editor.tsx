@@ -338,6 +338,13 @@ export function Editor({
       const target = await window.zoomcast.pickExportTarget(`${manifest.id}.mp4`);
       if (target === null) return;
 
+      // Persist what this export is being made from. saveProject already
+      // existed but was wired only to the manual save button, so the bundle
+      // for the take that exported badly on 2026-09-05 has no project.json at
+      // all and the settings that produced the file are unrecoverable. An
+      // export is exactly the moment the state is worth keeping.
+      await window.zoomcast.saveProject(bundle.dir, project);
+
       playerRef.current?.pause();
       setExporting("starting…");
 
