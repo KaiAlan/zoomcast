@@ -1,6 +1,5 @@
 import { cursorAt, type CursorPath } from "../cursor/path";
 import { clampToSource } from "./camera";
-import { pixelParityZoom } from "./geometry";
 import type { PlanContext, ZoomConfig, ZoomKeyframe, ZoomSegment } from "./types";
 
 /**
@@ -39,7 +38,10 @@ export function segmentsToKeyframes(
    */
   follow: CursorPath | null = null,
 ): ZoomKeyframe[] {
-  const ceiling = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
+  // The configured cap, not the pixel-parity point. Before 2026-09-07 these
+  // were the same number, and that is exactly what capped every zoom at
+  // full-bleed with nowhere for the camera to go.
+  const ceiling = cfg.maxZoom;
   const kfs: ZoomKeyframe[] = [];
 
   for (const s of segments) {

@@ -57,8 +57,19 @@ describe("fitScale", () => {
     maxY: 590,
   });
 
-  it("clamps to the comfortable maximum for a tight cluster", () => {
-    expect(fitScale(cluster(5), DEFAULT_ZOOM_CONFIG, ctx)).toBeCloseTo(1.176, 3);
+  it("clamps a tight cluster to the configured maximum", () => {
+    // A 5px cluster asks for roughly 12x. The cap is cfg.maxZoom since
+    // 2026-09-07 — it used to be pixelParityZoom, which meant every zoom on
+    // every take landed on 1.176 and the camera had nowhere to go.
+    expect(fitScale(cluster(5), DEFAULT_ZOOM_CONFIG, ctx)).toBeCloseTo(
+      DEFAULT_ZOOM_CONFIG.maxZoom,
+      9,
+    );
+  });
+
+  it("follows the configured maximum rather than the output size", () => {
+    const shallow = { ...DEFAULT_ZOOM_CONFIG, maxZoom: 1.2 };
+    expect(fitScale(cluster(5), shallow, ctx)).toBeCloseTo(1.2, 9);
   });
 
   it("never returns less than 1", () => {

@@ -539,6 +539,7 @@ export function Editor({
           playheadMs={playheadMs}
           playheadRef={playheadElRef}
           pixelParityZoom={ceiling}
+          maxZoom={project.zoom.config.maxZoom}
           onSeek={(t) => playerRef.current?.seek(t)}
         />
       </div>

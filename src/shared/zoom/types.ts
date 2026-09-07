@@ -33,6 +33,17 @@ export type ZoomConfig = {
   trailMs: number;
   transitionMs: number;
   easing: EasingName;
+  /**
+   * The deepest the camera goes. A sharpness choice, not a geometric limit:
+   * above `pixelParityZoom` (~1.18 at 1080p into 1080p) the picture is
+   * upscaled. Because the frame is inset by paddingFactor, a zoom of s
+   * upscales the source by s * paddingFactor — 1.6 costs 1.36x, not 1.6x.
+   *
+   * It used to be derived from the output size, which made it exactly the
+   * factor at which the old growing frame filled the output, so every zoom
+   * landed on it and the camera had nowhere to go.
+   */
+  maxZoom: number;
 };
 
 export type Impulse = {

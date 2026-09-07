@@ -210,3 +210,8 @@ it("keeps stored segments", () => {
   };
   expect(normalizeProject({ zoom: { segments: [seg] } }, "b").zoom.segments).toEqual([seg]);
 });
+
+it("gives a project written before maxZoom the default ceiling", () => {
+  const p = normalizeProject({ zoom: { config: { minHoldMs: 1500 } } }, "b");
+  expect(p.zoom.config.maxZoom).toBe(1.6);
+});

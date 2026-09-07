@@ -45,6 +45,9 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   { key: "trailMs", label: "trail (ms)", step: 50, min: 0 },
   // Below ~100ms a "transition" is a cut, and the dwell floor is twice this.
   { key: "transitionMs", label: "transition (ms)", step: 50, min: 100 },
+  // Above pixelParityZoom (~1.18 here) the picture is upscaled; the frame's
+  // inset means 1.6 costs 1.36x, not 1.6x. Below 1 there is no zoom at all.
+  { key: "maxZoom", label: "max zoom (×)", step: 0.05, min: 1 },
 ];
 
 /**

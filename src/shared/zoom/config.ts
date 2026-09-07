@@ -32,4 +32,5 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
    * the inspector; this line is the only thing that makes one the default.
    */
   easing: "zoomGlide",
+  maxZoom: 1.6,
 };

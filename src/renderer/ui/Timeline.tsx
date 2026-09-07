@@ -15,7 +15,10 @@ type Props = {
    * still the truth for the readout and for the position at mount.
    */
   playheadRef: RefObject<HTMLDivElement | null>;
+  /** Where upscaling begins. Keyframes past it are marked. */
   pixelParityZoom: number;
+  /** The configured cap. Since 2026-09-07 these are different numbers. */
+  maxZoom: number;
   onSeek: (tOutputMs: number) => void;
 };
 
@@ -36,6 +39,7 @@ export function Timeline({
   playheadMs,
   playheadRef,
   pixelParityZoom,
+  maxZoom,
   onSeek,
 }: Props) {
   const [scrubbing, setScrubbing] = useState(false);
@@ -149,7 +153,7 @@ export function Timeline({
         <span>{fmt(playheadMs)}</span>
         <span>
           {keyframes.filter((k) => k.scale > 1).length} zooms · {cuts.length} cuts ·
-          ceiling {pixelParityZoom.toFixed(2)}×
+          max {maxZoom.toFixed(2)}× · sharp to {pixelParityZoom.toFixed(2)}×
         </span>
         <span>{fmt(outputDurationMs)}</span>
       </div>

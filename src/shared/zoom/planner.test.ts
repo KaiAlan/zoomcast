@@ -145,14 +145,14 @@ describe("planZoom", () => {
     expect(kfs[0]?.cy).toBeCloseTo(0.5, 6);
   });
 
-  it("never exceeds the comfortable zoom ceiling for the source", () => {
+  it("never exceeds the configured zoom ceiling", () => {
     const kfs = plan(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
     for (const k of kfs) {
-      expect(k.scale).toBeLessThanOrEqual(1.177);
+      expect(k.scale).toBeLessThanOrEqual(DEFAULT_ZOOM_CONFIG.maxZoom + 1e-9);
     }
   });
 

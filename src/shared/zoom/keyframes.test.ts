@@ -16,7 +16,14 @@ const ctx: PlanContext = {
 };
 
 const cfg = DEFAULT_ZOOM_CONFIG;
-const CEILING = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
+/**
+ * What full depth renders as. The CAP, not the pixel-parity point — those were
+ * the same number before 2026-09-07, which is exactly what pinned every zoom
+ * to full-bleed. depthToScale's round-trip tests below still use
+ * pixelParityZoom, because that arithmetic is about the mapping, not the cap.
+ */
+const CEILING = cfg.maxZoom;
+const PARITY = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
 
 function seg(over: Partial<ZoomSegment> = {}): ZoomSegment {
   return {
@@ -92,13 +99,13 @@ describe("depth", () => {
    * a scale planned against 16:9 would be wrong the moment the user picks 1:1.
    */
   it("round-trips a scale through the ceiling", () => {
-    expect(depthToScale(scaleToDepth(CEILING, CEILING), CEILING)).toBeCloseTo(CEILING, 12);
-    expect(depthToScale(scaleToDepth(1, CEILING), CEILING)).toBeCloseTo(1, 12);
+    expect(depthToScale(scaleToDepth(PARITY, PARITY), PARITY)).toBeCloseTo(PARITY, 12);
+    expect(depthToScale(scaleToDepth(1, PARITY), PARITY)).toBeCloseTo(1, 12);
   });
 
   it("means the same shot at a different output aspect", () => {
     const square = pixelParityZoom({ w: 1920, h: 1080 }, { w: 1080, h: 1080 }, 0.85);
-    expect(square).not.toBeCloseTo(CEILING, 3);
+    expect(square).not.toBeCloseTo(PARITY, 3);
     // Full depth is full depth in both: that is the point of storing 0-1.
     expect(depthToScale(1, square)).toBeCloseTo(square, 12);
   });
@@ -242,5 +249,33 @@ describe("a follow segment", () => {
     expect(segmentsToKeyframes([seg()], cfg, square, path)).toEqual(
       segmentsToKeyframes([seg()], cfg, square),
     );
+  });
+});
+
+/** Invariant 8: depth is relative, so the ceiling can move under it. */
+describe("maxZoom", () => {
+  it("maps full depth onto the configured ceiling", () => {
+    const kfs = segmentsToKeyframes([seg()], { ...cfg, maxZoom: 1.6 }, ctx);
+    expect(kfs[0]?.scale).toBeCloseTo(1.6, 9);
+  });
+
+  it("does not invalidate a stored depth when the ceiling changes", () => {
+    // Same stored segment, same normalised depth, different rendered scale.
+    const shallow = segmentsToKeyframes([seg()], { ...cfg, maxZoom: 1.2 }, ctx);
+    const deep = segmentsToKeyframes([seg()], { ...cfg, maxZoom: 2.0 }, ctx);
+
+    expect(shallow[0]?.scale).toBeCloseTo(1.2, 9);
+    expect(deep[0]?.scale).toBeCloseTo(2.0, 9);
+  });
+
+  it("no longer ties the ceiling to the output size", () => {
+    // Before 2026-09-07 this was maxComfortableZoom, so a 1:1 output planned a
+    // different scale for the same segment. The camera samples 1/scale of the
+    // source at any aspect now, so it does not.
+    const square: PlanContext = { ...ctx, output: { w: 1080, h: 1080 } };
+    const a = segmentsToKeyframes([seg()], { ...cfg, maxZoom: 1.6 }, ctx);
+    const b = segmentsToKeyframes([seg()], { ...cfg, maxZoom: 1.6 }, square);
+
+    expect(a[0]?.scale).toBeCloseTo(b[0]?.scale ?? 0, 12);
   });
 });
