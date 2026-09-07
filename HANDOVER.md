@@ -1,18 +1,23 @@
 # zoomcast — handover
 
-Updated 2026-09-06. **Phases 0–7, A and B complete; B is merged to main.**
-Phase C has started — its export half is underway on `feat/phase-c-export`. The tool records your
-screen, mic and system audio, plans zooms from real input telemetry, draws a
-synthetic cursor with real shapes and click ripples, composes the frame over a
-procedural or custom background, lets you cut and scrub, and exports a finished
-MP4 at a chosen aspect and resolution.
+Updated 2026-09-07. **Phases 0–7, A, B and C complete; C is on
+`feat/phase-c-camera`, unmerged.** The tool records your screen, mic and system
+audio, plans zooms from real input telemetry, drives a camera that opens at
+rest and can follow the cursor, draws a synthetic cursor with real shapes and
+click ripples, composes the frame over a procedural or custom background, lets
+you cut and scrub, and exports a finished MP4 at a chosen aspect and
+resolution.
+
+**One decision is open and it needs your eyes:** which transition curve becomes
+the default. See "The camera (phase C)" below.
 
 Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
 tracked as phases C–F in
 `docs/specs/2026-09-04-composition-and-camera-design.md` §13, plus webcam PiP
 (the old phase 8), which is untouched and independent of all of them.
 
-**Phase C is next, and it is the one the user actually wants.**
+**Phase D (motion blur) is next; E is the one to reach for if the editing
+surface matters more than the look.**
 
 ## What this is
 
@@ -28,11 +33,11 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 237 passing, 32 files
+npm test              # 279 passing, 34 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
-npm run verify:parity # 20/20 at 43-45dB, over four configurations (builds first)
+npm run verify:parity # 25/25 at 43-49dB, over five configurations (builds first)
 npm run tune -- all   # zoom plan over every take on disk
 ```
 
@@ -90,32 +95,22 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 
 ## What is NOT built
 
-Phases C–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
+Phases D–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
 §13. None has a written plan yet.
 
-**Start any new session at
-`docs/superpowers/plans/2026-09-06-phase-c-camera.md`.** That is the rest of
-phase C — the follow camera, the opening shot, retuned transitions and the
-preview loop — and it is unstarted.
-
-Two plans are done and merged:
+Three plans are done and merged, and one is done and unmerged:
 `2026-09-06-phase-c-export-diagnostics.md` (tasks 1–6; task 7 is open but its
-subject, the head-of-file jump, was root-caused and fixed independently) and
+subject, the head-of-file jump, was root-caused and fixed independently),
 `2026-09-06-capture-frame-rate-and-settings.md` (tasks 1–6; task 7, ddagrab,
-is deliberately open).
+is deliberately open), and **`2026-09-06-phase-c-camera.md`, all 8 tasks, on
+`feat/phase-c-camera`**.
 `docs/superpowers/plans/2026-09-05-phase-b-handoff.md` is now history — its
 review happened, its fixes landed, and its three blocking questions were
 answered.
 
-**Phase C's camera half has no plan yet**, and it is the larger part: the
-follow-cursor camera, retuned transitions, the preview loop rewrite, and the
-two design problems the export investigation surfaced — a keyframe at `t = 0`
-that cannot be eased into, and a zoom ceiling that exactly cancels the
-composition.
-
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
-| C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance | A, B — both now done |
+| C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance — **done** | A, B |
 | D | Directional motion blur | C |
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
@@ -155,26 +150,18 @@ was the `screenQuad` clamp discontinuity described under "Camera geometry"
 below — not the planner, not the easing, and not the VFR capture, all of which
 were measured and cleared.
 
-**C is the one the user actually wants.** The zoom complaint is measured, with a
-specific signature, in `docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md`
-— read that before touching a pacing dial. B goes first anyway, and the spec's
-reason is good: the camera should be tuned once, against the finished composited
-look rather than raw full-bleed footage.
+**The zoom complaint is measured**, with a specific signature, in
+`docs/superpowers/notes/2026-09-05-zoom-complaint-evidence.md` — read that
+before touching a pacing dial. Phase C addressed two of its three causes; see
+"Is 'floaty and laggy' fixed?" below for which, and on what evidence.
 
-**A seam phase C will hit, worth knowing before it starts.** Spec §8 claims the
-cursor's position "comes from the same smoothed path the camera uses (§9), so
-cursor and camera cannot disagree." That claim does not currently hold up:
-`buildCursorPath`'s only damping input is `PathOptions.smoothing`, which is a
-**presentation** control the user can set to 0 (raw telemetry), and
-`MAX_HALF_LIFE_MS` is 90ms — a cursor-scale half-life. A follow camera wants
-several hundred ms and must not go jittery because someone turned the cursor's
-smoothing off. So C must either build a second path at camera damping (which
-falsifies §8) or thread a separate half-life. The cheap future-proofing is to
-let `PathOptions` take `halfLifeMs` directly and move the 0–1 `smoothing` →
-half-life mapping to the Editor call site, where the style control actually
-lives; `buildCursorPath` then serves both consumers without either owning the
-other's units. **This is a spec issue as much as a code one** — fix §8's wording
-either way.
+**Spec §8's shared-path claim was false and is now fixed.** It said the cursor's
+position "comes from the same smoothed path the camera uses (§9), so cursor and
+camera cannot disagree", but `buildCursorPath`'s only damping input was
+`smoothing`, a presentation control the user can set to 0, capped at a 90ms
+cursor-scale half-life. `PathOptions` now takes `halfLifeMs` directly and the
+0–1 mapping (`smoothingToHalfLife`) is applied at the Editor call site, so the
+two share one function evaluated at two half-lives. §8 says so.
 
 **Webcam PiP** (the old phase 8) is independent of all of it: a third
 `MediaRecorder` following the same hidden-renderer pattern as `AudioRecorder`, a
@@ -187,10 +174,6 @@ Also worth doing early:
 - **Undo/redo.** Spec §6 specifies immutable project snapshots. Nothing yet.
 - **Draggable cut regions.** Currently a placeholder "cut 0.5s here" button;
   there is no way to adjust or delete a cut once made.
-- **`addCut` never redraws the paused preview.** Adding a cut changes the
-  output→source mapping at the current playhead, but nothing redraws, so the
-  frame on screen is stale until the user scrubs. Same family as the cursor bug
-  fixed in phase A. See "three idioms" below.
 - **Surface the `unclean` state.** A recording that ended abnormally is marked
   in the manifest and logged, but the Welcome list does not show it.
 - **Delete recordings from the UI.** The list shows sizes; there is no delete.
@@ -237,7 +220,7 @@ unit tests could not have caught.
 | Command | Checks |
 | --- | --- |
 | `npm run verify:decode` | Every seek returns the frame that actually sits at that timestamp |
-| `npm run verify:parity` | Preview and export render identically, across three configurations (default, styled, 1:1) — 15 comparisons |
+| `npm run verify:parity` | Preview and export render identically, across five configurations (default, styled, 1:1, follow, hidden) — 25 comparisons |
 | `ZOOMCAST_SHOOT` | Renders arbitrary frame specs to PNG through the real compositor |
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
@@ -275,6 +258,121 @@ cat "$env:APPDATA\zoomcast\record-test.json"
 # Windows does not reach the launching shell
 cat "$env:APPDATA\zoomcast\main-error.log"
 ```
+
+## The camera (phase C)
+
+Segments are now the persisted, editable unit and keyframes are derived from
+them. `planZoom` returns `ZoomSegment[]`; `segmentsToKeyframes` turns them into
+what renders. Nothing else in the pipeline moved: `tune -- all` was
+byte-identical across that refactor, which is the guard that pacing did not
+shift.
+
+- `src/shared/zoom/types.ts` — `ZoomSegment`, `ZoomWaypoint`.
+- `src/shared/zoom/keyframes.ts` — segments → keyframes, the opening-at-rest
+  rule, the follow sampling, `depthToScale`/`scaleToDepth`.
+- `src/shared/zoom/camera.ts` — `followPath` and `clampToSource`.
+- `src/shared/zoom/replan.ts` — `replanSegments` alongside `replan`.
+
+Things worth knowing before touching it:
+
+- **A segment carries its waypoints.** The spec's §6 sketch had one centre per
+  segment; the pacing guards merge two zooms less than `minRecoveryMs` apart
+  into one segment that stays in and pans, and 5 of the 10 takes on disk
+  contain one (one has three waypoints). Splitting them into separate segments
+  would make "stay in" emerge from two times being exactly equal, and one drag
+  in phase E's timeline would bring back the flinch the guard prevents.
+- **`depth` is 0–1 against the derived ceiling, not a scale.** The ceiling comes
+  from the output size, so a stored absolute scale is wrong the moment the
+  aspect changes.
+- **Every take opens at rest.** A keyframe at `t = 0` cannot be eased into, so
+  takes used to open on a hard cut. Any keyframe whose transition would start
+  before zero moves to `transitionMs` — it is never given a shorter transition,
+  which would make the opening move the fastest in the take. The segment pays
+  for that by ending later too, clamped to the next segment's recovery gap;
+  without that the opening zoom's hold fell under the `transitionMs * 2` floor
+  `enforceDwell` exists to keep.
+- **Follow is precomputed, never integrated per frame.** `followPath` is the
+  cursor's own function at a 300ms half-life on a fixed grid. Per-frame
+  integration would make a 60fps preview and a 30fps export disagree, and
+  `verify:parity` would be right to fail. A follow segment emits a keyframe
+  every 100ms with a linear ramp between them, so what renders is the
+  precomputed path rather than the output frame rate.
+- **Two paths built at different `sampleHz` do NOT agree exactly**, because the
+  grid also quantises when a telemetry target changes; exponential decay
+  composes exactly only while the target is constant. The property parity
+  actually needs — one precomputed array read at any rate — does hold, and is
+  the test that guards it.
+- **Follow only has somewhere to go when the output crops the source.** Cropping
+  begins above `1 / paddingFactor`, which is exactly where `maxComfortableZoom`
+  lands when output matches source, so at the native aspect the whole source is
+  on screen at every legal scale. At 1:1, 4:5 or a downscaled export it crops
+  and the camera pans. This is a consequence of decision 1 (the ceiling stays
+  where it is), not a bug — but it means **follow does nothing at the native
+  aspect**, and `clampToSource` deliberately does not force the centre to 0.5
+  there, or it would pin the camera and make follow inert everywhere.
+- **Follow is opt-in and the planner never emits it.** It survives the re-plan
+  the editor runs on load only because `replanSegments` keeps pinned and manual
+  segments, which is spec §6's contract one level up from `replan`.
+
+**What follow is and is not guarded by.** `verify:parity`'s fifth config pins a
+follow segment at 1:1 and is 25/25, and its frames differ both from the square
+config and from each other over time, so the camera is provably moving rather
+than silently falling back. What is NOT guarded: follow at the native aspect
+(there is nothing to guard — see above), follow across a cut, and any UI for
+turning it on. **There is no control for `position: "follow"` yet** — a segment
+becomes a follow segment only by being written into `project.json`. That
+control belongs to phase E, which owns segment editing.
+
+### The transition curve — one decision is open
+
+The measured signature of the old curve, `zoomEase` = `cubicBezier(0.33, 0,
+0.1, 1)`: 61% of the motion in the first third, 6% in the last, peak velocity
+at 23% of the way through. At 600ms it is 95% arrived after 416ms and then
+drifts for 184ms. That drifting tail is what "floaty" describes.
+
+`zoomGlide` = `cubicBezier(0.45, 0.05, 0.55, 0.95)` is 23 / 50 / 23 across the
+thirds, peaks in the middle, and has the lowest peak speed of the curves tried
+(2.88×/s against 5.29×/s), so a longer transition reads as gentler rather than
+slower.
+
+| variant | halfway | 95% done | drifting tail | peak speed |
+| --- | --- | --- | --- | --- |
+| ease 600ms (current default) | 172ms | 416ms | 184ms | 5.29×/s |
+| glide 600ms | 300ms | 513ms | 87ms | 2.88×/s |
+| glide 900ms | 450ms | 770ms | 130ms | 1.92×/s |
+
+Both are pickable in the inspector, next to the transition duration that was
+already there. **The default is still `zoomEase`**, because which one is right
+is a watching decision and nobody has watched them yet. Renders of the same two
+takes under all three variants are in `tmp/curves/<take>/<variant>/`, built by
+`tmp/render-curves.ts` (throwaway; `tmp/` is gitignored). Pick one and change
+`DEFAULT_ZOOM_CONFIG`.
+
+### Is "floaty and laggy" fixed?
+
+Three causes; two are addressed here and one is not.
+
+1. **The drifting tail** — addressed, pending the default above. The curve
+   exists, is measured, and is one line of config away from being the default.
+2. **The preview stutter** — improved, not measured. The playhead no longer
+   re-renders the editor 60 times a second, and the decode for the next source
+   frame now happens in the gap after a draw instead of on the critical path.
+   What did NOT change is the cost of that decode: every seek decodes forward
+   from the nearest keyframe, GOP is 30, so advancing one source frame still
+   costs ~15 frames of decode on average. A stateful incremental decoder for
+   sequential playback is the real fix and is not in this phase. **No preview
+   frame-rate harness exists**, so "smoother" here is a design argument, not a
+   measurement — the honest next step is to build one before claiming it.
+3. **The source frame rate** — not fixable in software, and must not be
+   reported as fixed. Measured with `ffprobe -count_frames` over all twelve
+   takes on disk: the 2026-09-05 takes ran at 11.6–21.7fps, and the takes after
+   the capture-rate work at 27.1–30.2fps. Real 60fps needs `ddagrab`.
+
+While measuring that: **`manifest.video.fps` is trustworthy.** It comes from
+`avg_frame_rate`, which the phase C plan warned is a nominal container rate,
+but on every finished take it agrees exactly with a `-count_frames` count. The
+editor's status line now shows it as "captured at N.Nfps" rather than
+`30.227272727272727fps`.
 
 ## The compositor (phase B)
 
@@ -480,24 +578,25 @@ Each of these cost real time; none is hypothetical.
   space, so a cursor near the source edge spills over the rounded corner onto the
   background. Windows clips it in reality. Low frequency, easy to live with.
 
-**React and redraw — three idioms, one question**
+**React and redraw — one idiom, and keep it that way**
 
-`Editor.tsx` answers "how does an edit reach the paused preview?" three
-different ways, and `PreviewPlayer.draw()` runs only on `play()` / `seek()` /
-`toggle()` with nothing watching `project`:
+`PreviewPlayer.draw()` runs on `play()` / `seek()` / `toggle()`, and nothing
+else watches `project`. Exactly one thing bridges that gap: a `useEffect` on the
+whole `project` in `Editor.tsx` that re-seeks the player at the current
+playhead. **Do not add a second.**
 
-1. `onCursorChange` — a `useEffect` on `project.style.cursor`. **Correct**, and
-   the only one that works for a value feeding a `useMemo`: `cursorPath` is
-   memoised on `smoothing`, so a synchronous seek would redraw the OLD path.
-2. `onConfigChange` — patches `live.current` inside the state updater, then
-   seeks synchronously. Works, but depends on React invoking the functional
-   updater synchronously at dispatch — the eager-state optimisation, which is an
-   optimisation and not a contract.
-3. `addCut` — patches `live.current` and never seeks at all, so adding a cut
-   does not redraw. That is a live bug, listed above.
+It watches the whole object rather than a field list on purpose. `cursorPath`
+and `ctx` are `useMemo`s on `project`, so a synchronous seek inside a handler
+redraws with the OLD memos; and a dependency list that enumerates fields is one
+somebody forgets to extend — which is exactly how `addCut` came to patch
+`live.current` and never redraw at all. Phase C collapsed all three idioms onto
+the effect and that bug went with them. Redrawing once more than strictly
+necessary costs a decode that is almost always a cache hit.
 
-**Unify them in phase C**, which per spec §10 already owns preview performance
-and rewrites the playhead/render loop wholesale. Do not add a fourth.
+The playhead itself is NOT React state during playback. `onTick` positions the
+marker with a direct style write and updates React ten times a second for the
+numeric readout only — immediately whenever playback is stopped. If you need
+the live playhead in a component, take the element ref, not a state value.
 
 **Media and timing**
 
@@ -594,10 +693,10 @@ and rewrites the playhead/render loop wholesale. Do not add a fourth.
   silently lose it.**
 - **A `useMemo` cannot be refreshed by patching a ref.** If a value feeds a
   memo, the redraw that must see it has to happen after the re-render, i.e. in
-  an effect. See "three idioms" above. Phase B widened that effect to the whole
-  of `project.style` and `project.output` rather than adding a fourth idiom.
-- **The inspector panel is long.** Thirteen zoom fields, five cursor controls
-  and three style sections; `output` sits well below the fold. It scrolls, but
+  an effect. See "React and redraw" above; phase C widened that effect to the
+  whole `project` and deleted the other two idioms.
+- **The inspector panel is long.** Thirteen zoom fields, a curve picker, five
+  cursor controls and three style sections; `output` sits well below the fold. It scrolls, but
   collapsible sections would be a real improvement whenever someone is in there
   anyway.
 - **`ripplesAt` scans every prior click each frame.** O(clicks before t), so a

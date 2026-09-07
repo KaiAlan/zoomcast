@@ -108,7 +108,7 @@ because someone turned the cursor's smoothing off.
   `smoothingToHalfLife(smoothing: number): number` exported for the call site.
   Task 5 builds a second path at camera damping through the same function.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // append to src/shared/cursor/path.test.ts
@@ -143,7 +143,7 @@ describe("halfLifeMs", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```powershell
 powershell.exe -NoProfile -Command "cd C:\dev\zoomcast; npx vitest run src/shared/cursor/path.test.ts"
@@ -151,7 +151,7 @@ powershell.exe -NoProfile -Command "cd C:\dev\zoomcast; npx vitest run src/share
 
 Expected: FAIL — `halfLifeMs` is not a `PathOptions` field.
 
-- [ ] **Step 3: Change the seam**
+- [x] **Step 3: Change the seam**
 
 In `src/shared/cursor/path.ts`, replace `smoothing: number` in `PathOptions`
 with `halfLifeMs: number`, delete the in-function mapping at the
@@ -172,7 +172,7 @@ export function smoothingToHalfLife(smoothing: number): number {
 }
 ```
 
-- [ ] **Step 4: Update the one call site**
+- [x] **Step 4: Update the one call site**
 
 In `src/renderer/ui/Editor.tsx`, the `cursorPath` memo becomes:
 
@@ -183,7 +183,7 @@ In `src/renderer/ui/Editor.tsx`, the `cursorPath` memo becomes:
       }),
 ```
 
-- [ ] **Step 5: Fix the spec, which is wrong as written**
+- [x] **Step 5: Fix the spec, which is wrong as written**
 
 In §8, replace the claim that cursor and camera share one path with: they share
 one *function*, evaluated at two half-lives — a cursor-scale one driven by the
@@ -191,7 +191,7 @@ style control, and a camera-scale one fixed by the segment. Say why: a
 presentation control the user can zero must not be able to make the camera
 jitter.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 ```powershell
 powershell.exe -NoProfile -Command "cd C:\dev\zoomcast; npm run typecheck; npm test"
@@ -215,7 +215,7 @@ git commit -m "refactor(phase-c): cursor path takes a half-life, not a style con
 - Produces: `ZoomSegment` exactly as spec §6 defines it, and
   `project.zoom.segments: ZoomSegment[]`. Tasks 3-6 consume both.
 
-- [ ] **Step 1: Read the existing Segment first**
+- [x] **Step 1: Read the existing Segment first**
 
 `src/shared/zoom/segments.ts` already has a `Segment` type used between
 clusters and keyframes, plus the guards that were tuned against real footage
@@ -225,7 +225,7 @@ not change** — they encode the two pathologies found in real footage (a zoom
 held for less than its own two transitions, and a zoom-out followed 140ms later
 by a zoom-in elsewhere).
 
-- [ ] **Step 2: Add the persisted type**
+- [x] **Step 2: Add the persisted type**
 
 In `src/shared/zoom/types.ts`:
 
@@ -254,7 +254,7 @@ export type ZoomSegment = {
 from the output size, so a stored absolute scale would be wrong the moment the
 aspect changes.
 
-- [ ] **Step 3: Persist them, and migrate projects that have none**
+- [x] **Step 3: Persist them, and migrate projects that have none**
 
 Add `segments: ZoomSegment[]` to `project.zoom` in
 `src/shared/project/types.ts`, and to `normalizeProject`. A project written
@@ -262,7 +262,7 @@ before this phase has keyframes but no segments; normalising must give it
 `segments: []` rather than dropping the field, and the editor re-plans on load
 anyway.
 
-- [ ] **Step 4: Test the migration**
+- [x] **Step 4: Test the migration**
 
 ```ts
 // append to src/shared/project/migrate.test.ts
@@ -280,7 +280,7 @@ it("keeps stored segments", () => {
 });
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ---
 
@@ -296,7 +296,7 @@ it("keeps stored segments", () => {
 - Produces: `segmentsToKeyframes(segments, cfg, ctx): ZoomKeyframe[]`. Tasks 4
   and 5 both change what it emits.
 
-- [ ] **Step 1: Move the existing emission out of the planner**
+- [x] **Step 1: Move the existing emission out of the planner**
 
 `planZoom` currently walks `applySegmentGuards(segments, cfg)` and pushes an
 in-keyframe per waypoint plus a scale-1 out-keyframe at `s.endT`. Move exactly
@@ -304,7 +304,7 @@ that logic into `segmentsToKeyframes`, taking `ZoomSegment[]`, with `depth`
 mapped through `maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor)`.
 `planZoom` then returns segments, and the caller derives keyframes.
 
-- [ ] **Step 2: Pin the existing behaviour before changing it**
+- [x] **Step 2: Pin the existing behaviour before changing it**
 
 Write a test that the derived keyframes for a single fixed segment match what
 the planner produces today: an in-keyframe at `startMs` and an out-keyframe at
@@ -314,7 +314,7 @@ Then run `npm run tune -- all` and confirm it is **byte-identical** to the
 current output. That is the regression guard for this whole task: pacing must
 not move.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 ---
 
@@ -328,7 +328,7 @@ value from the first frame and the take opens as a hard cut.
 - Modify: `src/shared/zoom/keyframes.ts`
 - Test: `src/shared/zoom/keyframes.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("never emits a keyframe whose transition would start before zero", () => {
@@ -347,7 +347,7 @@ it("opens at rest, then eases in", () => {
 });
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 When a segment's in-keyframe would sit at `t < transitionMs`, move the keyframe
 to `transitionMs` rather than shortening the transition. A shortened transition
@@ -358,7 +358,7 @@ Guard the case where that would push the in-keyframe past the segment's own
 end: drop the segment instead, and say so in a comment — a zoom with no room to
 arrive is the pathology `segments.ts` already guards elsewhere.
 
-- [ ] **Step 3: Judge it on real footage**
+- [x] **Step 3: Judge it on real footage**
 
 ```powershell
 powershell.exe -NoProfile -Command "cd C:\dev\zoomcast; npm run tune -- all"
@@ -368,7 +368,7 @@ The take `2026-09-05T13-13-31` currently plans `zoom #0 in 0.00s out 1.64s`.
 Expect its in-time to move to the transition duration, and the zoom count to be
 unchanged.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ---
 
@@ -386,7 +386,7 @@ Spec §9. Opt-in per decision 4: the planner keeps emitting `"fixed"`.
 - Produces: `followPath(telemetry, opts): CursorPath` and
   `clampToSource(centre, scale, ctx): { cx, cy }`.
 
-- [ ] **Step 1: Precompute, never integrate per frame**
+- [x] **Step 1: Precompute, never integrate per frame**
 
 This is the decision that makes parity hold. A per-frame simulation depends on
 frame timing, so preview at 60fps and export at 30fps would produce different
@@ -397,7 +397,7 @@ Use the exponential (one-pole) lag, not a spring: memoryless exponential decay
 composes exactly across step sizes, so no-overshoot and frame-rate-independence
 hold exactly rather than approximately. An overshooting camera looks broken.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 ```ts
 it("never overshoots a step input", () => {
@@ -421,19 +421,19 @@ it("clamps so the viewport never leaves the source", () => {
 });
 ```
 
-- [ ] **Step 3: Implement, clamping the smoothed path**
+- [x] **Step 3: Implement, clamping the smoothed path**
 
 Apply the clamp to the **smoothed** path, not the raw cursor, so hitting a
 source edge decelerates rather than sticking.
 
-- [ ] **Step 4: Wire it into keyframe derivation**
+- [x] **Step 4: Wire it into keyframe derivation**
 
 A `position: "follow"` segment samples `followPath` at each waypoint rather
 than using a fixed centroid. Note the interaction with `screenQuad`'s clamp,
 which is now continuous — a follow near an edge will ride that clamp, and that
 is correct.
 
-- [ ] **Step 5: Verify, including parity**
+- [x] **Step 5: Verify, including parity**
 
 ```powershell
 powershell.exe -NoProfile -Command "cd C:\dev\zoomcast; npm test; npm run verify:parity"
@@ -443,7 +443,7 @@ Parity's configs use fixed segments, so this cannot regress them — which also
 means **follow is unguarded by parity**. Add a fourth config with a follow
 segment, or say plainly in the handover that it is not covered.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ---
 
@@ -460,26 +460,26 @@ than constants.
 - Modify: `src/renderer/ui/Inspector.tsx`
 - Test: `src/shared/zoom/easing.test.ts`
 
-- [ ] **Step 1: Add a curve worth switching to**
+- [x] **Step 1: Add a curve worth switching to**
 
 Add a named easing whose velocity peaks near the middle rather than at 30%, and
 test the property rather than pinning samples: no more than ~55% of the total
 motion in the first third, and a monotonic curve.
 
-- [ ] **Step 2: Make duration and curve project settings**
+- [x] **Step 2: Make duration and curve project settings**
 
 They are already `ZoomConfig` fields (`transitionMs`, `easing`) applied per
 keyframe. Surface both in `Inspector.tsx`, and route the change through
 `applyPlan` the way `onConfigChange` already does — the keyframes carry the
 values, so changing them must re-derive.
 
-- [ ] **Step 3: Judge on footage, not on reasoning**
+- [x] **Step 3: Judge on footage, not on reasoning**
 
 Export the same take with the old and new curve and watch both. The phase B
 lesson applies: two of that phase's mistakes were caught only by rendering and
 measuring, never by reasoning.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ---
 
@@ -492,14 +492,14 @@ every easing judgement wrong.
 - Modify: `src/renderer/media/PreviewPlayer.ts`, `src/renderer/media/VideoSource.ts`
 - Modify: `src/renderer/ui/Editor.tsx`, `src/renderer/ui/Timeline.tsx`
 
-- [ ] **Step 1: Playhead out of React state**
+- [x] **Step 1: Playhead out of React state**
 
 `onTick` currently calls `setPlayheadMs` every rAF, so React re-renders 60x a
 second during playback. Move the playhead to a ref, update React state on a
 ~10Hz throttle for the numeric readout only, and position the timeline playhead
 by direct style write.
 
-- [ ] **Step 2: Prefetch**
+- [x] **Step 2: Prefetch**
 
 `draw()` drops any tick arriving mid-decode (`if (this.busy) return`). Have
 `VideoSource` prefetch the next frames during playback so a decoded frame is
@@ -510,7 +510,7 @@ frame pool and `flush()` hangs forever with no error. `frameAt` returns a clone
 — close it. A prefetch of exactly one frame ahead is the safe shape; anything
 larger needs a hard cap and explicit closes.
 
-- [ ] **Step 3: One redraw idiom, not three**
+- [x] **Step 3: One redraw idiom, not three**
 
 `Editor.tsx` answers "how does an edit reach the paused preview?" three ways:
 an effect on `project.style`/`project.output` (correct, and the only one that
@@ -520,32 +520,58 @@ is an optimisation and not a contract), and `addCut`, which patches `live.curren
 and never seeks — **a live bug: adding a cut does not redraw**. Collapse all
 three onto the effect. Do not add a fourth.
 
-- [ ] **Step 4: Surface the measured capture rate**
+- [x] **Step 4: Surface the measured capture rate**
 
 Show `manifest.video.fps` in the editor. It cannot be fixed in software — see
 "What is already settled" — but it can stop being mistaken for a rendering
 fault.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 `verify:parity` must still be 20/20: the preview path changed, and parity is
 exactly the guard for preview/export divergence.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ---
 
 ### Task 8: Handover
 
-- [ ] Update `HANDOVER.md`: the three-idioms section goes (it is fixed), the
+- [x] Update `HANDOVER.md`: the three-idioms section goes (it is fixed), the
       `addCut` bug leaves the "worth doing early" list, and the camera section
       gains whatever the tuning actually settled on.
-- [ ] Record what follow is and is not guarded by.
-- [ ] Say plainly whether the user's "floaty and laggy" complaint is resolved,
+- [x] Record what follow is and is not guarded by.
+- [x] Say plainly whether the user's "floaty and laggy" complaint is resolved,
       and on what evidence. Two of its three causes are addressable here; the
       third — source frame rate — is not, and must not be reported as fixed.
 
 ---
+
+## What the execution changed, 2026-09-07
+
+All 8 tasks are done on `feat/phase-c-camera`. Three places where the plan was
+wrong or thin, recorded because the reasoning matters more than the diff:
+
+1. **Task 2's `ZoomSegment` could not represent what the guards produce.** It
+   had one `cx`/`cy`; `applySegmentGuards` merges nearby zooms into one
+   travelling segment with several waypoints, and half the takes on disk have
+   one. The type carries `waypoints` instead. Decided with the user; spec §6
+   updated.
+2. **Task 5's rate-independence test was a tautology** — it compared a value
+   with itself. Written properly, it fails: two paths BUILT at different grid
+   rates do not agree exactly, because the grid also quantises when a telemetry
+   target changes. The property parity needs is that ONE precomputed path read
+   at 30 and 60fps returns the same positions, and that is what the test now
+   asserts.
+3. **Task 4's shift silently broke the dwell floor.** Moving the opening
+   keyframe to `transitionMs` while leaving the segment's end alone took the
+   shortest hold to 1.04s, under the `transitionMs * 2` floor. The segment now
+   ends later by the same amount, clamped to the next one's recovery gap.
+
+Two things Task 5 and Task 6 could not settle without watching, and did not
+pretend to: the transition curve's default (both curves ship; `zoomEase` is
+still the default) and whether the preview is actually smoother (no frame-rate
+harness exists). Both are in HANDOVER.md.
 
 ## Self-Review
 
