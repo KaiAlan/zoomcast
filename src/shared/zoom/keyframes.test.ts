@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
-import { maxComfortableZoom, screenRect } from "./geometry";
+import { pixelParityZoom, screenRect } from "./geometry";
 import type { TelemetryEvent } from "../bundle/types";
 import { followPath } from "./camera";
 import { zoomAt } from "./interpolate";
+import { sourceRectFor } from "./viewport";
 import { depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
 import type { PlanContext, ZoomSegment } from "./types";
 
@@ -15,7 +16,7 @@ const ctx: PlanContext = {
 };
 
 const cfg = DEFAULT_ZOOM_CONFIG;
-const CEILING = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
+const CEILING = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
 
 function seg(over: Partial<ZoomSegment> = {}): ZoomSegment {
   return {
@@ -96,7 +97,7 @@ describe("depth", () => {
   });
 
   it("means the same shot at a different output aspect", () => {
-    const square = maxComfortableZoom({ w: 1920, h: 1080 }, { w: 1080, h: 1080 }, 0.85);
+    const square = pixelParityZoom({ w: 1920, h: 1080 }, { w: 1080, h: 1080 }, 0.85);
     expect(square).not.toBeCloseTo(CEILING, 3);
     // Full depth is full depth in both: that is the point of storing 0-1.
     expect(depthToScale(1, square)).toBeCloseTo(square, 12);
@@ -191,10 +192,15 @@ describe("a follow segment", () => {
   it("never leaves the source", () => {
     const kfs = segmentsToKeyframes([seg5], cfg, square, path);
 
-    const base = screenRect(square.source, square.output, square.paddingFactor);
+    const frame = screenRect(square.source, square.output, square.paddingFactor);
 
     for (const k of kfs.filter((x) => x.scale > 1)) {
-      const half = Math.min(1, square.output.w / (base.w * k.scale)) / 2;
+      // The bound comes from the geometry the renderer actually samples with,
+      // rather than being recomputed here. This test carried its own copy of
+      // the old growing-frame formula and had to be rewritten when the geometry
+      // changed; deriving it means it cannot drift again.
+      const region = sourceRectFor({ scale: k.scale, cx: 0.5, cy: 0.5 }, frame, square.source);
+      const half = region.w / 2;
       expect(k.cx).toBeGreaterThanOrEqual(half - 1e-9);
       expect(k.cx).toBeLessThanOrEqual(1 - half + 1e-9);
     }

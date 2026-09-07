@@ -1,6 +1,6 @@
 import { cursorAt, type CursorPath } from "../cursor/path";
 import { clampToSource } from "./camera";
-import { maxComfortableZoom } from "./geometry";
+import { pixelParityZoom } from "./geometry";
 import type { PlanContext, ZoomConfig, ZoomKeyframe, ZoomSegment } from "./types";
 
 /**
@@ -39,7 +39,7 @@ export function segmentsToKeyframes(
    */
   follow: CursorPath | null = null,
 ): ZoomKeyframe[] {
-  const ceiling = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
+  const ceiling = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
   const kfs: ZoomKeyframe[] = [];
 
   for (const s of segments) {

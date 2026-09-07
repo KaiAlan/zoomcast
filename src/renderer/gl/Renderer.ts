@@ -14,6 +14,7 @@ import { resolveFrame } from "../../shared/style/frame";
 import { BackgroundTextureCache } from "./backgroundTexture";
 import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
+import { sourceRectFor, sourceToFrame, type SourceRect } from "../../shared/zoom/viewport";
 import {
   BG_FRAG,
   CURSOR_FRAG,
@@ -166,6 +167,8 @@ export class Renderer {
     this.screen = link(gl, SCREEN_FRAG, [
       "u_tex",
       "u_quadPx",
+      "u_uv0",
+      "u_uv1",
       "u_radiusPx",
       "u_sharpen",
       "u_texel",
@@ -207,28 +210,71 @@ export class Renderer {
 
     this.drawBackground(style, out, state.backgroundImageUrl);
 
-    const quad = screenQuad(src, out, style.paddingFactor, state.zoom);
+    const quad = screenQuad(src, out, style.paddingFactor);
+    const region = sourceRectFor(state.zoom, quad, src);
 
     // Resolved once: every frame read must go through this or the presets
     // silently do nothing.
     const frame = resolveFrame(style.frame);
 
     this.drawShadow(quad, out, frame);
-    this.drawScreen(quad, out, src, frame, state.screen);
+    this.drawScreen(quad, region, out, src, frame, state.screen);
 
     // Ripples are their own toggle, independent of cursor visibility: a click
     // near the ends of the path can outlive the cursor sample that produced
     // it (cursorAt returns null there), and `visible: false` should not mute
     // a separately-enabled ripple.
     if (style.cursor.ripples) {
-      this.drawRipples(state.ripples ?? [], quad, out, src);
+      this.withFrameClip(quad, out, () =>
+        this.drawRipples(state.ripples ?? [], quad, region, out, src),
+      );
     }
 
     if (state.cursor !== undefined && state.cursor.style.visible) {
-      this.drawCursor(state.cursor.sample, state.cursor.style, quad, out, src);
+      const cursor = state.cursor;
+      this.withFrameClip(quad, out, () =>
+        this.drawCursor(cursor.sample, cursor.style, quad, region, out, src),
+      );
     }
 
     gl.bindVertexArray(null);
+  }
+
+  /**
+   * Run `draw` with rendering clipped to the frame.
+   *
+   * The ONE place a bottom-left origin appears: gl.scissor measures from the
+   * bottom of the drawing buffer while every coordinate in this codebase
+   * measures from the top (invariant 10). Confining the flip here is what
+   * keeps that invariant true everywhere else.
+   *
+   * Needed because the frame no longer grows to the output edge, so there is
+   * nothing else to crop an overlay that overhangs it — a cursor whose anchor
+   * is just inside the sampled region can still draw its glyph over the
+   * background.
+   *
+   * The scissor box is rectangular and the frame has rounded corners, so an
+   * overlay can still show over a corner's cut. At a 12px radius that is a few
+   * pixels in the extreme corners; accepted rather than masked.
+   */
+  private withFrameClip(
+    quad: { x: number; y: number; w: number; h: number },
+    out: Size,
+    draw: () => void,
+  ): void {
+    const gl = this.gl;
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(
+      Math.floor(quad.x),
+      Math.floor(out.h - (quad.y + quad.h)),
+      Math.ceil(quad.w),
+      Math.ceil(quad.h),
+    );
+    try {
+      draw();
+    } finally {
+      gl.disable(gl.SCISSOR_TEST);
+    }
   }
 
   private setRect(
@@ -347,6 +393,7 @@ export class Renderer {
 
   private drawScreen(
     quad: { x: number; y: number; w: number; h: number },
+    region: SourceRect,
     out: Size,
     src: Size,
     frame: ResolvedFrame,
@@ -358,8 +405,10 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 
-    // Sharpen only where we are actually upscaling past 1:1
-    const sampleScale = quad.w / src.w;
+    // Sharpen only where we are actually upscaling past 1:1. That now depends
+    // on how much of the source is sampled, not on the quad's size — the quad
+    // does not change any more.
+    const sampleScale = quad.w / (src.w * region.w);
     const sharpen = sampleScale > 1 ? Math.min(MAX_SHARPEN, sampleScale - 1) : 0;
 
     gl.useProgram(this.screen.program);
@@ -373,6 +422,12 @@ export class Renderer {
     gl.uniform4f(this.screen.uniforms.u_borderColor ?? null, br, bg2, bb, ba);
     gl.uniform1f(this.screen.uniforms.u_sharpen ?? null, sharpen);
     gl.uniform2f(this.screen.uniforms.u_texel ?? null, 1 / src.w, 1 / src.h);
+    gl.uniform2f(this.screen.uniforms.u_uv0 ?? null, region.x, region.y);
+    gl.uniform2f(
+      this.screen.uniforms.u_uv1 ?? null,
+      region.x + region.w,
+      region.y + region.h,
+    );
 
     this.setRect(this.screen, quad.x, quad.y, quad.w, quad.h, out);
 
@@ -388,6 +443,7 @@ export class Renderer {
   private drawRipples(
     ripples: Ripple[],
     quad: { x: number; y: number; w: number; h: number },
+    region: SourceRect,
     out: Size,
     src: Size,
   ): void {
@@ -400,8 +456,9 @@ export class Renderer {
     gl.useProgram(this.rippleProgram.program);
 
     for (const r of ripples) {
-      const x = quad.x + (r.x / src.w) * quad.w;
-      const y = quad.y + (r.y / src.h) * quad.h;
+      const at = sourceToFrame({ x: r.x / src.w, y: r.y / src.h }, region, quad);
+      if (at === null) continue;
+      const { x, y } = at;
 
       gl.uniform1f(this.rippleProgram.uniforms.u_progress ?? null, r.progress);
       this.setRect(this.rippleProgram, x - size / 2, y - size / 2, size, size, out);
@@ -421,6 +478,7 @@ export class Renderer {
     sample: CursorSample,
     style: CursorStyle,
     quad: { x: number; y: number; w: number; h: number },
+    region: SourceRect,
     out: Size,
     src: Size,
   ): void {
@@ -437,8 +495,9 @@ export class Renderer {
     const pad = padFor(cursorTex.px);
     const dim = cursorTex.px + pad * 2;
 
-    const x = quad.x + (sample.x / src.w) * quad.w;
-    const y = quad.y + (sample.y / src.h) * quad.h;
+    const at = sourceToFrame({ x: sample.x / src.w, y: sample.y / src.h }, region, quad);
+    if (at === null) return;
+    const { x, y } = at;
 
     const hotX = (art.hotspot.x / art.viewBox) * cursorTex.px + pad;
     const hotY = (art.hotspot.y / art.viewBox) * cursorTex.px + pad;

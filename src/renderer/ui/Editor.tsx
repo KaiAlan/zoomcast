@@ -6,7 +6,7 @@ import { outputDurationMs, outputToSource } from "../../shared/project/timeline"
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
 import type { Cut, Project } from "../../shared/project/types";
-import { maxComfortableZoom } from "../../shared/zoom/geometry";
+import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
 import { segmentsToKeyframes } from "../../shared/zoom/keyframes";
@@ -77,7 +77,7 @@ export function Editor({
   );
 
   const ceiling = useMemo(
-    () => maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor),
+    () => pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor),
     [ctx],
   );
 
@@ -383,7 +383,7 @@ export function Editor({
   /**
    * Output changes must re-plan, not just re-render.
    *
-   * `maxComfortableZoom` is derived from the output size, so every keyframe's
+   * `pixelParityZoom` is derived from the output size, so every keyframe's
    * scale belongs to the output it was planned against. Changing the aspect
    * with a bare setProject updated the context, the ceiling and the timeline
    * readout while leaving every keyframe carrying a scale computed for the old
@@ -538,7 +538,7 @@ export function Editor({
           keyframes={project.zoom.keyframes}
           playheadMs={playheadMs}
           playheadRef={playheadElRef}
-          maxComfortableZoom={ceiling}
+          pixelParityZoom={ceiling}
           onSeek={(t) => playerRef.current?.seek(t)}
         />
       </div>

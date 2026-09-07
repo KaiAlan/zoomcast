@@ -24,14 +24,20 @@ export function screenRect(source: Size, output: Size, paddingFactor: number): R
 }
 
 /**
- * The zoom level at which one source pixel maps to one output pixel.
- * Above this the export is upscaling and softens.
+ * The zoom at which one source pixel maps to one frame pixel. Above it the
+ * picture is upscaled and softens.
  *
- * Deriving this rather than hardcoding it means a higher-resolution source
- * lifts the ceiling with no code change: on a 1080p panel it lands near
- * 1.18x, and recording a 4K virtual display makes the same call return 2.35x.
+ * ADVICE, NOT A CAP, since 2026-09-07. It used to be the hard ceiling, which
+ * made the entire zoom range 1/paddingFactor — the factor at which the old
+ * growing frame exactly filled the output — so every zoom landed on it and the
+ * camera had nowhere to go. The cap is now `ZoomConfig.maxZoom`; this number is
+ * what the UI reports so the softening threshold stays visible.
+ *
+ * Deriving it rather than hardcoding it means a higher-resolution source lifts
+ * it with no code change: on a 1080p panel it lands near 1.18x, and recording a
+ * 4K virtual display makes the same call return 2.35x.
  */
-export function maxComfortableZoom(
+export function pixelParityZoom(
   source: Size,
   output: Size,
   paddingFactor: number,
@@ -52,6 +58,6 @@ export function fitScale(c: Cluster, cfg: ZoomConfig, ctx: PlanContext): number 
   return clamp(
     desired,
     1,
-    maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor),
+    pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor),
   );
 }

@@ -1,6 +1,6 @@
 import type { TelemetryEvent } from "../bundle/types";
 import { clusterImpulses, mergeAndFilter } from "./cluster";
-import { fitScale, maxComfortableZoom } from "./geometry";
+import { fitScale, pixelParityZoom } from "./geometry";
 import { applyGuards } from "./guards";
 import { toImpulses } from "./impulses";
 import { scaleToDepth } from "./keyframes";
@@ -52,7 +52,7 @@ export function planZoom(
     });
   }
 
-  const ceiling = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
+  const ceiling = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
 
   return payForTheOpeningMove(applySegmentGuards(segments, cfg), cfg).map((s) => {
     const first = s.waypoints[0];

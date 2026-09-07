@@ -15,7 +15,7 @@ type Props = {
    * still the truth for the readout and for the position at mount.
    */
   playheadRef: RefObject<HTMLDivElement | null>;
-  maxComfortableZoom: number;
+  pixelParityZoom: number;
   onSeek: (tOutputMs: number) => void;
 };
 
@@ -35,7 +35,7 @@ export function Timeline({
   keyframes,
   playheadMs,
   playheadRef,
-  maxComfortableZoom,
+  pixelParityZoom,
   onSeek,
 }: Props) {
   const [scrubbing, setScrubbing] = useState(false);
@@ -101,7 +101,7 @@ export function Timeline({
           if (out === null) return null;
 
           const zoomed = k.scale > 1;
-          const overSharp = k.scale > maxComfortableZoom + 0.001;
+          const overSharp = k.scale > pixelParityZoom + 0.001;
 
           return (
             <div
@@ -149,7 +149,7 @@ export function Timeline({
         <span>{fmt(playheadMs)}</span>
         <span>
           {keyframes.filter((k) => k.scale > 1).length} zooms · {cuts.length} cuts ·
-          ceiling {maxComfortableZoom.toFixed(2)}×
+          ceiling {pixelParityZoom.toFixed(2)}×
         </span>
         <span>{fmt(outputDurationMs)}</span>
       </div>

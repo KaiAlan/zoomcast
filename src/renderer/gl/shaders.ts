@@ -127,16 +127,22 @@ uniform float u_sharpen;
 uniform vec2  u_texel;
 uniform float u_borderPx;
 uniform vec4  u_borderColor;
+uniform vec2  u_uv0;
+uniform vec2  u_uv1;
 out vec4 frag;
 ${SD_ROUND_RECT}
 void main() {
-  vec3 c = texture(u_tex, v_uv).rgb;
+  // The camera: sample this region of the recording across the fixed frame.
+  // v_uv still drives the rounded-rect SDF below, because that is in quad
+  // space and the quad no longer changes.
+  vec2 uv = u_uv0 + v_uv * (u_uv1 - u_uv0);
+  vec3 c = texture(u_tex, uv).rgb;
 
   if (u_sharpen > 0.0) {
-    vec3 blur = texture(u_tex, v_uv + vec2(u_texel.x, 0.0)).rgb
-              + texture(u_tex, v_uv - vec2(u_texel.x, 0.0)).rgb
-              + texture(u_tex, v_uv + vec2(0.0, u_texel.y)).rgb
-              + texture(u_tex, v_uv - vec2(0.0, u_texel.y)).rgb;
+    vec3 blur = texture(u_tex, uv + vec2(u_texel.x, 0.0)).rgb
+              + texture(u_tex, uv - vec2(u_texel.x, 0.0)).rgb
+              + texture(u_tex, uv + vec2(0.0, u_texel.y)).rgb
+              + texture(u_tex, uv - vec2(0.0, u_texel.y)).rgb;
     c = clamp(c + u_sharpen * (c - blur * 0.25), 0.0, 1.0);
   }
 

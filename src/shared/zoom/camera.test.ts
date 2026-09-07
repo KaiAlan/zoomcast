@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TelemetryEvent } from "../bundle/types";
 import { cursorAt } from "../cursor/path";
 import { clampToSource, followPath } from "./camera";
-import { maxComfortableZoom } from "./geometry";
+import { pixelParityZoom } from "./geometry";
 import type { PlanContext } from "./types";
 
 const ctx: PlanContext = {
@@ -77,42 +77,49 @@ describe("followPath", () => {
 
 describe("clampToSource", () => {
   /**
-   * A 1:1 output crops a 16:9 source, so this is where a follow camera has
-   * somewhere to go. `visibleFraction` at scale 1.5 is 0.784, so the centre
-   * lives in [0.392, 0.608].
+   * Every scale above 1 crops now, at every aspect. Before 2026-09-07 nothing
+   * cropped below 1/paddingFactor — which at the native aspect was the ceiling
+   * itself — so the follow camera had nowhere to go and was inert. These tests
+   * used to encode that; they encode the new geometry instead.
    */
-  const square: PlanContext = { ...ctx, output: { w: 1080, h: 1080 } };
-
   it("clamps so the viewport never leaves the source", () => {
-    const { cx } = clampToSource({ cx: 0, cy: 0.5 }, 1.5, square);
-    expect(cx).toBeCloseTo(0.784 / 2, 3);
+    const { cx } = clampToSource({ cx: 0, cy: 0.5 }, 1.6, ctx);
+    expect(cx).toBeCloseTo(1 / 1.6 / 2, 9);
   });
 
   it("leaves a centred viewport alone", () => {
-    expect(clampToSource({ cx: 0.5, cy: 0.5 }, 1.5, square)).toEqual({ cx: 0.5, cy: 0.5 });
+    expect(clampToSource({ cx: 0.5, cy: 0.5 }, 1.6, ctx)).toEqual({ cx: 0.5, cy: 0.5 });
+  });
+
+  /** The camera now has somewhere to go at EVERY aspect, which it did not before. */
+  it("pans at the native aspect", () => {
+    const a = clampToSource({ cx: 0.45, cy: 0.5 }, 1.6, ctx).cx;
+    const b = clampToSource({ cx: 0.5, cy: 0.5 }, 1.6, ctx).cx;
+    expect(b).toBeGreaterThan(a);
+  });
+
+  it("pans at a cropping aspect too", () => {
+    const square: PlanContext = { ...ctx, output: { w: 1080, h: 1080 } };
+    const a = clampToSource({ cx: 0.45, cy: 0.5 }, 1.6, square).cx;
+    const b = clampToSource({ cx: 0.5, cy: 0.5 }, 1.6, square).cx;
+    expect(b).toBeGreaterThan(a);
   });
 
   it("decelerates into an edge rather than sticking at it", () => {
     // Successive approach positions map to successive clamped positions right
     // up to the bound; a clamp that snapped would return the bound for both.
-    const a = clampToSource({ cx: 0.45, cy: 0.5 }, 1.5, square).cx;
-    const b = clampToSource({ cx: 0.5, cy: 0.5 }, 1.5, square).cx;
+    const a = clampToSource({ cx: 0.35, cy: 0.5 }, 1.6, ctx).cx;
+    const b = clampToSource({ cx: 0.4, cy: 0.5 }, 1.6, ctx).cx;
     expect(b).toBeGreaterThan(a);
   });
 
-  /**
-   * At the native aspect nothing is ever cropped — cropping would begin above
-   * 1 / paddingFactor, which is exactly where the ceiling lands. So the clamp
-   * has nothing to say, and a follow camera pans by moving the screen within
-   * the frame rather than by moving a viewport across the source.
-   */
-  it("does not pin the camera when nothing is cropped", () => {
-    const ceiling = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
-    expect(clampToSource({ cx: 0.1, cy: 0.9 }, ceiling, ctx)).toEqual({ cx: 0.1, cy: 0.9 });
-    expect(clampToSource({ cx: 0.1, cy: 0.9 }, 1.05, ctx)).toEqual({ cx: 0.1, cy: 0.9 });
+  it("has nowhere to pan at rest", () => {
+    expect(clampToSource({ cx: 0.1, cy: 0.9 }, 1, ctx)).toEqual({ cx: 0.5, cy: 0.5 });
   });
 
-  it("keeps a centre inside the source even then", () => {
-    expect(clampToSource({ cx: -0.4, cy: 1.9 }, 1.05, ctx)).toEqual({ cx: 0, cy: 1 });
+  it("keeps a centre inside the source", () => {
+    const { cx, cy } = clampToSource({ cx: -0.4, cy: 1.9 }, 1.6, ctx);
+    expect(cx).toBeGreaterThanOrEqual(1 / 1.6 / 2 - 1e-9);
+    expect(cy).toBeLessThanOrEqual(1 - 1 / 1.6 / 2 + 1e-9);
   });
 });

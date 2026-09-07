@@ -1,6 +1,7 @@
 import { buildCursorPath, type CursorPath } from "../cursor/path";
 import type { TelemetryEvent } from "../bundle/types";
-import { clamp, screenRect } from "./geometry";
+import { screenRect } from "./geometry";
+import { sourceRectFor } from "./viewport";
 import type { PlanContext } from "./types";
 
 /**
@@ -44,44 +45,23 @@ export function followPath(
 /**
  * Keep the viewport inside the source.
  *
- * Applied to the SMOOTHED path rather than the raw cursor, so approaching a
- * source edge decelerates the camera instead of sticking it against the wall.
+ * Derived from `sourceRectFor` rather than reimplemented: two copies of this
+ * arithmetic would be free to disagree, and the one the renderer samples with
+ * is the one that decides what is actually on screen. Applied to the SMOOTHED
+ * path rather than the raw cursor, so approaching an edge decelerates the
+ * camera instead of sticking it against the wall.
  *
- * The visible fraction is not 1/scale: the quad is inset by paddingFactor
- * before it is scaled, so at the ceiling — where `screenRect(...).w * scale`
- * equals the output width — the whole source is visible and the only legal
- * centre is the middle. `screenQuad` clamps the same geometry in output space;
- * doing it here as well means the planned keyframes are already sane, so the
- * camera rides that clamp instead of being dragged by it.
+ * Before 2026-09-07 this had a branch for "nothing is cropped at this aspect",
+ * which was true at the native aspect for every legal scale and made the follow
+ * camera inert there. Every scale above 1 crops now, so the branch is gone.
  */
 export function clampToSource(
   centre: { cx: number; cy: number },
   scale: number,
   ctx: PlanContext,
 ): { cx: number; cy: number } {
-  const base = screenRect(ctx.source, ctx.output, ctx.paddingFactor);
+  const frame = screenRect(ctx.source, ctx.output, ctx.paddingFactor);
+  const r = sourceRectFor({ scale, cx: centre.cx, cy: centre.cy }, frame, ctx.source);
 
-  return {
-    cx: clampAxis(centre.cx, ctx.output.w / (base.w * scale)),
-    cy: clampAxis(centre.cy, ctx.output.h / (base.h * scale)),
-  };
-}
-
-/**
- * The bound binds only while something is actually cropped.
- *
- * At the native output aspect nothing ever is: cropping would start above
- * `1 / paddingFactor`, which is exactly where `maxComfortableZoom` lands when
- * output matches source, so the whole source is on screen at every legal scale
- * and every centre is legal. Forcing 0.5 there would pin a follow camera to
- * the middle and make it inert. Cropping — and therefore panning freedom —
- * exists when the output crops the source: 1:1, 4:5, or an export smaller than
- * the capture. Below that threshold `screenQuad`'s own clamp is what keeps the
- * composition nested, and it is continuous.
- */
-function clampAxis(v: number, visibleFraction: number): number {
-  if (visibleFraction >= 1) return clamp(v, 0, 1);
-
-  const half = visibleFraction / 2;
-  return clamp(v, half, 1 - half);
+  return { cx: r.x + r.w / 2, cy: r.y + r.h / 2 };
 }

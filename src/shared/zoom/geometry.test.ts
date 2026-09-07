@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
-import { fitScale, maxComfortableZoom, screenRect } from "./geometry";
+import { fitScale, pixelParityZoom, screenRect } from "./geometry";
 import type { Cluster, PlanContext } from "./types";
 
 const HD = { w: 1920, h: 1080 };
@@ -22,17 +22,17 @@ describe("screenRect", () => {
   });
 });
 
-describe("maxComfortableZoom", () => {
+describe("pixelParityZoom", () => {
   it("gives ~1.18x of free zoom on a 1080p source", () => {
-    expect(maxComfortableZoom(HD, HD, 0.85)).toBeCloseTo(1.176, 3);
+    expect(pixelParityZoom(HD, HD, 0.85)).toBeCloseTo(1.176, 3);
   });
 
   it("doubles when the source is 4K", () => {
-    expect(maxComfortableZoom(UHD, HD, 0.85)).toBeCloseTo(2.353, 3);
+    expect(pixelParityZoom(UHD, HD, 0.85)).toBeCloseTo(2.353, 3);
   });
 
   it("is exactly 1 with no padding on a matched source", () => {
-    expect(maxComfortableZoom(HD, HD, 1)).toBeCloseTo(1, 6);
+    expect(pixelParityZoom(HD, HD, 1)).toBeCloseTo(1, 6);
   });
 });
 
