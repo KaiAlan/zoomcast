@@ -1,15 +1,18 @@
 # zoomcast — handover
 
-Updated 2026-09-07. **Phases 0–7, A, B and C complete; C is on
-`feat/phase-c-camera`, unmerged.** The tool records your screen, mic and system
+Updated 2026-09-07. **Phases 0–7, A, B and C complete, plus the camera
+geometry and depth rework; all on `feat/phase-c-camera`, unmerged.** The tool records your screen, mic and system
 audio, plans zooms from real input telemetry, drives a camera that opens at
 rest and can follow the cursor, draws a synthetic cursor with real shapes and
 click ripples, composes the frame over a procedural or custom background, lets
 you cut and scrub, and exports a finished MP4 at a chosen aspect and
 resolution.
 
-**One decision is open and it needs your eyes:** which transition curve becomes
-the default. See "The camera (phase C)" below.
+**Zoom means something different now.** The frame no longer grows: it is fixed,
+and zoom samples a smaller region of the recording inside it, so the camera
+genuinely crops toward the pointer and the composition survives being zoomed
+in. Read "The camera" below before touching any of it, and
+`docs/specs/2026-09-07-camera-geometry-and-depth-design.md` for why.
 
 Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
 tracked as phases C–F in
@@ -111,6 +114,7 @@ answered.
 | Phase | Deliverable | Depends on |
 | --- | --- | --- |
 | C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance — **done** | A, B |
+| C+ | Camera geometry (fixed frame, sampled region), configurable ceiling, depth grading — **done**, spec `2026-09-07-camera-geometry-and-depth-design.md` | C |
 | D | Directional motion blur | C |
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
@@ -302,14 +306,12 @@ Things worth knowing before touching it:
   composes exactly only while the target is constant. The property parity
   actually needs — one precomputed array read at any rate — does hold, and is
   the test that guards it.
-- **Follow only has somewhere to go when the output crops the source.** Cropping
-  begins above `1 / paddingFactor`, which is exactly where `maxComfortableZoom`
-  lands when output matches source, so at the native aspect the whole source is
-  on screen at every legal scale. At 1:1, 4:5 or a downscaled export it crops
-  and the camera pans. This is a consequence of decision 1 (the ceiling stays
-  where it is), not a bug — but it means **follow does nothing at the native
-  aspect**, and `clampToSource` deliberately does not force the centre to 0.5
-  there, or it would pin the camera and make follow inert everywhere.
+- **Follow works at every aspect now.** It used to be inert at 16:9: nothing
+  cropped below `1 / paddingFactor`, which was exactly where the ceiling landed,
+  so the camera had no viewport to move. Every scale above 1 crops since the
+  geometry rework, so `cx`/`cy` matter everywhere and `clampToSource` is a
+  two-line derivation of `sourceRectFor` rather than its own copy of the
+  arithmetic.
 - **Follow is opt-in and the planner never emits it.** It survives the re-plan
   the editor runs on load only because `replanSegments` keeps pinned and manual
   segments, which is spec §6's contract one level up from `replan`.
@@ -323,7 +325,71 @@ turning it on. **There is no control for `position: "follow"` yet** — a segmen
 becomes a follow segment only by being written into `project.json`. That
 control belongs to phase E, which owns segment editing.
 
-### The transition curve — one decision is open
+### Zoom is a camera now, not a scale
+
+Until 2026-09-07 zoom meant "grow the screen rectangle until the output frame
+crops it". Two things followed, both visible in the export of that morning:
+the entire zoom range was 1.0–1.176x — exactly the padding — and at the top of
+it the quad covered the output, so `cx`/`cy` clamped to dead centre and the
+camera had no freedom at all. Hence "it feels like the screen is being scaled".
+
+The frame is now fixed and the **sampled source region is the camera**.
+
+| Piece | Where |
+| --- | --- |
+| `sourceRectFor(zoom, frame, source)` | `src/shared/zoom/viewport.ts` — the camera and its clamp |
+| `sourceToFrame(p, rect, frame)` | same file — the ONE mapping, used by screen, cursor and ripples |
+| `screenQuad(source, output, padding)` | `src/renderer/gl/layout.ts` — the fixed frame; **no zoom argument any more** |
+| `zoomDepth(inputs, cfg)` | `src/shared/zoom/depth.ts` — how deep, from intent and spread |
+
+Things worth knowing before touching it:
+
+- **In `src/shared/`, not the renderer, deliberately.** The spec put the
+  geometry in `layout.ts`; `clampToSource` lives in shared and cannot import
+  from renderer, so that would have forced a second copy of the clamp. One
+  implementation, and `clampToSource` derives from it.
+- **`sourceToFrame` returns `null` when a point is off screen**, and the cursor
+  and ripple passes skip it. They also need `withFrameClip`, because the frame
+  no longer reaches the output edge and nothing else would crop an overlay
+  overhanging it. That helper is the ONE place a bottom-left origin appears —
+  `gl.scissor` measures from the bottom while everything else here measures
+  from the top. The scissor box is rectangular and the frame has rounded
+  corners, so an overlay can still show over a corner cut; accepted, not masked.
+- **The ceiling is a sharpness choice.** `maxZoom` defaults to 1.6. Because the
+  frame is inset by `paddingFactor`, that upscales the source by 1.36x, not
+  1.6x — checked on a 1:1 crop of a real export, where text stays readable with
+  the existing sharpen pass. `pixelParityZoom` is where upscaling starts and is
+  reported in the timeline as "sharp to".
+- **Raising the ceiling alone changes nothing.** `fitScale` carried its own
+  clamp at pixel parity, and that is the one that binds — a single click has
+  bounds of zero and asks for ~12x. Deleted now, but the lesson generalises:
+  if a depth change has no effect, look for a second cap.
+- **Depth grading: intent sets the base, spread only pulls back.** Measured, not
+  stylistic: of 54 clusters that earn a zoom across every take on disk, 29 have
+  zero spatial spread and 38 are under 200px. There is nothing to grade on for
+  most zooms, so intent has to carry it. `contextFraction` is 0.8, chosen
+  because 0.6 and 0.8 drop the same single zoom on real footage while 0.6 also
+  rejects anything spanning 0.625 of the screen — which is the shape of the
+  test fixture, and would have stopped four of parity's five configs exercising
+  the zoom path at all.
+- **`Impulse.kind` is not `Impulse.w`.** The weight gates `minWeight`, which
+  decides whether a cluster earns a zoom AT ALL; the intent weights decide how
+  deep it goes. They are separate config so tuning depth cannot silently change
+  how many zooms there are.
+- **Target size is a seam, not a dependency.** `DepthInputs.targetSize` is
+  optional and absent, and absent means "no constraint", never "size zero".
+  Getting real element bounds needs UI Automation over COM or CV on the frame;
+  spec §8 has the analysis. Judge the exports first.
+
+### What is NOT fixed by this
+
+**The preview decode cost is unchanged.** Advancing one source frame still
+decodes from the nearest keyframe — GOP is 30, so ~15 frames on average. Three
+watchable improvements landed here; a fourth did not. If the preview still
+stutters, that is why, and a stateful incremental decoder for sequential
+playback is the fix.
+
+### The transition curve
 
 The measured signature of the old curve, `zoomEase` = `cubicBezier(0.33, 0,
 0.1, 1)`: 61% of the motion in the first third, 6% in the last, peak velocity
@@ -337,24 +403,29 @@ slower.
 
 | variant | halfway | 95% done | drifting tail | peak speed |
 | --- | --- | --- | --- | --- |
-| ease 600ms (current default) | 172ms | 416ms | 184ms | 5.29×/s |
+| ease 600ms (old default) | 172ms | 416ms | 184ms | 5.29×/s |
 | glide 600ms | 300ms | 513ms | 87ms | 2.88×/s |
 | glide 900ms | 450ms | 770ms | 130ms | 1.92×/s |
 
 Both are pickable in the inspector, next to the transition duration that was
-already there. **The default is still `zoomEase`**, because which one is right
-is a watching decision and nobody has watched them yet. Renders of the same two
-takes under all three variants are in `tmp/curves/<take>/<variant>/`, built by
-`tmp/render-curves.ts` (throwaway; `tmp/` is gitignored). Pick one and change
-`DEFAULT_ZOOM_CONFIG`.
+already there. **`zoomGlide` is the default since 2026-09-07**, chosen after
+watching an export: the complaint was an abrupt start and a floaty tail, which
+is zoomEase's measured shape. One line in `DEFAULT_ZOOM_CONFIG` reverts it.
+Renders under all three variants are in `tmp/curves/<take>/<variant>/`, built by
+`tmp/render-curves.ts` (throwaway; `tmp/` is gitignored).
 
 ### Is "floaty and laggy" fixed?
 
-Three causes; two are addressed here and one is not.
+Four causes now — the fourth was found by watching an export rather than
+reasoning about the complaint. Three are addressed; one is not.
 
-1. **The drifting tail** — addressed, pending the default above. The curve
-   exists, is measured, and is one line of config away from being the default.
-2. **The preview stutter** — improved, not measured. The playhead no longer
+1. **The drifting tail** — addressed. `zoomGlide` is the default.
+2. **The zoom itself did nothing** — this turned out to be the big one, and it
+   was not on the original list. The whole zoom range was the 15% padding, and
+   at the top of it the camera was mathematically pinned to centre. Fixed by
+   the geometry rework above: the camera now crops toward the pointer, up to a
+   configurable 1.6x, at a depth that varies with what you were doing.
+3. **The preview stutter** — improved, not measured. The playhead no longer
    re-renders the editor 60 times a second, and the decode for the next source
    frame now happens in the gap after a draw instead of on the critical path.
    What did NOT change is the cost of that decode: every seek decodes forward
@@ -363,7 +434,7 @@ Three causes; two are addressed here and one is not.
    sequential playback is the real fix and is not in this phase. **No preview
    frame-rate harness exists**, so "smoother" here is a design argument, not a
    measurement — the honest next step is to build one before claiming it.
-3. **The source frame rate** — not fixable in software, and must not be
+4. **The source frame rate** — not fixable in software, and must not be
    reported as fixed. Measured with `ffprobe -count_frames` over all twelve
    takes on disk: the 2026-09-05 takes ran at 11.6–21.7fps, and the takes after
    the capture-rate work at 27.1–30.2fps. Real 60fps needs `ddagrab`.
@@ -447,12 +518,14 @@ Each of these cost real time; none is hypothetical.
 
 **Zoom planning**
 
-- **On a 1080p source into a 1080p output every zoom is exactly 1.176x.**
-  `maxComfortableZoom` is `source.w / (output.w * paddingFactor)` = 1/0.85, and
-  any cluster tighter than ~1630px wants more than that, so it clamps. This
-  means `marginPx` and `clusterRadiusPx` do nothing to zoom DEPTH at this
-  resolution — only timing is tunable. Recording a higher-resolution source is
-  the only way to get a deeper zoom.
+- **Zoom depth is graded, and the ceiling is a setting.** Until 2026-09-07
+  every zoom in every take was exactly 1.176x: the cap was
+  `source.w / (output.w * paddingFactor)` and a single click asks for ~12x, so
+  everything clamped. Depth now comes from `zoomDepth` in `depth.ts` — intent
+  sets a base (`click` 1.55, `type` 1.35, `scroll` 1.15) and spread only ever
+  pulls it back — and the cap is `ZoomConfig.maxZoom`, default 1.6.
+  `pixelParityZoom` is where upscaling begins, reported in the timeline as
+  "sharp to", and is no longer a cap.
 - **`maxZoomsPerMinute` is a backstop, not a pacing dial.** Turning it down
   makes the result worse: it deletes the clusters that would otherwise have
   merged into one travelling shot, leaving isolated zooms and long flat
@@ -500,9 +573,14 @@ Each of these cost real time; none is hypothetical.
   The continuity properties in `layout.test.ts` are what hold it closed: they
   sweep the scale and bound the per-step movement, because pinned positions
   pass happily against a curve that jumps between the pinned points.
-- **At the zoom ceiling the composition is exactly invisible.** `1/0.85` is both
-  the ceiling and the scale at which the screen fills the padded frame, so a
-  zoomed-in take shows no background, no border and no shadow. That is a design
+- **FIXED 2026-09-07: at the zoom ceiling the composition used to be exactly
+  invisible.** `1/0.85` was both the ceiling and the scale at which the screen
+  filled the padded frame, so a zoomed-in take showed no background, no border
+  and no shadow — and worse, the quad covered the output, so `cx`/`cy` clamped
+  to dead centre and the camera was inert exactly when the zoom was deepest.
+  That is why the result read as the screen being scaled rather than a camera
+  moving. The frame is fixed now and the sampled region is the camera. The
+  original note read: that is a design
   question for phase C, not a bug — but it means judging the compositor on a
   zoomed take tells you nothing.
 - **A keyframe at `t = 0` cannot be eased into**, since its transition would
