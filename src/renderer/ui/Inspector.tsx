@@ -3,8 +3,9 @@ import type {
   OutputConfig,
   StyleConfig,
 } from "../../shared/project/types";
+import { DEFAULT_ZOOM_CONFIG } from "../../shared/zoom/config";
 import type { EasingName, ZoomConfig } from "../../shared/zoom/types";
-import { fieldLabel, numberInput, row, sectionHeader, selectInput } from "./controls";
+import { buttonInput, fieldLabel, numberInput, row, sectionHeader, selectInput } from "./controls";
 import { StylePanel } from "./StylePanel";
 
 type Props = {
@@ -19,21 +20,31 @@ type Props = {
   onOutputChange: (next: OutputConfig) => void;
 };
 
-/** The knobs worth reaching for while tuning; the rest live in project.json. */
-const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number }> = [
-  { key: "minHoldMs", label: "min hold (ms)", step: 100 },
-  { key: "minDwellMs", label: "min dwell (ms)", step: 100 },
-  { key: "minRecoveryMs", label: "min recovery (ms)", step: 50 },
-  { key: "deadzonePx", label: "deadzone (px)", step: 10 },
-  { key: "maxZoomsPerMinute", label: "max zooms / min", step: 1 },
-  { key: "clusterRadiusPx", label: "cluster radius (px)", step: 10 },
-  { key: "clusterWindowMs", label: "cluster window (ms)", step: 100 },
-  { key: "minGapMs", label: "min gap (ms)", step: 50 },
-  { key: "minWeight", label: "min weight", step: 0.1 },
-  { key: "marginPx", label: "margin (px)", step: 10 },
-  { key: "leadInMs", label: "lead in (ms)", step: 50 },
-  { key: "trailMs", label: "trail (ms)", step: 50 },
-  { key: "transitionMs", label: "transition (ms)", step: 50 },
+/**
+ * The knobs worth reaching for while tuning; the rest live in project.json.
+ *
+ * Every one carries a floor, because these are number inputs and a typo is
+ * silent. A negative `clusterWindowMs` makes `impulse.t - cluster.endT <= win`
+ * unsatisfiable — time only moves forward — so clustering switches off
+ * entirely and every click becomes its own zoom. That happened, and from the
+ * panel it looks like any other value.
+ */
+const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: number }> = [
+  { key: "minHoldMs", label: "min hold (ms)", step: 100, min: 0 },
+  { key: "minDwellMs", label: "min dwell (ms)", step: 100, min: 0 },
+  { key: "minRecoveryMs", label: "min recovery (ms)", step: 50, min: 0 },
+  { key: "deadzonePx", label: "deadzone (px)", step: 10, min: 0 },
+  // One zoom a minute at least, or the budget deletes every cluster.
+  { key: "maxZoomsPerMinute", label: "max zooms / min", step: 1, min: 1 },
+  { key: "clusterRadiusPx", label: "cluster radius (px)", step: 10, min: 1 },
+  { key: "clusterWindowMs", label: "cluster window (ms)", step: 100, min: 0 },
+  { key: "minGapMs", label: "min gap (ms)", step: 50, min: 0 },
+  { key: "minWeight", label: "min weight", step: 0.1, min: 0 },
+  { key: "marginPx", label: "margin (px)", step: 10, min: 0 },
+  { key: "leadInMs", label: "lead in (ms)", step: 50, min: 0 },
+  { key: "trailMs", label: "trail (ms)", step: 50, min: 0 },
+  // Below ~100ms a "transition" is a cut, and the dwell floor is twice this.
+  { key: "transitionMs", label: "transition (ms)", step: 50, min: 100 },
 ];
 
 /**
@@ -57,21 +68,50 @@ export function Inspector({
   onStyleChange,
   onOutputChange,
 }: Props) {
+  const isTuned = FIELDS.every((f) => config[f.key] === DEFAULT_ZOOM_CONFIG[f.key]) &&
+    config.easing === DEFAULT_ZOOM_CONFIG.easing;
+
   return (
     <div>
-      <div style={sectionHeader}>zoom planner</div>
+      <div
+        style={{
+          ...sectionHeader,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <span>zoom planner</span>
+        <button
+          type="button"
+          style={{ ...buttonInput, padding: "2px 8px", fontSize: 11 }}
+          disabled={isTuned}
+          title={
+            isTuned
+              ? "already at the tuned defaults"
+              : "restore the defaults tuned against real footage"
+          }
+          onClick={() => onChange({ ...DEFAULT_ZOOM_CONFIG })}
+        >
+          {isTuned ? "tuned" : "reset"}
+        </button>
+      </div>
 
-      {FIELDS.map(({ key, label, step }) => (
+      {FIELDS.map(({ key, label, step, min }) => (
         <label key={key} style={row}>
           <span style={fieldLabel}>{label}</span>
           <input
             type="number"
             step={step}
+            min={min}
             value={config[key] as number}
             onChange={(e) => {
               const value = Number(e.target.value);
               if (Number.isNaN(value)) return;
-              onChange({ ...config, [key]: value });
+              // Clamped on the way in, not just declared on the input: the
+              // min attribute makes the field look invalid but still fires
+              // onChange with the bad value.
+              onChange({ ...config, [key]: Math.max(min, value) });
             }}
             style={numberInput}
           />

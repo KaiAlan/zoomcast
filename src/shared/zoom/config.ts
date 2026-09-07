@@ -24,5 +24,12 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   leadInMs: 250,
   trailMs: 400,
   transitionMs: 600,
-  easing: "zoomEase",
+  /**
+   * Judged on an exported take, 2026-09-07, not by reasoning: zoomEase puts
+   * 61% of the motion in the first third and then drifts for 184ms, which
+   * reads as an abrupt start followed by a floaty tail. zoomGlide is
+   * 23/50/23 across the thirds at half the peak speed. Both stay pickable in
+   * the inspector; this line is the only thing that makes one the default.
+   */
+  easing: "zoomGlide",
 };
