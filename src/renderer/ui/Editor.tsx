@@ -278,7 +278,7 @@ export function Editor({
       const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
       const next = {
         ...withConfig,
-        zoom: { config, keyframes: applyPlan(config, withConfig) },
+        zoom: { ...withConfig.zoom, config, keyframes: applyPlan(config, withConfig) },
       };
       live.current = { ...live.current, project: next };
       return next;

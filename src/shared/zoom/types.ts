@@ -64,6 +64,29 @@ export type ZoomKeyframe = {
   pinned: boolean;
 };
 
+/**
+ * The persisted, editable unit. Keyframes remain the render-time
+ * representation, derived from these; segments are what the planner emits, the
+ * timeline draws and the user edits.
+ */
+export type ZoomSegment = {
+  id: string;
+  startMs: number;
+  endMs: number;
+  /** Follow is opt-in: the planner always emits "fixed". */
+  position: "follow" | "fixed";
+  /**
+   * 0..1, mapped onto the derived zoom ceiling rather than an absolute scale.
+   * The ceiling derives from the output size, so a stored absolute scale would
+   * be wrong the moment the aspect changes.
+   */
+  depth: number;
+  cx: number;
+  cy: number;
+  origin: "auto" | "manual";
+  pinned: boolean;
+};
+
 export type Size = { w: number; h: number };
 
 export type PlanContext = {

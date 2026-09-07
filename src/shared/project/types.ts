@@ -1,4 +1,4 @@
-import type { ZoomConfig, ZoomKeyframe } from "../zoom/types";
+import type { ZoomConfig, ZoomKeyframe, ZoomSegment } from "../zoom/types";
 
 export type Cut = { startMs: number; endMs: number };
 
@@ -72,7 +72,12 @@ export type Project = {
   version: 1;
   bundleId: string;
   cuts: Cut[];
-  zoom: { config: ZoomConfig; keyframes: ZoomKeyframe[] };
+  zoom: {
+    config: ZoomConfig;
+    /** The persisted, editable unit; keyframes are derived from these. */
+    segments: ZoomSegment[];
+    keyframes: ZoomKeyframe[];
+  };
   style: StyleConfig;
   webcam: WebcamConfig;
   audio: { micGainDb: number; systemGainDb: number; syncNudgeMs: number };

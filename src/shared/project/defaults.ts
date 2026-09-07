@@ -6,7 +6,7 @@ export function defaultProject(bundleId: string): Project {
     version: 1,
     bundleId,
     cuts: [],
-    zoom: { config: { ...DEFAULT_ZOOM_CONFIG }, keyframes: [] },
+    zoom: { config: { ...DEFAULT_ZOOM_CONFIG }, segments: [], keyframes: [] },
     style: {
       paddingFactor: 0.85,
       frame: {

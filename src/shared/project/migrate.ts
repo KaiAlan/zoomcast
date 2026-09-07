@@ -96,6 +96,12 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
       config: isRecord(zoom.config)
         ? { ...base.zoom.config, ...(zoom.config as Partial<Project["zoom"]["config"]>) }
         : base.zoom.config,
+      // A project written before phase C has keyframes but no segments. It
+      // normalises to an empty list rather than losing the field; the editor
+      // re-plans on load anyway.
+      segments: Array.isArray(zoom.segments)
+        ? (zoom.segments as Project["zoom"]["segments"])
+        : base.zoom.segments,
       keyframes: Array.isArray(zoom.keyframes)
         ? (zoom.keyframes as Project["zoom"]["keyframes"])
         : base.zoom.keyframes,
