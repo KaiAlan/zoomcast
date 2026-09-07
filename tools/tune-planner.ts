@@ -25,6 +25,7 @@ import { clusterImpulses, mergeAndFilter } from "../src/shared/zoom/cluster";
 import { DEFAULT_ZOOM_CONFIG } from "../src/shared/zoom/config";
 import { applyGuards } from "../src/shared/zoom/guards";
 import { toImpulses } from "../src/shared/zoom/impulses";
+import { segmentsToKeyframes } from "../src/shared/zoom/keyframes";
 import { planZoom } from "../src/shared/zoom/planner";
 import type { PlanContext, ZoomConfig, ZoomKeyframe } from "../src/shared/zoom/types";
 
@@ -195,7 +196,7 @@ function funnel(take: Take, cfg: ZoomConfig): Record<string, number> {
   const clustered = clusterImpulses(imps, cfg);
   const merged = mergeAndFilter(clustered, cfg);
   const guarded = applyGuards(merged, cfg, take.durationMs);
-  const planned = toZooms(planZoom(take.events, cfg, take.ctx));
+  const planned = toZooms(segmentsToKeyframes(planZoom(take.events, cfg, take.ctx), cfg, take.ctx));
 
   return {
     impulses: imps.length,
@@ -211,7 +212,7 @@ function fmt(n: number, d = 1): string {
 }
 
 function reportTake(take: Take, cfg: ZoomConfig, detail: boolean): void {
-  const zooms = toZooms(planZoom(take.events, cfg, take.ctx));
+  const zooms = toZooms(segmentsToKeyframes(planZoom(take.events, cfg, take.ctx), cfg, take.ctx));
   const m = metrics(zooms, take);
 
   console.log(
@@ -269,7 +270,7 @@ function compare(takes: Take[]): void {
     console.table(
       VARIANTS.map(({ name, patch }) => {
         const cfg = { ...DEFAULT_ZOOM_CONFIG, ...patch };
-        const m = metrics(toZooms(planZoom(take.events, cfg, take.ctx)), take);
+        const m = metrics(toZooms(segmentsToKeyframes(planZoom(take.events, cfg, take.ctx), cfg, take.ctx)), take);
         return {
           variant: name,
           zooms: m.zooms,

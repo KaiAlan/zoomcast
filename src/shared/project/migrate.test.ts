@@ -205,7 +205,8 @@ it("gives a pre-phase-C project an empty segment list", () => {
 it("keeps stored segments", () => {
   const seg = {
     id: "s1", startMs: 0, endMs: 1000, position: "fixed",
-    depth: 0.5, cx: 0.5, cy: 0.5, origin: "auto", pinned: false,
+    waypoints: [{ id: "w1", tMs: 0, depth: 0.5, cx: 0.5, cy: 0.5 }],
+    origin: "auto", pinned: false,
   };
   expect(normalizeProject({ zoom: { segments: [seg] } }, "b").zoom.segments).toEqual([seg]);
 });

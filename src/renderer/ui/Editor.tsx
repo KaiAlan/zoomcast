@@ -8,6 +8,7 @@ import { bundleAssetUrl } from "../media/assetUrl";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
+import { segmentsToKeyframes } from "../../shared/zoom/keyframes";
 import { planZoom } from "../../shared/zoom/planner";
 import { replan } from "../../shared/zoom/replan";
 import type { PlanContext, ZoomConfig } from "../../shared/zoom/types";
@@ -108,7 +109,7 @@ export function Editor({
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
     (config: ZoomConfig, existing: Project) => {
-      const generated = planZoom(bundle.telemetry, config, {
+      const planCtx = {
         source: { w: manifest.video.width, h: manifest.video.height },
         // The zoom ceiling derives from the output size, so a re-plan after an
         // aspect change must see the new shape or it plans for the old one.
@@ -118,9 +119,17 @@ export function Editor({
         }),
         paddingFactor: existing.style.paddingFactor,
         durationMs: manifest.durationMs,
-      });
+      };
 
-      return replan(existing.zoom.keyframes, generated);
+      const segments = planZoom(bundle.telemetry, config, planCtx);
+
+      return {
+        segments,
+        keyframes: replan(
+          existing.zoom.keyframes,
+          segmentsToKeyframes(segments, config, planCtx),
+        ),
+      };
     },
     [
       bundle.telemetry,
@@ -186,7 +195,7 @@ export function Editor({
         setProject((prev) => {
           const next = {
             ...prev,
-            zoom: { ...prev.zoom, keyframes: applyPlan(prev.zoom.config, prev) },
+            zoom: { ...prev.zoom, ...applyPlan(prev.zoom.config, prev) },
           };
           live.current = { ...live.current, project: next };
           return next;
@@ -278,7 +287,7 @@ export function Editor({
       const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
       const next = {
         ...withConfig,
-        zoom: { ...withConfig.zoom, config, keyframes: applyPlan(config, withConfig) },
+        zoom: { ...withConfig.zoom, config, ...applyPlan(config, withConfig) },
       };
       live.current = { ...live.current, project: next };
       return next;
@@ -305,7 +314,7 @@ export function Editor({
         ...withOutput,
         zoom: {
           ...withOutput.zoom,
-          keyframes: applyPlan(withOutput.zoom.config, withOutput),
+          ...applyPlan(withOutput.zoom.config, withOutput),
         },
       };
       live.current = { ...live.current, project: next };

@@ -163,16 +163,32 @@ pacing guards were added. It is currently an internal stage between clusters and
 keyframes. It gets promoted to the persisted, editable unit:
 
 ```ts
+type ZoomWaypoint = {
+  id: string;
+  tMs: number;                  // source time
+  depth: number;                // 0..1, mapped onto the derived zoom ceiling
+  cx: number;                   // 0..1 of source width
+  cy: number;
+};
+
 type ZoomSegment = {
   id: string;
   startMs: number;              // source time
   endMs: number;
   position: "follow" | "fixed";
-  depth: number;                // 0..1, mapped onto the derived zoom ceiling
+  waypoints: ZoomWaypoint[];    // 1 = an ordinary zoom; several = travelling
   origin: "auto" | "manual";
   pinned: boolean;
 };
 ```
+
+A segment holds its waypoints rather than being a single point. `applySegmentGuards`
+merges two zooms less than `minRecoveryMs` apart into one segment that stays in
+and pans, because pulling out and straight back in reads as a flinch; five of
+the ten takes recorded so far contain such a segment, one with three waypoints.
+Splitting them into separate persisted segments would make "stay in" emerge
+from two segments' times being exactly equal, and a single drag in §11's
+timeline would reintroduce the flinch the guard exists to prevent.
 
 Keyframes remain the render-time representation; segments are what the planner
 emits, the timeline draws and the user edits. `replan()` keeps its existing

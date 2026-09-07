@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseTelemetry } from "../bundle/telemetry";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
+import { segmentsToKeyframes } from "./keyframes";
 import { planZoom } from "./planner";
 import type { PlanContext } from "./types";
 
@@ -13,13 +14,25 @@ const ctx: PlanContext = {
   durationMs: 60_000,
 };
 
+/**
+ * planZoom emits segments; every assertion here is about what they render as,
+ * so derive the keyframes at the call.
+ */
+function plan(
+  events: Parameters<typeof planZoom>[0],
+  cfg: Parameters<typeof planZoom>[1],
+  c: PlanContext,
+): ReturnType<typeof segmentsToKeyframes> {
+  return segmentsToKeyframes(planZoom(events, cfg, c), cfg, c);
+}
+
 describe("planZoom", () => {
   it("returns nothing for empty telemetry", () => {
-    expect(planZoom([], DEFAULT_ZOOM_CONFIG, ctx)).toEqual([]);
+    expect(plan([], DEFAULT_ZOOM_CONFIG, ctx)).toEqual([]);
   });
 
   it("emits an in/out keyframe pair per surviving cluster", () => {
-    const kfs = planZoom(
+    const kfs = plan(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
@@ -30,7 +43,7 @@ describe("planZoom", () => {
   });
 
   it("leads the zoom in", () => {
-    const kfs = planZoom(
+    const kfs = plan(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
@@ -41,7 +54,7 @@ describe("planZoom", () => {
   it("holds a lone click for minDwellMs rather than just trailMs", () => {
     // trailMs alone would end this at 1400 — a 650ms hold against 1200ms of
     // transition, which is a twitch, not a shot.
-    const kfs = planZoom(
+    const kfs = plan(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
@@ -53,7 +66,7 @@ describe("planZoom", () => {
     // A long cluster at 500,500 then a separate one 1000px away, close enough
     // that trailMs and leadInMs would otherwise collide. This is the shape the
     // real 35s take produces at 25.8s.
-    const kfs = planZoom(
+    const kfs = plan(
       [
         { t: 1000, k: "down", x: 500, y: 500, b: 1 },
         { t: 2500, k: "down", x: 500, y: 500, b: 1 },
@@ -77,7 +90,7 @@ describe("planZoom", () => {
       { t: 5000, k: "down" as const, x: 1500, y: 900, b: 1 },
       { t: 9000, k: "down" as const, x: 300, y: 200, b: 1 },
     ];
-    const kfs = planZoom(events, DEFAULT_ZOOM_CONFIG, ctx);
+    const kfs = plan(events, DEFAULT_ZOOM_CONFIG, ctx);
 
     for (let i = 0; i < kfs.length - 1; i++) {
       const k = kfs[i];
@@ -92,7 +105,7 @@ describe("planZoom", () => {
   });
 
   it("never leads in before zero", () => {
-    const kfs = planZoom(
+    const kfs = plan(
       [{ t: 10, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
@@ -101,7 +114,7 @@ describe("planZoom", () => {
   });
 
   it("normalises the focus point to 0..1 of the source", () => {
-    const kfs = planZoom(
+    const kfs = plan(
       [{ t: 1000, k: "down", x: 960, y: 540, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
@@ -111,7 +124,7 @@ describe("planZoom", () => {
   });
 
   it("never exceeds the comfortable zoom ceiling for the source", () => {
-    const kfs = planZoom(
+    const kfs = plan(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
@@ -123,15 +136,15 @@ describe("planZoom", () => {
 
   it("marks generated keyframes as auto and unpinned with stable ids", () => {
     const events = [{ t: 1000, k: "down" as const, x: 500, y: 400, b: 1 }];
-    const a = planZoom(events, DEFAULT_ZOOM_CONFIG, ctx);
-    const b = planZoom(events, DEFAULT_ZOOM_CONFIG, ctx);
+    const a = plan(events, DEFAULT_ZOOM_CONFIG, ctx);
+    const b = plan(events, DEFAULT_ZOOM_CONFIG, ctx);
     expect(a[0]?.origin).toBe("auto");
     expect(a[0]?.pinned).toBe(false);
     expect(a.map((k) => k.id)).toEqual(b.map((k) => k.id));
   });
 
   describe("over the basic fixture", () => {
-    const kfs = planZoom(
+    const kfs = plan(
       parseTelemetry(
         readFileSync(
           join(process.cwd(), "tests", "fixtures", "basic", "input.jsonl"),

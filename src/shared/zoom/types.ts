@@ -65,9 +65,33 @@ export type ZoomKeyframe = {
 };
 
 /**
+ * One focus point the camera visits without pulling back out.
+ *
+ * `depth` is 0..1 against the derived ceiling rather than an absolute scale:
+ * the ceiling comes from the output size, so a stored scale would be wrong the
+ * moment the aspect changes.
+ */
+export type ZoomWaypoint = {
+  id: string;
+  tMs: number;
+  depth: number;
+  cx: number;
+  cy: number;
+};
+
+/**
  * The persisted, editable unit. Keyframes remain the render-time
  * representation, derived from these; segments are what the planner emits, the
  * timeline draws and the user edits.
+ *
+ * A segment holds its waypoints rather than being one point, because the
+ * pacing guards merge two zooms less than `minRecoveryMs` apart into ONE
+ * segment that stays in and pans — pulling out and straight back in reads as a
+ * flinch. Five of the ten takes on this machine contain such a segment, one of
+ * them with three waypoints. Splitting them into separate persisted segments
+ * would make "stay in" an emergent property of two segments' times being
+ * exactly equal, and one drag in the phase E timeline would reintroduce the
+ * flinch the guard exists to prevent.
  */
 export type ZoomSegment = {
   id: string;
@@ -75,14 +99,8 @@ export type ZoomSegment = {
   endMs: number;
   /** Follow is opt-in: the planner always emits "fixed". */
   position: "follow" | "fixed";
-  /**
-   * 0..1, mapped onto the derived zoom ceiling rather than an absolute scale.
-   * The ceiling derives from the output size, so a stored absolute scale would
-   * be wrong the moment the aspect changes.
-   */
-  depth: number;
-  cx: number;
-  cy: number;
+  /** One waypoint is an ordinary zoom; several mean the camera travels. */
+  waypoints: ZoomWaypoint[];
   origin: "auto" | "manual";
   pinned: boolean;
 };

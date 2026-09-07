@@ -1,17 +1,19 @@
 import type { TelemetryEvent } from "../bundle/types";
 import { clusterImpulses, mergeAndFilter } from "./cluster";
-import { fitScale } from "./geometry";
+import { fitScale, maxComfortableZoom } from "./geometry";
 import { applyGuards } from "./guards";
 import { toImpulses } from "./impulses";
+import { scaleToDepth } from "./keyframes";
 import { applySegmentGuards, type Segment } from "./segments";
-import type { PlanContext, ZoomConfig, ZoomKeyframe } from "./types";
+import type { PlanContext, ZoomConfig, ZoomSegment } from "./types";
 
 /**
  * Turn telemetry into an editable zoom plan.
  *
- * The output is a plain keyframe list, not a live effect. The planner does not
+ * The output is a plain segment list, not a live effect. The planner does not
  * need to be right — it needs to be close and correctable, which is what makes
- * this tractable at all.
+ * this tractable at all. Keyframes are derived from these by
+ * `segmentsToKeyframes`; segments are what is persisted and edited.
  *
  * Clusters become segments before they become keyframes, because the two
  * things that actually make auto-zoom unwatchable — a zoom too short to arrive,
@@ -22,7 +24,7 @@ export function planZoom(
   events: TelemetryEvent[],
   cfg: ZoomConfig,
   ctx: PlanContext,
-): ZoomKeyframe[] {
+): ZoomSegment[] {
   const clusters = applyGuards(
     mergeAndFilter(clusterImpulses(toImpulses(events, cfg), cfg), cfg),
     cfg,
@@ -50,38 +52,28 @@ export function planZoom(
     });
   }
 
-  const kfs: ZoomKeyframe[] = [];
+  const ceiling = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
 
-  for (const s of applySegmentGuards(segments, cfg)) {
-    for (const w of s.waypoints) {
-      kfs.push({
-        id: `${w.id}i`,
-        tSourceMs: w.t,
-        scale: w.scale,
+  return applySegmentGuards(segments, cfg).map((s) => {
+    const first = s.waypoints[0];
+
+    return {
+      // The cluster that produced the first waypoint, so replan can still
+      // match a segment across a re-plan.
+      id: `s${first?.id ?? "0"}`,
+      startMs: s.startT,
+      endMs: s.endT,
+      // Follow is opt-in; the planner never chooses it.
+      position: "fixed",
+      waypoints: s.waypoints.map((w) => ({
+        id: w.id,
+        tMs: w.t,
+        depth: scaleToDepth(w.scale, ceiling),
         cx: w.cx,
         cy: w.cy,
-        easing: cfg.easing,
-        transitionMs: cfg.transitionMs,
-        origin: "auto",
-        pinned: false,
-      });
-    }
-
-    const last = s.waypoints[s.waypoints.length - 1];
-    if (last === undefined) continue;
-
-    kfs.push({
-      id: `${last.id}o`,
-      tSourceMs: s.endT,
-      scale: 1,
-      cx: last.cx,
-      cy: last.cy,
-      easing: cfg.easing,
-      transitionMs: cfg.transitionMs,
+      })),
       origin: "auto",
       pinned: false,
-    });
-  }
-
-  return kfs.sort((a, b) => a.tSourceMs - b.tSourceMs);
+    };
+  });
 }
