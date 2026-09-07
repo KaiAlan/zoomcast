@@ -2,7 +2,12 @@
  * `linear` is not a style choice: the follow camera's 100ms samples use it so
  * that what renders between them is the precomputed path and nothing else.
  */
-export type EasingName = "zoomEase" | "zoomGlide" | "screenStudio" | "linear";
+export type EasingName =
+  | "zoomEase"
+  | "zoomGlide"
+  | "screenStudio"
+  | "cameraPan"
+  | "linear";
 
 export type ZoomConfig = {
   /** How stale a click may be and still anchor a keystroke. */
@@ -31,6 +36,12 @@ export type ZoomConfig = {
   trailMs: number;
   /** How long the camera takes to arrive. The ease runs BEFORE the keyframe. */
   transitionMs: number;
+  /**
+   * How long the camera takes to travel between focus points inside one shot.
+   * Separate from `transitionMs` because a pan is not a zoom — see the
+   * `cameraPan` curve.
+   */
+  panMs: number;
   /**
    * How long it takes to leave. Separate from `transitionMs` because a good
    * exit is quicker than the entrance: Recordly zooms in over 1523ms and out

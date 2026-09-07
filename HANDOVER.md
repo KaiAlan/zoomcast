@@ -615,6 +615,21 @@ Each of these cost real time; none is hypothetical.
   pulls it back — and the cap is `ZoomConfig.maxZoom`, default 1.6.
   `pixelParityZoom` is where upscaling begins, reported in the timeline as
   "sharp to", and is no longer a cap.
+- **A pan is not a zoom, and must not share its curve.** The first waypoint in
+  a shot is the zoom-in and uses `easing`/`transitionMs`; every later one is
+  the camera travelling inside a shot it has already arrived in, and uses the
+  fixed `cameraPan` curve over `panMs`. Measured off Recordly: their pan curve
+  is 65/28/7 across the thirds at a 2.61x/s peak, against their zoom's 90/9/1
+  at 4.09x/s. Sharing the zoom curve put 90% of a sideways move into its first
+  third, which reads as a lurch. `cameraPan` is not in the inspector's curve
+  picker for the same reason `linear` is not: it is a mechanism, not a look.
+- **`minRecoveryMs` is the chain window, and 700ms was too tight.** Below it,
+  two zooms stay in and pan between focus points; above it the camera pulls
+  out to full screen and comes back. Recordly chains at 1500ms
+  (`CHAINED_ZOOM_PAN_GAP_MS`) and ours now matches. On real takes this turns
+  separate shots into waypoints: 8 zooms at 17.9/min became 4 at 9.0/min, and
+  12 became 9, with coverage roughly unchanged. The zooms did not disappear —
+  they became stops inside a travelling shot.
 - **`maxZoomsPerMinute` is a backstop, not a pacing dial.** Turning it down
   makes the result worse: it deletes the clusters that would otherwise have
   merged into one travelling shot, leaving isolated zooms and long flat

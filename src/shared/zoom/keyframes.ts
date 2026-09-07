@@ -48,7 +48,7 @@ export function segmentsToKeyframes(
     const waypoints = openAtRest(s, cfg);
     if (waypoints.length === 0) continue;
 
-    for (const w of waypoints) {
+    for (const [i, w] of waypoints.entries()) {
       const centre =
         s.position === "follow" && follow !== null
           ? followCentre(follow, w.tMs, depthToScale(w.depth, ceiling), ctx, w)
@@ -59,8 +59,11 @@ export function segmentsToKeyframes(
         tSourceMs: w.tMs,
         scale: depthToScale(w.depth, ceiling),
         ...centre,
-        easing: cfg.easing,
-        transitionMs: cfg.transitionMs,
+        // The first waypoint is the zoom-in; the rest are the camera
+        // travelling inside a shot it has already arrived in, which is a
+        // gentler move on its own curve.
+        easing: i === 0 ? cfg.easing : "cameraPan",
+        transitionMs: i === 0 ? cfg.transitionMs : cfg.panMs,
         origin: s.origin,
         pinned: s.pinned,
       });

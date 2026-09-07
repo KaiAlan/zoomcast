@@ -49,6 +49,9 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   { key: "transitionMs", label: "transition in (ms)", step: 50, min: 100 },
   // A good exit is quicker than the entrance: the reference is 1523 in, 1015 out.
   { key: "transitionOutMs", label: "transition out (ms)", step: 50, min: 100 },
+  // Travelling between focus points inside one shot. Its curve is fixed
+  // (`cameraPan`) — it is a mechanism, not a look, like `linear` for follow.
+  { key: "panMs", label: "pan (ms)", step: 50, min: 100 },
   // Above pixelParityZoom (~1.18 here) the picture is upscaled; the frame's
   // inset means 1.6 costs 1.36x, not 1.6x. Below 1 there is no zoom at all.
   { key: "maxZoom", label: "max zoom (×)", step: 0.05, min: 1 },

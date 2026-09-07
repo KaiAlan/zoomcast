@@ -61,5 +61,14 @@ export const EASINGS: Record<EasingName, (x: number) => number> = {
    * tail is fine as long as the camera commits early and hard.
    */
   screenStudio: cubicBezier(0.16, 1, 0.3, 1),
+  /**
+   * For travelling between focus points inside one shot, not for zooming.
+   *
+   * Measured off Recordly, where it is `easeConnectedPan`: 65/28/7 across the
+   * thirds against `screenStudio`'s 90/9/1, and a peak speed of 2.61x/s
+   * against 4.09x/s. A pan wants to be gentler than a zoom — putting 90% of a
+   * sideways camera move into its first third reads as a lurch.
+   */
+  cameraPan: cubicBezier(0.1, 0, 0.2, 1),
   linear: (x: number): number => Math.min(1, Math.max(0, x)),
 };

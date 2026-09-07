@@ -21,13 +21,21 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
    * MIN_DWELL_DURATION_MS, measured holding on its exports too.
    */
   minDwellMs: 1450,
-  minRecoveryMs: 700,
+  /**
+   * Zooms closer than this stay in and pan between focus points instead of
+   * pulling out and coming back. Recordly chains at 1500ms
+   * (CHAINED_ZOOM_PAN_GAP_MS); this was 700ms, which meant the camera
+   * retreated to full screen between shots that were plainly related.
+   */
+  minRecoveryMs: 1500,
   deadzonePx: 120,
   maxZoomsPerMinute: 20,
   leadInMs: 250,
   trailMs: 400,
   transitionMs: 1500,
   transitionOutMs: 1000,
+  /** Recordly's CONNECTED_ZOOM_PAN_DURATION_MS, which is its own constant too. */
+  panMs: 1000,
   /**
    * Measured off a Recordly export the user pointed at as the target look,
    * then confirmed in its source. 90/9/1 across the thirds over a 1523ms

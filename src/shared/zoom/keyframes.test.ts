@@ -315,3 +315,37 @@ describe("asymmetric transitions", () => {
     expect(zout?.transitionMs).toBe(1000);
   });
 });
+
+describe("panning between focus points", () => {
+  const travelling = seg({
+    startMs: START,
+    endMs: START + 6000,
+    waypoints: [
+      { id: "k0", tMs: START, depth: 1, cx: 0.25, cy: 0.5 },
+      { id: "k1", tMs: START + 2000, depth: 1, cx: 0.75, cy: 0.5 },
+      { id: "k2", tMs: START + 4000, depth: 1, cx: 0.5, cy: 0.8 },
+    ],
+  });
+
+  it("moves between focus points on its own curve and duration", () => {
+    // A pan is not a zoom. Reusing the zoom-in's curve put 90% of a sideways
+    // camera move into its first third, which reads as a lurch; the reference
+    // pans on a gentler 65/28/7 curve at 60% of the peak speed.
+    const kfs = segmentsToKeyframes([travelling], cfg, ctx);
+    const ins = kfs.filter((k) => k.scale > 1);
+
+    expect(ins).toHaveLength(3);
+    expect(ins[0]).toMatchObject({ easing: cfg.easing, transitionMs: cfg.transitionMs });
+    for (const k of ins.slice(1)) {
+      expect(k.easing).toBe("cameraPan");
+      expect(k.transitionMs).toBe(cfg.panMs);
+    }
+  });
+
+  it("still leaves on the zoom-out duration, not the pan one", () => {
+    const kfs = segmentsToKeyframes([travelling], cfg, ctx);
+    const out = kfs.find((k) => k.scale === 1);
+
+    expect(out?.transitionMs).toBe(cfg.transitionOutMs);
+  });
+});
