@@ -51,7 +51,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 315 passing, 36 files
+npm test              # 325 passing, 36 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -436,19 +436,58 @@ slower.
 | glide 600ms | 300ms | 513ms | 87ms | 2.88×/s |
 | glide 900ms | 450ms | 770ms | 130ms | 1.92×/s |
 
-Both are pickable in the inspector, next to the transition duration that was
-already there. **`zoomGlide` is the default since 2026-09-07**, chosen after
-watching an export: the complaint was an abrupt start and a floaty tail, which
-is zoomEase's measured shape. One line in `DEFAULT_ZOOM_CONFIG` reverts it.
-Renders under all three variants are in `tmp/curves/<take>/<variant>/`, built by
-`tmp/render-curves.ts` (throwaway; `tmp/` is gitignored).
+**Superseded 2026-09-07 by a measurement of the reference the user actually
+wants.** They pointed at a Recordly export and said "how smooth and clean it
+is". Measured off that video and then confirmed in Recordly's source, where the
+function is called `easeOutScreenStudio`:
+
+| variant | window | 95% done | drifting tail | thirds |
+| --- | --- | --- | --- | --- |
+| glide 600ms | 600ms | 513ms | 87ms | 23/53/23 |
+| ease 600ms | 600ms | 416ms | 184ms | 61/33/6 |
+| **screenStudio** `cubic-bezier(0.16, 1, 0.3, 1)` | **1523ms in / 1015ms out** | 648ms | **875ms** | **90/9/1** |
+
+So the tail was never the problem. zoomGlide was chosen because zoomEase's
+184ms tail was blamed for "floaty"; the reference has a tail **ten times
+longer** and reads as smooth. What it does differently is commit — 90% of the
+motion in the first third — and then settle almost invisibly. **`screenStudio`
+is the default since 2026-09-07.** All three stay pickable in the inspector.
+
+Renders are in `tmp/pacing/<take>/{a-before-glide-600,b-after-studio}/`, built
+by `tmp/render-pacing.ts` (throwaway; `tmp/` is gitignored). The older curve
+renders are in `tmp/curves/<take>/<variant>/` from `tmp/render-curves.ts`.
+
+### What else the reference measurement said
+
+Measured from a 45.1s Recordly export, and cross-checked against its source:
+
+| | Recordly | zoomcast before | zoomcast after |
+| --- | --- | --- | --- |
+| take spent zoomed | 28% | 52-64% | 24-46% |
+| shots per minute | 6.6 | 6.5-8.9 | unchanged |
+| depth | 1.5 flat | 1.15-1.55 graded | unchanged |
+| hold bounds | 450-2600ms | min only | `minDwellMs` 1450, `maxDwellMs` 3600 |
+| pan during a hold | **~0-1px/s** | 0px/s | 0px/s |
+
+Two things worth keeping in mind:
+
+- **The reference does NOT pan during a hold either.** Its camera arrives and
+  freezes, exactly like `position: "fixed"`. Whatever makes it read as smooth,
+  it is not a follow camera — so do not reach for follow to chase this look.
+- **`maxDwellMs` is what moved the needle**, not the curve. Without a cap the
+  planner holds a zoom until the next cluster, which is why takes sat 61-64%
+  zoomed. Both new dials are segment length, so they include the zoom-out the
+  shot pays for: 2600ms of visible hold + a 1000ms exit = 3600.
 
 ### Is "floaty and laggy" fixed?
 
 Four causes now — the fourth was found by watching an export rather than
 reasoning about the complaint. Three are addressed; one is not.
 
-1. **The drifting tail** — addressed. `zoomGlide` is the default.
+1. **The drifting tail** — this diagnosis was WRONG, and was corrected on
+   2026-09-07 by measuring the reference the user actually wants. A long tail
+   is fine; the reference has an 875ms one. `screenStudio` is the default now.
+   See "The transition curve" above.
 2. **The zoom itself did nothing** — this turned out to be the big one, and it
    was not on the original list. The whole zoom range was the 15% padding, and
    at the top of it the camera was mathematically pinned to centre. Fixed by
@@ -559,6 +598,15 @@ Each of these cost real time; none is hypothetical.
   makes the result worse: it deletes the clusters that would otherwise have
   merged into one travelling shot, leaving isolated zooms and long flat
   stretches. Pace with `minHoldMs`, `minDwellMs` and `minRecoveryMs`.
+- **`payForTheOpeningMove` runs AFTER `applySegmentGuards`, so the dwell floor
+  has already had its say.** It shifts an opening waypoint to `transitionMs`
+  and extends `endT` to match — but that extension is clamped by the next
+  segment's recovery gap, so a close-following cluster truncates it. At a
+  600ms transition the shift was small and this never showed; at 1500ms
+  `tune` reported a **0.71s opening zoom against a 1.0s zoom-out**, and a
+  synthetic probe got it down to **150ms**. It now drops a shot with no room
+  to leave, measuring from the MOVED waypoint rather than `startT` — those two
+  differ only for the opening segment, which is exactly the case that broke.
 - **Cluster guards cannot see camera pathologies.** `guards.ts` works on
   attention; the two things that actually make auto-zoom unwatchable are only
   visible once zoom times exist, so they are guarded in `segments.ts`: a zoom

@@ -25,13 +25,21 @@ const cfg = DEFAULT_ZOOM_CONFIG;
 const CEILING = cfg.maxZoom;
 const PARITY = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
 
+/**
+ * The fixture's start. It must sit past `cfg.transitionMs`, or `openAtRest`
+ * moves it and tests about everything else quietly become tests of that rule.
+ * It was 1000 while the transition was 600.
+ */
+const START = 4000;
+const END = 7000;
+
 function seg(over: Partial<ZoomSegment> = {}): ZoomSegment {
   return {
     id: "s1",
-    startMs: 1000,
-    endMs: 4000,
+    startMs: START,
+    endMs: END,
     position: "fixed",
-    waypoints: [{ id: "k0", tMs: 1000, depth: 1, cx: 0.25, cy: 0.5 }],
+    waypoints: [{ id: "k0", tMs: START, depth: 1, cx: 0.25, cy: 0.5 }],
     origin: "auto",
     pinned: false,
     ...over,
@@ -45,7 +53,7 @@ describe("segmentsToKeyframes", () => {
     expect(kfs).toHaveLength(2);
     expect(kfs[0]).toMatchObject({
       id: "k0i",
-      tSourceMs: 1000,
+      tSourceMs: START,
       cx: 0.25,
       cy: 0.5,
       easing: cfg.easing,
@@ -56,7 +64,7 @@ describe("segmentsToKeyframes", () => {
     expect(kfs[0]?.scale).toBeCloseTo(CEILING, 12);
     // The out-keyframe sits at the segment's end, at rest, where the last
     // waypoint left the camera.
-    expect(kfs[1]).toMatchObject({ id: "k0o", tSourceMs: 4000, scale: 1, cx: 0.25 });
+    expect(kfs[1]).toMatchObject({ id: "k0o", tSourceMs: END, scale: 1, cx: 0.25 });
   });
 
   it("emits one in-keyframe per waypoint and a single out-keyframe", () => {
@@ -65,8 +73,8 @@ describe("segmentsToKeyframes", () => {
       [
         seg({
           waypoints: [
-            { id: "k0", tMs: 1000, depth: 1, cx: 0.25, cy: 0.5 },
-            { id: "k1", tMs: 2500, depth: 1, cx: 0.75, cy: 0.5 },
+            { id: "k0", tMs: START, depth: 1, cx: 0.25, cy: 0.5 },
+            { id: "k1", tMs: START + 1500, depth: 1, cx: 0.75, cy: 0.5 },
           ],
         }),
       ],
@@ -80,12 +88,12 @@ describe("segmentsToKeyframes", () => {
 
   it("sorts by source time", () => {
     const kfs = segmentsToKeyframes(
-      [seg({ id: "b", startMs: 6000, endMs: 8000, waypoints: [{ id: "k1", tMs: 6000, depth: 1, cx: 0.5, cy: 0.5 }] }), seg()],
+      [seg({ id: "b", startMs: 9000, endMs: 11_000, waypoints: [{ id: "k1", tMs: 9000, depth: 1, cx: 0.5, cy: 0.5 }] }), seg()],
       cfg,
       ctx,
     );
 
-    expect(kfs.map((k) => k.tSourceMs)).toEqual([1000, 4000, 6000, 8000]);
+    expect(kfs.map((k) => k.tSourceMs)).toEqual([START, END, 9000, 11_000]);
   });
 
   it("drops a segment with no waypoints rather than emitting a bare pull-out", () => {
@@ -164,7 +172,8 @@ describe("opening at rest", () => {
 
   it("leaves a segment that already starts late alone", () => {
     const kfs = segmentsToKeyframes([seg()], cfg, ctx);
-    expect(kfs[0]?.tSourceMs).toBe(1000);
+    expect(START).toBeGreaterThan(cfg.transitionMs);
+    expect(kfs[0]?.tSourceMs).toBe(START);
   });
 });
 
@@ -177,7 +186,14 @@ describe("a follow segment", () => {
     { k: "move", t: 5000, x: 1700, y: 540 },
   ];
   const path = followPath(events);
-  const seg5 = seg({ startMs: 1000, endMs: 5000, position: "follow" });
+  // Explicit waypoints: this block is about the follow sampler, so it must
+  // not inherit the shared fixture's start and silently sample nothing.
+  const seg5 = seg({
+    startMs: 1000,
+    endMs: 5000,
+    position: "follow",
+    waypoints: [{ id: "k0", tMs: 1000, depth: 1, cx: 0.25, cy: 0.5 }],
+  });
 
   it("tracks the cursor between waypoints instead of holding one centre", () => {
     const kfs = segmentsToKeyframes([seg5], cfg, square, path);
@@ -277,5 +293,20 @@ describe("maxZoom", () => {
     const b = segmentsToKeyframes([seg()], { ...cfg, maxZoom: 1.6 }, square);
 
     expect(a[0]?.scale).toBeCloseTo(b[0]?.scale ?? 0, 12);
+  });
+});
+
+describe("asymmetric transitions", () => {
+  it("gives the zoom-out its own duration", () => {
+    // Recordly zooms in over 1523ms and out over 1015ms. One number for both
+    // made the exit as slow as the entrance, which is not what reads well.
+    const cfg = { ...DEFAULT_ZOOM_CONFIG, transitionMs: 1500, transitionOutMs: 1000 };
+    const kfs = segmentsToKeyframes([seg({ startMs: 4000, endMs: 9000 })], cfg, ctx);
+
+    const zin = kfs.find((k) => k.scale > 1);
+    const zout = kfs.find((k) => k.scale === 1);
+
+    expect(zin?.transitionMs).toBe(1500);
+    expect(zout?.transitionMs).toBe(1000);
   });
 });

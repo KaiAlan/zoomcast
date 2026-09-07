@@ -48,7 +48,11 @@ describe("planZoom", () => {
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
-    expect(kfs[0]?.tSourceMs).toBe(750); // 1000 - leadInMs 250
+    // 1000 - leadInMs 250 = 750, but a keyframe cannot be eased into from
+    // before zero, so openAtRest moves it to transitionMs.
+    expect(kfs[0]?.tSourceMs).toBe(
+      Math.max(750, DEFAULT_ZOOM_CONFIG.transitionMs),
+    );
   });
 
   it("holds a lone click for minDwellMs rather than just trailMs", () => {
@@ -59,7 +63,9 @@ describe("planZoom", () => {
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
-    expect(kfs[1]?.tSourceMs).toBe(750 + DEFAULT_ZOOM_CONFIG.minDwellMs);
+    expect(kfs[1]?.tSourceMs).toBe(
+      Math.max(750, DEFAULT_ZOOM_CONFIG.transitionMs) + DEFAULT_ZOOM_CONFIG.minDwellMs,
+    );
   });
 
   it("travels between two focus points instead of pulling out and back in", () => {
@@ -84,7 +90,7 @@ describe("planZoom", () => {
     expect(kfs[2]?.scale).toBe(1);
   });
 
-  it("never emits a zoom held for less than its own two transitions", () => {
+  it("never emits a zoom with no room to leave", () => {
     const events = [
       { t: 1000, k: "down" as const, x: 500, y: 500, b: 1 },
       { t: 5000, k: "down" as const, x: 1500, y: 900, b: 1 },
@@ -98,7 +104,7 @@ describe("planZoom", () => {
       if (k === undefined || next === undefined) continue;
       if (k.scale > 1 && next.scale === 1) {
         expect(next.tSourceMs - k.tSourceMs).toBeGreaterThanOrEqual(
-          DEFAULT_ZOOM_CONFIG.transitionMs * 2,
+          DEFAULT_ZOOM_CONFIG.minDwellMs,
         );
       }
     }
@@ -131,8 +137,41 @@ describe("planZoom", () => {
     );
     const [inKf, outKf] = kfs;
     expect((outKf?.tSourceMs ?? 0) - (inKf?.tSourceMs ?? 0)).toBeGreaterThanOrEqual(
-      DEFAULT_ZOOM_CONFIG.transitionMs * 2,
+      DEFAULT_ZOOM_CONFIG.minDwellMs,
     );
+  });
+
+  it("never emits a zoom with less room to leave than its own exit", () => {
+    // Regression: payForTheOpeningMove runs AFTER the guards, shifts the
+    // opening waypoint to transitionMs and extends endT to match — but that
+    // extension is clamped by the next segment's recovery gap. At a 600ms
+    // transition the shift was small; at 1500ms it truncates, and `tune`
+    // showed a 0.71s opening zoom against a 1.0s zoom-out.
+    // These three reproduce it: a click near zero followed by one close
+    // enough that the recovery gap truncates the compensation. They yielded
+    // 150ms, 450ms and 550ms of visible zoom against a 1000ms exit.
+    const sets = [
+      [{ t: 100, k: "down" as const, x: 500, y: 500, b: 1 },
+       { t: 2400, k: "down" as const, x: 1500, y: 900, b: 1 }],
+      [{ t: 0, k: "down" as const, x: 500, y: 500, b: 1 },
+       { t: 2600, k: "down" as const, x: 1500, y: 900, b: 1 }],
+      [{ t: 300, k: "down" as const, x: 500, y: 500, b: 1 },
+       { t: 2900, k: "down" as const, x: 1500, y: 900, b: 1 }],
+    ];
+
+    for (const events of sets) {
+      const kfs = plan(events, DEFAULT_ZOOM_CONFIG, ctx);
+      for (let i = 0; i < kfs.length - 1; i++) {
+        const k = kfs[i];
+        const next = kfs[i + 1];
+        if (k === undefined || next === undefined) continue;
+        if (k.scale > 1 && next.scale === 1) {
+          expect(next.tSourceMs - k.tSourceMs).toBeGreaterThanOrEqual(
+            DEFAULT_ZOOM_CONFIG.transitionOutMs,
+          );
+        }
+      }
+    }
   });
 
   it("normalises the focus point to 0..1 of the source", () => {

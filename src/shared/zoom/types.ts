@@ -2,7 +2,7 @@
  * `linear` is not a style choice: the follow camera's 100ms samples use it so
  * that what renders between them is the precomputed path and nothing else.
  */
-export type EasingName = "zoomEase" | "zoomGlide" | "linear";
+export type EasingName = "zoomEase" | "zoomGlide" | "screenStudio" | "linear";
 
 export type ZoomConfig = {
   /** How stale a click may be and still anchor a keystroke. */
@@ -17,8 +17,15 @@ export type ZoomConfig = {
   minGapMs: number;
   /** A zoom may not be replaced sooner than this after it started. */
   minHoldMs: number;
-  /** Target hold for an emitted zoom; the floor is transitionMs * 2. */
+  /** Target hold for an emitted zoom; the floor is transitionOutMs. */
   minDwellMs: number;
+  /**
+   * The longest a shot may stay in. Without a cap the planner holds a zoom
+   * until the next cluster, which is why takes sat 61-64% zoomed against the
+   * 28% measured off a Recordly export. Segment length, like minDwellMs, so
+   * it includes the zoom-out the shot still has to pay for.
+   */
+  maxDwellMs: number;
   /** Zooms closer than this become one travelling zoom instead of two. */
   minRecoveryMs: number;
   /** A cluster within this distance extends the previous zoom, not a new one. */
@@ -29,7 +36,14 @@ export type ZoomConfig = {
   leadInMs: number;
   /** Hold the zoom this long after the cluster ends. */
   trailMs: number;
+  /** How long the camera takes to arrive. The ease runs BEFORE the keyframe. */
   transitionMs: number;
+  /**
+   * How long it takes to leave. Separate from `transitionMs` because a good
+   * exit is quicker than the entrance: Recordly zooms in over 1523ms and out
+   * over 1015ms, and one number for both made the exit as slow as the entry.
+   */
+  transitionOutMs: number;
   easing: EasingName;
   /**
    * The deepest the camera goes. A sharpness choice, not a geometric limit:

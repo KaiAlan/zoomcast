@@ -88,7 +88,7 @@ export function segmentsToKeyframes(
       cx: end.cx,
       cy: end.cy,
       easing: cfg.easing,
-      transitionMs: cfg.transitionMs,
+      transitionMs: cfg.transitionOutMs,
       origin: s.origin,
       pinned: s.pinned,
     });
@@ -129,7 +129,7 @@ function sampleFollow(
 
   // Stop short of the end: the pull-out transition starts at
   // endMs - transitionMs, and a follow sample inside it would fight it.
-  const until = s.endMs - cfg.transitionMs;
+  const until = s.endMs - cfg.transitionOutMs;
 
   for (let t = last.tMs + FOLLOW_SAMPLE_MS, n = 0; t < until; t += FOLLOW_SAMPLE_MS, n++) {
     out.push({

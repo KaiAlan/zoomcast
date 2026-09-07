@@ -50,5 +50,16 @@ export const EASINGS: Record<EasingName, (x: number) => number> = {
    * not read as a slower one. Gentler at both ends, with no drifting tail.
    */
   zoomGlide: cubicBezier(0.45, 0.05, 0.55, 0.95),
+  /**
+   * Measured off a Recordly export, then confirmed in its source, where the
+   * same curve is called `easeOutScreenStudio`.
+   *
+   * 90 / 9 / 1 across the thirds: it is 95% arrived after 648ms of a 1523ms
+   * window and spends the remaining 875ms settling almost invisibly. That is
+   * the opposite of the reasoning that made zoomGlide the default — a
+   * drifting tail was blamed for "floaty" — and the reference says a long
+   * tail is fine as long as the camera commits early and hard.
+   */
+  screenStudio: cubicBezier(0.16, 1, 0.3, 1),
   linear: (x: number): number => Math.min(1, Math.max(0, x)),
 };

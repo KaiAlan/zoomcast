@@ -16,21 +16,32 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   minWeight: 0.8,
   minGapMs: 700,
   minHoldMs: 1500,
-  minDwellMs: 1400,
+  /**
+   * 450ms of visible hold plus the zoom-out it pays for. 450 is Recordly's
+   * MIN_DWELL_DURATION_MS, measured holding on its exports too.
+   */
+  minDwellMs: 1450,
+  /** 2600ms of visible hold (Recordly's MAX_DWELL_DURATION_MS) plus the exit. */
+  maxDwellMs: 3600,
   minRecoveryMs: 700,
   deadzonePx: 120,
   maxZoomsPerMinute: 20,
   leadInMs: 250,
   trailMs: 400,
-  transitionMs: 600,
+  transitionMs: 1500,
+  transitionOutMs: 1000,
   /**
-   * Judged on an exported take, 2026-09-07, not by reasoning: zoomEase puts
-   * 61% of the motion in the first third and then drifts for 184ms, which
-   * reads as an abrupt start followed by a floaty tail. zoomGlide is
-   * 23/50/23 across the thirds at half the peak speed. Both stay pickable in
-   * the inspector; this line is the only thing that makes one the default.
+   * Measured off a Recordly export the user pointed at as the target look,
+   * then confirmed in its source. 90/9/1 across the thirds over a 1523ms
+   * window: commit hard, arrive at 95% in 648ms, then settle invisibly.
+   *
+   * This reverses the 2026-09-07 choice of zoomGlide. That was picked because
+   * zoomEase's 184ms drifting tail was blamed for "floaty"; the reference has
+   * an 875ms tail and reads as smooth, so the tail was never the problem —
+   * the lack of early commitment was. All three stay pickable in the
+   * inspector; this line is the only thing that makes one the default.
    */
-  easing: "zoomGlide",
+  easing: "screenStudio",
   maxZoom: 1.6,
   // Fractions of maxZoom, so one dial deepens everything and the grading
   // between intents survives. At maxZoom 1.6 these are 1.55 / 1.35 / 1.15.

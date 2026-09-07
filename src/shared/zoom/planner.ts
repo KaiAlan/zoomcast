@@ -109,18 +109,38 @@ export function planZoom(
  * were tuned to put it, and keeps the zoom count unchanged.
  */
 function payForTheOpeningMove(segs: Segment[], cfg: ZoomConfig): Segment[] {
-  return segs.map((s, i) => {
+  const out: Segment[] = [];
+
+  segs.forEach((s, i) => {
     const first = s.waypoints[0];
-    if (first === undefined || first.t >= cfg.transitionMs) return s;
+    if (first === undefined || first.t >= cfg.transitionMs) {
+      out.push(s);
+      return;
+    }
 
     const shift = cfg.transitionMs - first.t;
     const next = segs[i + 1];
     const latestEnd = next === undefined ? Infinity : next.startT - cfg.minRecoveryMs;
+    const endT = Math.min(s.endT + shift, latestEnd);
 
-    return {
+    // The compensation is clamped by the next segment's recovery gap, so a
+    // close-following cluster can truncate it to nothing — and this runs AFTER
+    // applySegmentGuards, so the dwell floor has already had its say. Measure
+    // from the MOVED waypoint, which is where the camera actually arrives, and
+    // drop a shot with no room to leave.
+    //
+    // It only started mattering when transitionMs went from 600 to 1500: the
+    // shift is that much bigger, and `tune` showed a 0.71s opening zoom
+    // against a 1.0s zoom-out. Dropping it opens the take at rest, which is
+    // what the reference footage does anyway.
+    if (endT - cfg.transitionMs < cfg.transitionOutMs) return;
+
+    out.push({
       startT: s.startT,
-      endT: Math.min(s.endT + shift, latestEnd),
+      endT,
       waypoints: s.waypoints.map((w) => ({ ...w, t: Math.max(w.t, cfg.transitionMs) })),
-    };
+    });
   });
+
+  return out;
 }

@@ -80,3 +80,34 @@ describe("EASINGS", () => {
     expect(EASINGS.zoomEase(1)).toBe(1);
   });
 });
+
+describe("screenStudio", () => {
+  const f = EASINGS.screenStudio;
+
+  it("puts nearly all the motion in the first third", () => {
+    // Measured off a Recordly export: 90 / 9 / 1 across the thirds. That
+    // front-loading is why a 1500ms window still reads as a quick move.
+    const a = f(1 / 3);
+    const b = f(2 / 3);
+    expect(a).toBeGreaterThan(0.85);
+    expect(b - a).toBeLessThan(0.14);
+    expect(1 - b).toBeLessThan(0.04);
+  });
+
+  it("arrives at 95% in well under half the window", () => {
+    let t = 0;
+    while (t < 1 && f(t) < 0.95) t += 0.001;
+    expect(t).toBeLessThan(0.45);
+  });
+
+  it("is monotonic and spans the unit interval", () => {
+    let prev = -1;
+    for (let t = 0; t <= 1.0001; t += 0.01) {
+      const v = f(Math.min(1, t));
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
+    expect(f(0)).toBe(0);
+    expect(f(1)).toBe(1);
+  });
+});

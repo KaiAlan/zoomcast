@@ -35,6 +35,9 @@ type Props = {
 const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: number }> = [
   { key: "minHoldMs", label: "min hold (ms)", step: 100, min: 0 },
   { key: "minDwellMs", label: "min dwell (ms)", step: 100, min: 0 },
+  // The cap that keeps a take from living zoomed in. Segment length, like min
+  // dwell, so it includes the zoom-out the shot pays for.
+  { key: "maxDwellMs", label: "max dwell (ms)", step: 100, min: 200 },
   { key: "minRecoveryMs", label: "min recovery (ms)", step: 50, min: 0 },
   { key: "deadzonePx", label: "deadzone (px)", step: 10, min: 0 },
   // One zoom a minute at least, or the budget deletes every cluster.
@@ -46,7 +49,9 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   { key: "leadInMs", label: "lead in (ms)", step: 50, min: 0 },
   { key: "trailMs", label: "trail (ms)", step: 50, min: 0 },
   // Below ~100ms a "transition" is a cut, and the dwell floor is twice this.
-  { key: "transitionMs", label: "transition (ms)", step: 50, min: 100 },
+  { key: "transitionMs", label: "transition in (ms)", step: 50, min: 100 },
+  // A good exit is quicker than the entrance: the reference is 1523 in, 1015 out.
+  { key: "transitionOutMs", label: "transition out (ms)", step: 50, min: 100 },
   // Above pixelParityZoom (~1.18 here) the picture is upscaled; the frame's
   // inset means 1.6 costs 1.36x, not 1.6x. Below 1 there is no zoom at all.
   { key: "maxZoom", label: "max zoom (×)", step: 0.05, min: 1 },
@@ -65,6 +70,7 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
  * a look anyone would choose for a zoom.
  */
 const CURVES: Array<{ value: EasingName; label: string }> = [
+  { value: "screenStudio", label: "studio — commits, then settles" },
   { value: "zoomGlide", label: "glide — even, peaks mid-move" },
   { value: "zoomEase", label: "ease — fast in, drifting tail" },
 ];

@@ -7,6 +7,9 @@ const cfg: ZoomConfig = {
   ...DEFAULT_ZOOM_CONFIG,
   minDwellMs: 1400,
   minRecoveryMs: 700,
+  // Uncapped, so the tests below measure the rule each is named for. The cap
+  // has its own block, which passes an explicit maxDwellMs.
+  maxDwellMs: Number.POSITIVE_INFINITY,
 };
 
 const seg = (startT: number, endT: number, cx = 500, cy = 500): Segment => ({
@@ -19,6 +22,40 @@ describe("applySegmentGuards", () => {
   it("leaves well-separated, long-enough segments alone", () => {
     const out = applySegmentGuards([seg(0, 3000), seg(6000, 9000, 1400, 800)], cfg);
     expect(out).toEqual([seg(0, 3000), seg(6000, 9000, 1400, 800)]);
+  });
+
+  describe("max dwell", () => {
+    it("caps a shot that would otherwise sit zoomed indefinitely", () => {
+      // Recordly caps a hold at 2600ms; ours is segment length, so the cap is
+      // that plus the zoom-out it still has to pay for.
+      const out = applySegmentGuards([seg(0, 20_000)], { ...cfg, maxDwellMs: 3600 });
+      expect(out[0]?.endT).toBe(3600);
+    });
+
+    it("leaves a shot already shorter than the cap alone", () => {
+      const out = applySegmentGuards([seg(0, 2000)], { ...cfg, maxDwellMs: 3600 });
+      expect(out[0]?.endT).toBe(2000);
+    });
+
+    it("caps after the min-dwell push, not before", () => {
+      // minDwell would push this to 1400; the cap must not then drag it back.
+      const out = applySegmentGuards([seg(0, 500)], { ...cfg, maxDwellMs: 3600 });
+      expect(out[0]?.endT).toBe(1400);
+    });
+  });
+
+  describe("the floor", () => {
+    it("is the zoom-out, not both transitions", () => {
+      // The zoom-in eases into startT from BEFORE it, so it cannot constrain
+      // how long the segment lasts. Only the zoom-out is paid from inside.
+      const c = { ...cfg, transitionMs: 1500, transitionOutMs: 1000, minDwellMs: 0 };
+      expect(applySegmentGuards([seg(0, 1200)], c)).toHaveLength(1);
+    });
+
+    it("drops a segment with no room to leave", () => {
+      const c = { ...cfg, transitionMs: 1500, transitionOutMs: 1000, minDwellMs: 0 };
+      expect(applySegmentGuards([seg(0, 800)], c)).toHaveLength(0);
+    });
   });
 
   describe("recovery", () => {

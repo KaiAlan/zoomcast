@@ -60,15 +60,20 @@ function mergeForRecovery(segs: Segment[], cfg: ZoomConfig): Segment[] {
 }
 
 /**
- * Hold each zoom long enough to be a shot rather than a move.
+ * Hold each zoom long enough to be a shot rather than a move, and not so long
+ * that the take lives zoomed in.
  *
- * `minDwellMs` is the target; the floor is the transition the zoom costs
- * itself — in and out — because below that the camera is still moving when it
- * is asked to leave. A segment that cannot reach the floor without eating the
- * next one's recovery gap has nowhere to exist, and is dropped.
+ * `minDwellMs` is the target and `maxDwellMs` the cap. The floor is
+ * `transitionOutMs` alone, not both transitions: a keyframe is the instant the
+ * camera ARRIVES, so the zoom-in eases into `startT` from before it and cannot
+ * constrain how long the segment lasts. Only the exit is paid from inside.
+ * (It read `transitionMs * 2` while the two durations were one number.)
+ *
+ * A segment that cannot reach the floor without eating the next one's recovery
+ * gap has nowhere to exist, and is dropped.
  */
 function enforceDwell(segs: Segment[], cfg: ZoomConfig): Segment[] {
-  const floor = cfg.transitionMs * 2;
+  const floor = cfg.transitionOutMs;
   const out: Segment[] = [];
 
   segs.forEach((s, i) => {
@@ -76,7 +81,10 @@ function enforceDwell(segs: Segment[], cfg: ZoomConfig): Segment[] {
     const latestEnd =
       next === undefined ? Infinity : next.startT - cfg.minRecoveryMs;
 
-    const endT = Math.min(Math.max(s.endT, s.startT + cfg.minDwellMs), latestEnd);
+    // The cap applies after the min-dwell push, or a shot shorter than the
+    // target would be dragged back down by it.
+    const held = Math.min(Math.max(s.endT, s.startT + cfg.minDwellMs), s.startT + cfg.maxDwellMs);
+    const endT = Math.min(held, latestEnd);
     if (endT - s.startT < floor) return;
 
     out.push({ ...s, endT });
