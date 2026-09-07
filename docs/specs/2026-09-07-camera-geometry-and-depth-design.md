@@ -75,6 +75,16 @@ These are the contract. Each is a property test, not a comment.
    ceiling is.
 9. **`zoomDepth()` is deterministic and has no renderer or layout side
    effects.** Pure function, testable in `src/shared/` with no GL context.
+10. **One coordinate convention, one flip boundary.** Every coordinate in this
+    system — telemetry, `sourceRect`, `screenRect`, `sourceToFrame` input and
+    output — is **top-left origin, y increasing downward**. This is already
+    true and must stay true: `u_rect` places geometry in output space from the
+    top left, and textures are uploaded *without* `UNPACK_FLIP_Y_WEBGL`, so
+    `v_uv.y = 0` is the top row of the image. The single Y flip into clip space
+    happens in one place, `QUAD_VERT`'s `gl_Position`. `sourceToFrame` inherits
+    that convention and performs no flip of its own. The failure this prevents
+    is three call sites (screen, cursor, ripple) each carrying their own
+    correction and happening to agree today.
 
 ### 3.1 The continuity invariant, specifically
 
@@ -84,15 +94,49 @@ pinning `x` while the unclamped value was hundreds of pixels away, and one
 float below the crossover the clamp released and the camera teleported. It was
 measured at 229px.
 
-**That clamp moves to `sourceRect`, so its property tests move with it.** The
-required property, swept exhaustively rather than sampled:
+**That clamp moves to `sourceRect`, so its property tests move with it.**
 
-> For any centre and any two scales differing by ε, `sourceRect` differs by
-> O(ε). There is no scale at which a small change in scale or centre produces a
-> large change in the sampled region.
+**Where the crossover is now.** `sourceRect.x` is clamped to `[0, 1 - w]`. That
+range collapses to zero width exactly at `w = 1`, which is `scale = 1` — the
+direct analogue of the old crossover at `w = output.w`. So `scale = 1` is the
+boundary that matters, and it must be written as one continuous range
+(`clamp(x, 0, 1 - w)`), never as a gated branch. Written that way the collapse
+is continuous: the range shrinks to `[0, 0]` smoothly rather than releasing one
+float away. Writing it as two cases is exactly how the 229px teleport happened.
 
-Both bounds must be written as one continuous range, exactly as the current
-clamp is, and for the same reason.
+**The testable property.** "Exhaustive" cannot mean every float, so it means a
+defined finite domain plus targeted probes:
+
+> For a perturbation ε in either scale or centre,
+> `distance(sourceRect(s, c), sourceRect(s ± ε, c ± ε)) ≤ K·ε + tol`
+> in normalised source units.
+
+`K = 2` is the bound to assert, derived rather than guessed: `w = 1/s`, so
+`|dw/ds| = 1/s² ≤ 1` for `s ≥ 1`; `x = cx - w/2` gives `|dx/ds| ≤ 0.5` and
+`|dx/dcx| ≤ 1`; and clamping is 1-Lipschitz, so it can only reduce movement.
+Two is therefore a safe bound with margin. In concrete terms on a 1920px
+source, a 0.001 change in scale may move the sampled region by at most ~4px —
+against the 229px the original bug produced.
+
+**The domain to sweep**, all of it, plus probes at `boundary − ε`, `boundary`
+and `boundary + ε` for each boundary below:
+
+| Swept | Values |
+|---|---|
+| scale | a fixed grid from 1.0 to `maxZoom` in steps of 0.005 |
+| centre | a fixed grid of `cx`, `cy` over `[0, 1]` in steps of 0.05, including exactly 0 and 1 |
+| output aspect | native, 1:1, and one output smaller than the source |
+
+| Boundary | Why it is a boundary |
+|---|---|
+| `scale = 1` | the clamp range collapses to zero width (above) |
+| `cx = w/2`, `cx = 1 − w/2` | the centre reaches an edge and the clamp begins to bind |
+| `cx = 0`, `cx = 1` | the extremes of the centre's own domain |
+| `scale = maxZoom` | the configured cap |
+| `scale = pixelParityZoom` | not a clamp, but where the sharpen term switches on; assert it too, since `min(MAX_SHARPEN, s − 1)` is continuous only if written that way |
+
+Systematic coverage of where discontinuities can live beats a claim of
+universal coverage that no test can honour.
 
 ## 4. Geometry
 
@@ -117,6 +161,15 @@ export function sourceRectFor(zoom: ZoomState, frame: Rect, source: Size): Sourc
   long way so invariant 3 is enforced rather than assumed.
 - Centred on `(cx, cy)`, then clamped so the region stays inside `[0,1]²`.
 - At `scale = 1` it is exactly `{ x: 0, y: 0, w: 1, h: 1 }` (invariant 4).
+
+**That last point is conditional, and the condition must not be forgotten.**
+`scale = 1` can only produce `{0, 0, 1, 1}` while the maximum intended source
+region and the frame share the source's aspect ratio, which the current fitted
+frame guarantees. **A future crop mode must redefine the maximum intended
+source region before this invariant can hold**, because a frame that crops to
+a different aspect cannot show the whole source at any scale. Read
+"`zoom = 1` = whole source" as a consequence of today's frame, never as a
+definition.
 
 ### 4.2 Changes by file
 
@@ -161,15 +214,26 @@ export type DepthInputs = {
 export function zoomDepth(inputs: DepthInputs, cfg: DepthConfig): number;
 ```
 
-Returns an absolute scale, clamped to `[1, cfg.maxZoom]`.
+Returns an absolute scale, clamped to `[1, cfg.maxZoom]`. `DepthConfig` carries
+`base` (per intent), `contextFraction`, `maxZoom` and `intentWeight` (§5.4).
 
 ### 5.2 The rule
 
 ```
-base     = cfg.base[intent]                       // click > type > scroll
-pullback = cfg.contextFraction / max(spread.x, spread.y)
-scale    = clamp(min(base, pullback), 1, cfg.maxZoom)
+base      = cfg.base[intent]                      // click > type > scroll
+spreadMax = max(spread.x, spread.y)
+pullback  = spreadMax > 0
+              ? cfg.contextFraction / spreadMax
+              : Infinity                          // no constraint
+scale     = clamp(min(base, pullback), 1, cfg.maxZoom)
 ```
+
+**A zero-spread cluster has no spread constraint and resolves to its intent
+base.** This is not an edge case to be discovered at runtime: 29 of the 54
+clusters on disk have zero spread, so it is the single most common path through
+this function. Dividing by zero happens to yield `Infinity` and therefore the
+right answer in JavaScript, which is exactly why it must be written explicitly —
+a correct result reached by accident is one refactor away from a `NaN`.
 
 - **Intent sets the base.** `click` deepest; `type` middle, because reading
   needs surrounding context; `scroll` shallowest.
@@ -206,9 +270,33 @@ saturates at the cap: a single click has bounds of zero and asks for ~12×.
 
 ### 5.4 Upstream change
 
-`Impulse` gains a `kind` (`click | key | wheel`), and a cluster's intent is its
-dominant kind by weight. Keystrokes already borrow the most recent click's
-position, so a typing cluster is anchored where the typing is happening.
+`Impulse` gains a `kind` (`click | key | wheel`). Keystrokes already borrow the
+most recent click's position, so a typing cluster is anchored where the typing
+is happening.
+
+**Intent is the kind with the greatest summed intent weight.** Two rules make
+that unambiguous:
+
+```
+weightFor(kind) = cfg.intentWeight[kind]          // click 1.0, key 0.4, wheel 0.3
+score(kind)     = Σ weightFor(kind) over the cluster's impulses of that kind
+intent          = argmax score, ties broken toward the SHALLOWER base
+```
+
+1. **`cfg.intentWeight` is its own config, not `Impulse.w`.** The existing
+   impulse weight feeds `minWeight`, which decides whether a cluster earns a
+   zoom at all. Reusing it here would couple two unrelated decisions, so that
+   tuning how deep a typing zoom goes could silently change how many zooms
+   there are. The starting values are the same numbers; the point is that they
+   can move apart.
+2. **Ties break toward the shallower base** (`scroll` < `type` < `click`).
+   Deterministic, and it errs the safe way: showing too much context is
+   recoverable for a viewer, showing too little is not.
+
+The rule gives the behaviour the design wants without a special case. One click
+followed by twenty keystrokes scores `1.0` against `8.0`, so **a typing run
+opened by a click classifies as `type`**, which is the intent whose base depth
+is deliberately shallower because reading needs surrounding context.
 
 `fitScale` is replaced by `zoomDepth` at its one call site in the planner.
 
@@ -274,8 +362,9 @@ a restructure.
 | Invariant | Guard |
 |---|---|
 | 1, 3, 4 | Unit tests on `sourceRectFor` over a sweep of scales, centres and output aspects. |
-| 2, 7 | Exhaustive sweep in `layout.test.ts`, carried over from the `screenQuad` clamp tests — the ones that hold the head-of-file jump closed. |
+| 2, 7 | The finite grid and the boundary probe table of §3.1, in `layout.test.ts`, carried over from the `screenQuad` clamp tests that hold the head-of-file jump closed. Assert the `K = 2` bound, not "looks continuous". |
 | 5, 6 | Unit tests on `sourceToFrame`, including points outside the sampled region. |
+| 10 | One test asserting a known source point lands where expected in the frame at a non-trivial zoom, for the screen, the cursor and a ripple — the three that must agree. A y-flip in any one of them fails it. |
 | 8 | `depthToScale`/`scaleToDepth` round-trip at two different `maxZoom` values. |
 | 9 | `zoomDepth` tested in `src/shared/` with no GL context. |
 | Whole pipeline | `verify:parity` — preview and export both go through `Renderer`, so divergence is caught for free. Expect to re-baseline the fixture: its stored keyframes carry absolute scales computed against the old ceiling. |
