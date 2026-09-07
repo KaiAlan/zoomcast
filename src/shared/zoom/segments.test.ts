@@ -7,9 +7,6 @@ const cfg: ZoomConfig = {
   ...DEFAULT_ZOOM_CONFIG,
   minDwellMs: 1400,
   minRecoveryMs: 700,
-  // Uncapped, so the tests below measure the rule each is named for. The cap
-  // has its own block, which passes an explicit maxDwellMs.
-  maxDwellMs: Number.POSITIVE_INFINITY,
 };
 
 const seg = (startT: number, endT: number, cx = 500, cy = 500): Segment => ({
@@ -24,23 +21,18 @@ describe("applySegmentGuards", () => {
     expect(out).toEqual([seg(0, 3000), seg(6000, 9000, 1400, 800)]);
   });
 
-  describe("max dwell", () => {
-    it("caps a shot that would otherwise sit zoomed indefinitely", () => {
-      // Recordly caps a hold at 2600ms; ours is segment length, so the cap is
-      // that plus the zoom-out it still has to pay for.
-      const out = applySegmentGuards([seg(0, 20_000)], { ...cfg, maxDwellMs: 3600 });
-      expect(out[0]?.endT).toBe(3600);
-    });
+  describe("activity that keeps going", () => {
+    it("holds the zoom for as long as the activity lasts", () => {
+      // Regression: a `maxDwellMs` cap truncated a segment whose activity was
+      // still running. On a real take the camera pulled out at 6.62s exactly
+      // as a 26-second typing run began, and never came back — the cluster was
+      // already spent. The cap came from misreading Recordly's
+      // MAX_DWELL_DURATION_MS, which filters cursor-dwell CANDIDATES rather
+      // than capping how long a zoom holds.
+      const out = applySegmentGuards([seg(0, 20_000)], cfg);
 
-    it("leaves a shot already shorter than the cap alone", () => {
-      const out = applySegmentGuards([seg(0, 2000)], { ...cfg, maxDwellMs: 3600 });
-      expect(out[0]?.endT).toBe(2000);
-    });
-
-    it("caps after the min-dwell push, not before", () => {
-      // minDwell would push this to 1400; the cap must not then drag it back.
-      const out = applySegmentGuards([seg(0, 500)], { ...cfg, maxDwellMs: 3600 });
-      expect(out[0]?.endT).toBe(1400);
+      expect(out).toHaveLength(1);
+      expect(out[0]?.endT).toBe(20_000);
     });
   });
 

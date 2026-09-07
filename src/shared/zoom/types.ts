@@ -19,13 +19,6 @@ export type ZoomConfig = {
   minHoldMs: number;
   /** Target hold for an emitted zoom; the floor is transitionOutMs. */
   minDwellMs: number;
-  /**
-   * The longest a shot may stay in. Without a cap the planner holds a zoom
-   * until the next cluster, which is why takes sat 61-64% zoomed against the
-   * 28% measured off a Recordly export. Segment length, like minDwellMs, so
-   * it includes the zoom-out the shot still has to pay for.
-   */
-  maxDwellMs: number;
   /** Zooms closer than this become one travelling zoom instead of two. */
   minRecoveryMs: number;
   /** A cluster within this distance extends the previous zoom, not a new one. */

@@ -35,9 +35,6 @@ type Props = {
 const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: number }> = [
   { key: "minHoldMs", label: "min hold (ms)", step: 100, min: 0 },
   { key: "minDwellMs", label: "min dwell (ms)", step: 100, min: 0 },
-  // The cap that keeps a take from living zoomed in. Segment length, like min
-  // dwell, so it includes the zoom-out the shot pays for.
-  { key: "maxDwellMs", label: "max dwell (ms)", step: 100, min: 200 },
   { key: "minRecoveryMs", label: "min recovery (ms)", step: 50, min: 0 },
   { key: "deadzonePx", label: "deadzone (px)", step: 10, min: 0 },
   // One zoom a minute at least, or the budget deletes every cluster.

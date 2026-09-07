@@ -60,10 +60,18 @@ function mergeForRecovery(segs: Segment[], cfg: ZoomConfig): Segment[] {
 }
 
 /**
- * Hold each zoom long enough to be a shot rather than a move, and not so long
- * that the take lives zoomed in.
+ * Hold each zoom long enough to be a shot rather than a move.
  *
- * `minDwellMs` is the target and `maxDwellMs` the cap. The floor is
+ * There is deliberately NO upper bound. A segment already ends at the
+ * activity's end plus `trailMs`, so a long segment means a long burst of
+ * activity — capping it pulls the camera out while the user is still working,
+ * and the cluster is spent so nothing re-engages. That shipped briefly on
+ * 2026-09-07 as `maxDwellMs`, from misreading Recordly's
+ * MAX_DWELL_DURATION_MS: that constant filters cursor-dwell CANDIDATES, not
+ * how long a zoom holds. On a real take it pulled out at 6.62s exactly as a
+ * 26-second typing run began.
+ *
+ * `minDwellMs` is the target. The floor is
  * `transitionOutMs` alone, not both transitions: a keyframe is the instant the
  * camera ARRIVES, so the zoom-in eases into `startT` from before it and cannot
  * constrain how long the segment lasts. Only the exit is paid from inside.
@@ -81,10 +89,7 @@ function enforceDwell(segs: Segment[], cfg: ZoomConfig): Segment[] {
     const latestEnd =
       next === undefined ? Infinity : next.startT - cfg.minRecoveryMs;
 
-    // The cap applies after the min-dwell push, or a shot shorter than the
-    // target would be dragged back down by it.
-    const held = Math.min(Math.max(s.endT, s.startT + cfg.minDwellMs), s.startT + cfg.maxDwellMs);
-    const endT = Math.min(held, latestEnd);
+    const endT = Math.min(Math.max(s.endT, s.startT + cfg.minDwellMs), latestEnd);
     if (endT - s.startT < floor) return;
 
     out.push({ ...s, endT });

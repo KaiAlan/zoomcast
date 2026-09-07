@@ -21,8 +21,6 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
    * MIN_DWELL_DURATION_MS, measured holding on its exports too.
    */
   minDwellMs: 1450,
-  /** 2600ms of visible hold (Recordly's MAX_DWELL_DURATION_MS) plus the exit. */
-  maxDwellMs: 3600,
   minRecoveryMs: 700,
   deadzonePx: 120,
   maxZoomsPerMinute: 20,

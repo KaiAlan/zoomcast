@@ -474,10 +474,10 @@ Measured from a 45.1s Recordly export, and cross-checked against its source:
 
 | | Recordly | zoomcast before | zoomcast after |
 | --- | --- | --- | --- |
-| take spent zoomed | 28% | 52-64% | 24-46% |
+| take spent zoomed | 28% | 52-64% | 52-64% (see below) |
 | shots per minute | 6.6 | 6.5-8.9 | unchanged |
 | depth | 1.5 flat | 1.15-1.55 graded | unchanged |
-| hold bounds | 450-2600ms | min only | `minDwellMs` 1450, `maxDwellMs` 3600 |
+| hold bounds | 450-2600ms, and NOT a zoom-length cap | min only | `minDwellMs` 1450, still no maximum |
 | pan during a hold | **~0-1px/s** | 0px/s | 0px/s |
 
 Two things worth keeping in mind:
@@ -485,10 +485,20 @@ Two things worth keeping in mind:
 - **The reference does NOT pan during a hold either.** Its camera arrives and
   freezes, exactly like `position: "fixed"`. Whatever makes it read as smooth,
   it is not a follow camera — so do not reach for follow to chase this look.
-- **`maxDwellMs` is what moved the needle**, not the curve. Without a cap the
-  planner holds a zoom until the next cluster, which is why takes sat 61-64%
-  zoomed. Both new dials are segment length, so they include the zoom-out the
-  shot pays for: 2600ms of visible hold + a 1000ms exit = 3600.
+- **There is deliberately no cap on how long a zoom holds, and adding one was
+  a mistake.** `maxDwellMs` shipped for about an hour on 2026-09-07 and was
+  removed the same session. Recordly's `MAX_DWELL_DURATION_MS` filters
+  cursor-DWELL CANDIDATES — "a run of stillness longer than 2.6s is not a
+  dwell signal" — and says nothing about zoom length; reading it as a cap was
+  the error. A segment already ends at the activity's end plus `trailMs`, so a
+  long segment means a long burst of activity. Capping it pulled the camera
+  out at 6.62s on a real take **exactly as a 26-second typing run began**, and
+  nothing re-engaged because the cluster was spent. It also left segments
+  holding waypoints beyond their own end.
+- **So the 28% figure is not a target to engineer toward.** It came from one
+  45s clip of someone else's content. What is transferable is the CURVE and
+  the transition windows, which are properties of the tool; how much of a take
+  is zoomed is a property of what the take contains.
 
 ### Is "floaty and laggy" fixed?
 
