@@ -17,6 +17,8 @@
     "verify:parity": "npm run build && tsx tools/verify-parity.ts",
     "tune": "tsx tools/tune-planner.ts",
     "bench:encoders": "tsx tools/bench-encoders.ts",
+    "camera:travel": "tsx tools/camera-travel.ts",
+    "render:camera": "tsx tools/render-camera.ts",
     "icon": "tsx tools/make-icon.ts",
     "dist": "npm run build && electron-builder --win"
   },

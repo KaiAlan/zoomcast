@@ -14,6 +14,12 @@ genuinely crops toward the pointer and the composition survives being zoomed
 in. Read "The camera" below before touching any of it, and
 `docs/specs/2026-09-07-camera-geometry-and-depth-design.md` for why.
 
+**Start the next session at
+`docs/superpowers/plans/2026-09-07-follow-camera-handoff.md`.** The camera is
+still static during a hold — measurably, 0px/s — and the agreed next step is a
+per-segment switch to the follow camera, which is built but has no UI. That
+document carries the decision, the design and the traps.
+
 Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
 tracked as phases C–F in
 `docs/specs/2026-09-04-composition-and-camera-design.md` §13, plus webcam PiP
@@ -230,6 +236,8 @@ unit tests could not have caught.
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
 | `ZOOMCAST_RECORD_TEST_RUNS=<n>` | n recordings in **one process**, each reporting `hasCursorShapes` and its cursor-event count. Use 2+ for anything touching process-global state — see the koffi entry below |
 | `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
+| `npm run camera:travel -- <take>` | How far the camera moves DURING a hold, fixed vs follow. Fixed is 0px/s — it arrives and freezes |
+| `npm run render:camera -- <take>` | Renders a take twice, every zoom fixed then every zoom following, to watch side by side |
 | `npm run icon` | Redraws `build/icon.ico` from `tools/make-icon.ts` |
 
 The record test is the best check on a packaged build, because it exercises the
