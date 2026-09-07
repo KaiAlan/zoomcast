@@ -1,8 +1,8 @@
 # zoomcast — handover
 
 Updated 2026-09-07. **Phases 0–7, A, B and C complete, plus the camera
-geometry and depth rework and the per-segment camera switch — all merged to
-`main` on 2026-09-07, and `feat/phase-c-camera` is gone.** The tool records
+geometry and depth rework, the per-segment camera switch, and a day of camera
+retiming measured against a Recordly export — all on `main`.** The tool records
 your screen, mic and system audio, plans zooms from real input telemetry,
 drives a camera that opens at rest and can follow the cursor, draws a synthetic cursor with real shapes and
 click ripples, composes the frame over a procedural or custom background, lets
@@ -31,13 +31,20 @@ between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
 a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
 
-**Start the next session by watching an export of a follow shot.** Three open
-questions in `docs/superpowers/plans/2026-09-07-follow-camera-handoff.md` need
-eyes rather than code: whether follow reads well on a short hold, whether a
-follow shot wants to sit deeper than a fixed one, and whether a
-minimum-meaningful-zoom floor is worth adding. That document also carries the
-lever not taken — widening `minRecoveryMs` so the camera travels between focus
-points instead of retreating between them.
+**Start the next session at
+`docs/superpowers/plans/2026-09-07-camera-feel-handoff.md`.** It carries the
+state of the camera-feel work, the three routes open for the preview, the
+stateful decoder that was tried and reverted with the feedback loop any retry
+has to break, the fully measured motion-blur recipe, and the mistakes made
+that day so they are not repeated.
+
+**The headline: the editor preview runs at ~13fps, and that is what "lagging
+and glitchy" was.** `npm run bench:preview` measures it. Judge camera work on
+an export, not in the editor, until that changes.
+
+The `minRecoveryMs` lever that document's predecessor called "not taken" HAS
+now been taken — shots chain at 1500ms and pan between focus points on their
+own curve.
 
 Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
 tracked as phases C–F in
@@ -61,7 +68,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 323 passing, 36 files
+npm test              # 326 passing, 36 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
