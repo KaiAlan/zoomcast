@@ -44,24 +44,3 @@ export function pixelParityZoom(
 ): number {
   return source.w / screenRect(source, output, paddingFactor).w;
 }
-
-/**
- * Zoom needed to fit a cluster's bounds, clamped to what is allowed.
- *
- * Clamped to `cfg.maxZoom`, not to `pixelParityZoom`. Those were the same
- * clamp until 2026-09-07, and it is the one that actually binds: a single
- * click has bounds of zero and asks for roughly 12x, so every zoom on every
- * take landed exactly on it. Raising the ceiling without moving this clamp
- * changes nothing at all.
- */
-export function fitScale(c: Cluster, cfg: ZoomConfig, ctx: PlanContext): number {
-  const boundsW = c.maxX - c.minX + cfg.marginPx * 2;
-  const boundsH = c.maxY - c.minY + cfg.marginPx * 2;
-
-  const desired = Math.min(
-    ctx.source.w / Math.max(boundsW, 1),
-    ctx.source.h / Math.max(boundsH, 1),
-  );
-
-  return clamp(desired, 1, cfg.maxZoom);
-}

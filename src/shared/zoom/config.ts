@@ -33,4 +33,18 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
    */
   easing: "zoomGlide",
   maxZoom: 1.6,
+  zoomClick: 1.55,
+  zoomType: 1.35,
+  zoomScroll: 1.15,
+  /**
+   * Tuned against real takes, not chosen: at 0.6 and at 0.8 exactly the same
+   * single zoom is dropped across every take on disk — the widest cluster,
+   * spanning 0.853 of the screen. 0.6 additionally rejected a cluster spanning
+   * 0.625, which is the shape of the synthetic test fixture and of any
+   * genuinely wide burst of activity, and rejecting those buys nothing.
+   */
+  contextFraction: 0.8,
+  intentWeightClick: 1,
+  intentWeightKey: 0.4,
+  intentWeightWheel: 0.3,
 };

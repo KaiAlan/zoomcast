@@ -12,6 +12,7 @@ const cluster = (
   cy: number,
   weight = 1,
 ): Cluster => ({
+  intentScores: { click: 1, key: 0, wheel: 0 },
   startT,
   endT,
   cx,

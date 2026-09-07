@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { clusterImpulses, mergeAndFilter } from "./cluster";
+import { absorbCluster, clusterImpulses, clusterIntent, mergeAndFilter } from "./cluster";
+import { DEFAULT_DEPTH_CONFIG } from "./depth";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
-import type { Impulse } from "./types";
+import type { Cluster, Impulse } from "./types";
 
 const cfg = DEFAULT_ZOOM_CONFIG;
 
-const imp = (t: number, x: number, y: number, w = 1, srcIndex = 0): Impulse => ({
+const imp = (
+  t: number,
+  x: number,
+  y: number,
+  w = 1,
+  srcIndex = 0,
+  kind: Impulse["kind"] = "click",
+): Impulse => ({
+  kind,
   t,
   x,
   y,
@@ -69,5 +78,59 @@ describe("mergeAndFilter", () => {
     const merged = mergeAndFilter(cs, cfg);
     expect(merged).toHaveLength(1);
     expect(merged[0]?.weight).toBe(1);
+  });
+});
+
+describe("clusterIntent", () => {
+  const depthCfg = DEFAULT_DEPTH_CONFIG;
+  const clusterOf = (imps: Impulse[]): Cluster =>
+    clusterImpulses(imps, DEFAULT_ZOOM_CONFIG)[0] as Cluster;
+
+  it("calls a lone click a click", () => {
+    expect(clusterIntent(clusterOf([imp(0, 500, 400, 1, 0, "click")]), depthCfg)).toBe("click");
+  });
+
+  /**
+   * The case the design cares about: people click into a field before typing
+   * into it, and a typing run wants CONTEXT, not the deepest zoom available.
+   * One click scores 1.0 against twenty keystrokes at 8.0.
+   */
+  it("calls a typing run opened by a click a typing run", () => {
+    const imps = [
+      imp(0, 500, 400, 1, 0, "click"),
+      ...Array.from({ length: 20 }, (_, i) => imp(i * 50, 500, 400, 0.4, i + 1, "key")),
+    ];
+    expect(clusterIntent(clusterOf(imps), depthCfg)).toBe("type");
+  });
+
+  it("calls a scroll burst a scroll", () => {
+    const imps = Array.from({ length: 6 }, (_, i) => imp(i * 40, 500, 400, 0.3, i, "wheel"));
+    expect(clusterIntent(clusterOf(imps), depthCfg)).toBe("scroll");
+  });
+
+  /** Deterministic, and it errs toward context: too much is recoverable. */
+  it("breaks a tie toward the shallower intent", () => {
+    const c = clusterOf([imp(0, 500, 400, 1, 0, "click")]);
+    // 1 click scores 1.0; 2.5 keys score 1.0 as well.
+    c.intentScores.key = 2.5;
+    expect(clusterIntent(c, depthCfg)).toBe("type");
+  });
+
+  it("counts kinds rather than weights, so weights stay tunable", () => {
+    const c = clusterOf([
+      imp(0, 500, 400, 1, 0, "click"),
+      imp(10, 500, 400, 0.4, 1, "key"),
+      imp(20, 500, 400, 0.4, 2, "key"),
+    ]);
+    expect(c.intentScores).toEqual({ click: 1, key: 2, wheel: 0 });
+  });
+
+  it("keeps its own scores when clusters merge", () => {
+    // A shallow spread would have two clusters sharing one scores object.
+    const a = clusterOf([imp(0, 500, 400, 1, 0, "click")]);
+    const b = clusterOf([imp(10, 500, 400, 1, 1, "click")]);
+    absorbCluster(a, b);
+    expect(b.intentScores.click).toBe(1);
+    expect(a.intentScores.click).toBe(2);
   });
 });

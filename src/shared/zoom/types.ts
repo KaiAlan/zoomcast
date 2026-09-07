@@ -44,7 +44,26 @@ export type ZoomConfig = {
    * landed on it and the camera had nowhere to go.
    */
   maxZoom: number;
+  /** Base zoom for a click-led cluster. See depth.ts. */
+  zoomClick: number;
+  /** Base zoom for a typing run — shallower, because reading needs context. */
+  zoomType: number;
+  /** Base zoom for a scroll burst. */
+  zoomScroll: number;
+  /** What fraction of the frame the activity may occupy before pulling back. */
+  contextFraction: number;
+  /**
+   * Intent weights. Separate from `Impulse.w`, which gates `minWeight` and so
+   * decides whether a cluster earns a zoom AT ALL — sharing one number would
+   * mean tuning how deep a typing zoom goes silently changed how many zooms
+   * there are.
+   */
+  intentWeightClick: number;
+  intentWeightKey: number;
+  intentWeightWheel: number;
 };
+
+export type ImpulseKind = "click" | "key" | "wheel";
 
 export type Impulse = {
   t: number;
@@ -52,6 +71,11 @@ export type Impulse = {
   y: number;
   w: number;
   srcIndex: number;
+  /**
+   * What produced this impulse. Separate from `w`: that weight decides whether
+   * a cluster earns a zoom at all, while kind decides how deep the zoom goes.
+   */
+  kind: ImpulseKind;
 };
 
 export type Cluster = {
@@ -65,6 +89,12 @@ export type Cluster = {
   cx: number;
   cy: number;
   anchorIndex: number;
+  /**
+   * How many impulses of each kind this cluster absorbed. Counts, not weights —
+   * the weighting happens in `clusterIntent`, so the weights stay tunable
+   * without re-clustering.
+   */
+  intentScores: Record<ImpulseKind, number>;
 };
 
 export type ZoomKeyframe = {

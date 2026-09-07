@@ -1,7 +1,7 @@
 import type { TelemetryEvent } from "../bundle/types";
-import { clusterImpulses, mergeAndFilter } from "./cluster";
-import { fitScale } from "./geometry";
+import { clusterImpulses, clusterIntent, mergeAndFilter } from "./cluster";
 import { applyGuards } from "./guards";
+import { depthConfigFrom, zoomDepth } from "./depth";
 import { toImpulses } from "./impulses";
 import { scaleToDepth } from "./keyframes";
 import { applySegmentGuards, type Segment } from "./segments";
@@ -32,9 +32,24 @@ export function planZoom(
   );
 
   const segments: Segment[] = [];
+  const depthCfg = depthConfigFrom(cfg);
 
   for (const c of clusters) {
-    const scale = fitScale(c, cfg, ctx);
+    const scale = zoomDepth(
+      {
+        intent: clusterIntent(c, depthCfg),
+        // Normalised per axis, so the rule does not depend on the capture's
+        // resolution: a 4K take grades the same way a 1080p one does.
+        spread: {
+          x: (c.maxX - c.minX) / ctx.source.w,
+          y: (c.maxY - c.minY) / ctx.source.h,
+        },
+      },
+      depthCfg,
+    );
+
+    // Activity spread across most of the screen resolves to 1 and earns no
+    // camera move at all, which is intended: there is nothing to zoom into.
     if (scale <= 1.0001) continue;
 
     segments.push({

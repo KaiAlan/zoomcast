@@ -61,7 +61,9 @@ export function applyGuards(
       }
     }
 
-    kept.push({ ...c });
+    // Its own copy, or two clusters absorbed into this one share a scores
+    // object with the original.
+    kept.push({ ...c, intentScores: { ...c.intentScores } });
   }
 
   return rateLimit(kept, cfg, durationMs);

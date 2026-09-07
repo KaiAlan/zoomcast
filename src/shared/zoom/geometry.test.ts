@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
-import { fitScale, pixelParityZoom, screenRect } from "./geometry";
+import { pixelParityZoom, screenRect } from "./geometry";
 import type { Cluster, PlanContext } from "./types";
 
 const HD = { w: 1920, h: 1080 };
@@ -36,43 +36,3 @@ describe("pixelParityZoom", () => {
   });
 });
 
-describe("fitScale", () => {
-  const ctx: PlanContext = {
-    source: HD,
-    output: HD,
-    paddingFactor: 0.85,
-    durationMs: 60_000,
-  };
-
-  const cluster = (halfW: number): Cluster => ({
-    startT: 0,
-    endT: 0,
-    cx: 960,
-    cy: 540,
-    weight: 1,
-    anchorIndex: 0,
-    minX: 960 - halfW,
-    maxX: 960 + halfW,
-    minY: 490,
-    maxY: 590,
-  });
-
-  it("clamps a tight cluster to the configured maximum", () => {
-    // A 5px cluster asks for roughly 12x. The cap is cfg.maxZoom since
-    // 2026-09-07 — it used to be pixelParityZoom, which meant every zoom on
-    // every take landed on 1.176 and the camera had nowhere to go.
-    expect(fitScale(cluster(5), DEFAULT_ZOOM_CONFIG, ctx)).toBeCloseTo(
-      DEFAULT_ZOOM_CONFIG.maxZoom,
-      9,
-    );
-  });
-
-  it("follows the configured maximum rather than the output size", () => {
-    const shallow = { ...DEFAULT_ZOOM_CONFIG, maxZoom: 1.2 };
-    expect(fitScale(cluster(5), shallow, ctx)).toBeCloseTo(1.2, 9);
-  });
-
-  it("never returns less than 1", () => {
-    expect(fitScale(cluster(5000), DEFAULT_ZOOM_CONFIG, ctx)).toBe(1);
-  });
-});

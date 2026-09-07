@@ -27,12 +27,12 @@ export function toImpulses(events: TelemetryEvent[], cfg: ZoomConfig): Impulse[]
       case "down":
         lastCursor = { x: e.x, y: e.y };
         lastClick = { x: e.x, y: e.y, t: e.t };
-        out.push({ t: e.t, x: e.x, y: e.y, w: CLICK_WEIGHT, srcIndex: i });
+        out.push({ t: e.t, x: e.x, y: e.y, w: CLICK_WEIGHT, srcIndex: i, kind: "click" });
         break;
 
       case "wheel":
         lastCursor = { x: e.x, y: e.y };
-        out.push({ t: e.t, x: e.x, y: e.y, w: WHEEL_WEIGHT, srcIndex: i });
+        out.push({ t: e.t, x: e.x, y: e.y, w: WHEEL_WEIGHT, srcIndex: i, kind: "wheel" });
         break;
 
       case "key": {
@@ -41,7 +41,7 @@ export function toImpulses(events: TelemetryEvent[], cfg: ZoomConfig): Impulse[]
         const fresh = click !== null && e.t - click.t <= cfg.keyAnchorWindowMs;
         const anchor = fresh ? click : lastCursor;
         if (anchor === null) break;
-        out.push({ t: e.t, x: anchor.x, y: anchor.y, w: KEY_WEIGHT, srcIndex: i });
+        out.push({ t: e.t, x: anchor.x, y: anchor.y, w: KEY_WEIGHT, srcIndex: i, kind: "key" });
         break;
       }
 

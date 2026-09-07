@@ -8,7 +8,9 @@ const cfg = DEFAULT_ZOOM_CONFIG;
 describe("toImpulses", () => {
   it("emits a full-weight impulse for a click", () => {
     const ev: TelemetryEvent[] = [{ t: 100, k: "down", x: 10, y: 20, b: 1 }];
-    expect(toImpulses(ev, cfg)).toEqual([{ t: 100, x: 10, y: 20, w: 1, srcIndex: 0 }]);
+    expect(toImpulses(ev, cfg)).toEqual([
+      { t: 100, x: 10, y: 20, w: 1, srcIndex: 0, kind: "click" },
+    ]);
   });
 
   it("emits nothing for movement alone", () => {
@@ -28,6 +30,7 @@ describe("toImpulses", () => {
       y: 400,
       w: 0.4,
       srcIndex: 2,
+      kind: "key",
     });
   });
 
@@ -43,6 +46,7 @@ describe("toImpulses", () => {
       y: 900,
       w: 0.4,
       srcIndex: 2,
+      kind: "key",
     });
   });
 

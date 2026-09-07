@@ -204,3 +204,38 @@ describe("planZoom", () => {
     });
   });
 });
+
+/**
+ * Depth grading. Before 2026-09-07 every zoom in every take was the same
+ * scale, because fitScale asked for ~12x on a single click and got clamped.
+ */
+it("zooms deeper for a click than for a scroll", () => {
+  const click = plan([{ t: 1000, k: "down", x: 500, y: 400, b: 1 }], DEFAULT_ZOOM_CONFIG, ctx);
+  const scroll = plan(
+    Array.from({ length: 6 }, (_, i) => ({
+      t: 1000 + i * 40,
+      k: "wheel" as const,
+      x: 500,
+      y: 400,
+      dy: -1,
+    })),
+    DEFAULT_ZOOM_CONFIG,
+    ctx,
+  );
+
+  expect(click[0]?.scale ?? 0).toBeGreaterThan(scroll[0]?.scale ?? 0);
+});
+
+it("pulls back for activity spread across the screen", () => {
+  const tight = plan([{ t: 1000, k: "down", x: 960, y: 540, b: 1 }], DEFAULT_ZOOM_CONFIG, ctx);
+  const wide = plan(
+    [
+      { t: 1000, k: "down", x: 200, y: 540, b: 1 },
+      { t: 1200, k: "down", x: 1500, y: 540, b: 1 },
+    ],
+    { ...DEFAULT_ZOOM_CONFIG, clusterRadiusPx: 2000 },
+    ctx,
+  );
+
+  expect(wide[0]?.scale ?? 0).toBeLessThan(tight[0]?.scale ?? 0);
+});
