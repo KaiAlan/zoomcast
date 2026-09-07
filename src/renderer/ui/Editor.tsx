@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
-import { buildCursorPath, cursorAt } from "../../shared/cursor/path";
+import { buildCursorPath, cursorAt, smoothingToHalfLife } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
 import { outputSizeFor } from "../../shared/style/aspect";
@@ -73,7 +73,7 @@ export function Editor({
   const cursorPath = useMemo(
     () =>
       buildCursorPath(bundle.telemetry, {
-        smoothing: project.style.cursor.smoothing,
+        halfLifeMs: smoothingToHalfLife(project.style.cursor.smoothing),
         sampleHz: 120,
       }),
     [bundle.telemetry, project.style.cursor.smoothing],

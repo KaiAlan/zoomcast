@@ -218,8 +218,16 @@ for a result that is a fixed-size bitmap — the one thing that cannot survive
 being zoomed. Eight vector shapes cover `CursorShape` and stay sharp at any
 depth and any export resolution.
 
-Position comes from the same smoothed path the camera uses (§9), so cursor and
-camera cannot disagree.
+Position comes from the same *function* the camera uses (§9), evaluated at two
+half-lives: a cursor-scale one driven by the `smoothing` style control, and a
+camera-scale one fixed by the segment. They are deliberately not one shared
+path. `smoothing` is a presentation control the user can set to 0 — raw
+telemetry — and a camera that inherited that would jitter every time someone
+turned cursor smoothing off. So `buildCursorPath` takes `halfLifeMs` directly
+and the 0-1 mapping (`smoothingToHalfLife`, capped at 90ms) is applied at the
+call site. Sharing the function is what keeps the two from disagreeing about
+*shape*; the half-lives are what let them disagree about *lag*, which is
+correct — a camera lags a cursor on purpose.
 
 Size is compensated for zoom so apparent size stays constant: a cursor that
 grows with the zoom looks like a bug, not a feature.

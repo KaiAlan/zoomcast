@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { TelemetryEvent } from "../bundle/types";
-import { buildCursorPath, cursorAt } from "./path";
+import { buildCursorPath, cursorAt, smoothingToHalfLife } from "./path";
 
-const opts = { smoothing: 0.8, sampleHz: 120 };
+const opts = { halfLifeMs: smoothingToHalfLife(0.8), sampleHz: 120 };
 
 describe("buildCursorPath", () => {
   it("returns an empty path for no events at all", () => {
@@ -82,7 +82,7 @@ describe("buildCursorPath", () => {
       { t: 0, k: "move", x: 0, y: 0 },
       { t: 500, k: "move", x: 200, y: 0 },
     ];
-    const s = cursorAt(buildCursorPath(events, { smoothing: 0, sampleHz: 120 }), 500);
+    const s = cursorAt(buildCursorPath(events, { halfLifeMs: smoothingToHalfLife(0), sampleHz: 120 }), 500);
     expect(s?.x).toBeCloseTo(200, 0);
   });
 
@@ -97,4 +97,34 @@ describe("buildCursorPath", () => {
     expect(cursorAt(path, 400)?.shape).toBe("hand");
   });
 
+});
+
+describe("halfLifeMs", () => {
+  const events: TelemetryEvent[] = [
+    { k: "move", t: 0, x: 0, y: 0 },
+    { k: "move", t: 500, x: 1000, y: 0 },
+  ];
+
+  it("damps more at a longer half-life", () => {
+    const quick = buildCursorPath(events, { halfLifeMs: 30, sampleHz: 120 });
+    const slow = buildCursorPath(events, { halfLifeMs: 400, sampleHz: 120 });
+
+    const at = (p: ReturnType<typeof buildCursorPath>) => cursorAt(p, 520)?.x ?? 0;
+    // Both lag the step; the camera-scale path lags much further behind.
+    expect(at(quick)).toBeGreaterThan(at(slow));
+  });
+
+  it("maps the 0-1 presentation control onto a cursor-scale half-life", () => {
+    expect(smoothingToHalfLife(0)).toBeLessThan(smoothingToHalfLife(1));
+    expect(smoothingToHalfLife(1)).toBeLessThanOrEqual(90);
+  });
+
+  /**
+   * The camera must not become jittery because the user turned the CURSOR's
+   * smoothing off. That is the whole reason these are separate inputs.
+   */
+  it("a camera-scale half-life is unaffected by the cursor control", () => {
+    const camera = buildCursorPath(events, { halfLifeMs: 400, sampleHz: 120 });
+    expect(cursorAt(camera, 520)?.x).toBeLessThan(1000);
+  });
 });

@@ -1,8 +1,12 @@
 import type { CursorShape, TelemetryEvent } from "../bundle/types";
 
 export type PathOptions = {
-  /** 0 = raw telemetry, 1 = heavily damped. */
-  smoothing: number;
+  /**
+   * Half-life of the lag, in ms. Not a 0-1 style control: the camera builds
+   * its own path at a several-hundred-millisecond half-life through this same
+   * function, so the units have to be the real ones.
+   */
+  halfLifeMs: number;
   sampleHz: number;
 };
 
@@ -70,8 +74,7 @@ export function buildCursorPath(
   const shapes: CursorShape[] = new Array<CursorShape>(count);
 
   // Half-life form, so the response is frame-rate independent by construction.
-  const halfLife =
-    MIN_HALF_LIFE_MS + (MAX_HALF_LIFE_MS - MIN_HALF_LIFE_MS) * clamp01(opts.smoothing);
+  const halfLife = opts.halfLifeMs;
   const decay = halfLife <= 0 ? 0 : Math.pow(0.5, stepMs / halfLife);
 
   let x = first.x;
@@ -103,6 +106,18 @@ export function buildCursorPath(
   }
 
   return { t0, stepMs, xs, ys, shapes };
+}
+
+/**
+ * The 0-1 style control, mapped onto a cursor-scale half-life.
+ *
+ * Lives here so the range stays with the code that knows what a half-life
+ * means, but is applied at the CALL SITE: the camera builds its own path at a
+ * several-hundred-millisecond half-life, and must not inherit a presentation
+ * control the user can set to zero.
+ */
+export function smoothingToHalfLife(smoothing: number): number {
+  return MIN_HALF_LIFE_MS + (MAX_HALF_LIFE_MS - MIN_HALF_LIFE_MS) * clamp01(smoothing);
 }
 
 export function cursorAt(path: CursorPath, tMs: number): CursorSample | null {
