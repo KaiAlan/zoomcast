@@ -9,11 +9,21 @@ click ripples, composes the frame over a procedural or custom background, lets
 you cut and scrub, and exports a finished MP4 at a chosen aspect and
 resolution.
 
-**Zoom means something different now.** The frame no longer grows: it is fixed,
-and zoom samples a smaller region of the recording inside it, so the camera
-genuinely crops toward the pointer and the composition survives being zoomed
-in. Read "The camera" below before touching any of it, and
-`docs/specs/2026-09-07-camera-geometry-and-depth-design.md` for why.
+**Zoom grows the whole window and travels it. It does NOT crop.** The
+composited window scales about the focus point and slides so the focus
+approaches the output centre; above `1 / paddingFactor` it is larger than the
+output and bleeds off every edge, so the background disappears while zoomed.
+That is correct and deliberate — it is what the reference footage does.
+
+This **reverses** the 2026-09-07 rework, which made the frame constant and
+shrank the sampled region instead. That rework's premise was that a growing
+window "capped the whole zoom range at 1/paddingFactor and left the camera with
+zero freedom at the top of it" — but that was the CAP, not the model:
+`maxZoom` was derived from the padding. `maxZoom` is an independent dial now,
+so the growing window has all the room it needs. **Third time this codebase
+blamed a model for what a cap was doing.** The user's complaint, three times
+over, was "the section is zooming and getting cropped, I want the camera to
+zoom and travel" — the cropping was literal.
 
 **The per-segment follow camera landed 2026-09-07.** Click a shot in the
 timeline and the inspector's "selected shot" section switches its camera
@@ -51,7 +61,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 325 passing, 36 files
+npm test              # 323 passing, 36 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -361,9 +371,10 @@ The frame is now fixed and the **sampled source region is the camera**.
 
 | Piece | Where |
 | --- | --- |
-| `sourceRectFor(zoom, frame, source)` | `src/shared/zoom/viewport.ts` — the camera and its clamp |
-| `sourceToFrame(p, rect, frame)` | same file — the ONE mapping, used by screen, cursor and ripples |
-| `screenQuad(source, output, padding)` | `src/renderer/gl/layout.ts` — the fixed frame; **no zoom argument any more** |
+| `screenQuadFor(source, output, padding, zoom)` | `src/shared/zoom/viewport.ts` — the camera and its clamp. In shared, not the renderer, because `clampToSource` needs the same clamp |
+| `focusBoundsFor(...)` | same file — which focus centres the quad will not clamp. Clamping the quad is **not** a fixed point in `cx`, so the follow path is clamped in `cx` directly |
+| `sourceToFrame(p, rect, frame)` | same file — the ONE mapping, used by screen, cursor and ripples. Product code passes `WHOLE_SOURCE`: the zoom is in the quad |
+| `screenQuad(source, output, padding, zoom)` | `src/renderer/gl/layout.ts` — a thin delegate to `screenQuadFor` |
 | `zoomDepth(inputs, cfg)` | `src/shared/zoom/depth.ts` — how deep, from intent and spread |
 
 Things worth knowing before touching it:
@@ -650,8 +661,18 @@ Each of these cost real time; none is hypothetical.
   The continuity properties in `layout.test.ts` are what hold it closed: they
   sweep the scale and bound the per-step movement, because pinned positions
   pass happily against a curve that jumps between the pinned points.
-- **FIXED 2026-09-07: at the zoom ceiling the composition used to be exactly
-  invisible.** `1/0.85` was both the ceiling and the scale at which the screen
+- **The composition is INTENDED to disappear at depth.** Once the window is
+  larger than the output there is no background, no border and no shadow —
+  that is the reference's look, not a bug, and it is why judging the
+  compositor on a zoomed take tells you nothing. Use a take at rest.
+- **A clamped quad is not a fixed point in `cx`.** Reading a centre back off a
+  clamped quad and feeding it in again moves the quad — measured at 135px on
+  the first attempt at `clampToSource`. `focusBoundsFor` solves the bound
+  analytically instead, from the same expression `screenQuadFor` uses, and
+  `camera.test.ts` sweeps scales and centres asserting a second pass changes
+  nothing.
+- **Superseded 2026-09-07: at the zoom ceiling the composition used to be
+  exactly invisible.** `1/0.85` was both the ceiling and the scale at which the screen
   filled the padded frame, so a zoomed-in take showed no background, no border
   and no shadow — and worse, the quad covered the output, so `cx`/`cy` clamped
   to dead centre and the camera was inert exactly when the zoom was deepest.

@@ -1,7 +1,7 @@
 import { buildCursorPath, type CursorPath } from "../cursor/path";
 import type { TelemetryEvent } from "../bundle/types";
-import { screenRect } from "./geometry";
-import { sourceRectFor } from "./viewport";
+import { clamp, screenRect } from "./geometry";
+import { focusBoundsFor } from "./viewport";
 import type { PlanContext } from "./types";
 
 /**
@@ -43,25 +43,26 @@ export function followPath(
 }
 
 /**
- * Keep the viewport inside the source.
+ * Keep the window covering the output.
  *
- * Derived from `sourceRectFor` rather than reimplemented: two copies of this
- * arithmetic would be free to disagree, and the one the renderer samples with
- * is the one that decides what is actually on screen. Applied to the SMOOTHED
- * path rather than the raw cursor, so approaching an edge decelerates the
- * camera instead of sticking it against the wall.
+ * Derived from `screenQuadFor` rather than reimplemented: that is the quad the
+ * renderer actually draws with, so it is the one that decides what is on
+ * screen, and two copies of the clamp would be free to disagree. Applied to
+ * the SMOOTHED path rather than the raw cursor, so approaching an edge
+ * decelerates the camera instead of sticking it against the wall.
  *
- * Before 2026-09-07 this had a branch for "nothing is cropped at this aspect",
- * which was true at the native aspect for every legal scale and made the follow
- * camera inert there. Every scale above 1 crops now, so the branch is gone.
+ * The round trip is: build the quad for this centre, then read back which
+ * source point the clamped quad puts at the output centre.
  */
 export function clampToSource(
   centre: { cx: number; cy: number },
   scale: number,
   ctx: PlanContext,
 ): { cx: number; cy: number } {
-  const frame = screenRect(ctx.source, ctx.output, ctx.paddingFactor);
-  const r = sourceRectFor({ scale, cx: centre.cx, cy: centre.cy }, frame, ctx.source);
+  const b = focusBoundsFor(ctx.source, ctx.output, ctx.paddingFactor, scale);
 
-  return { cx: r.x + r.w / 2, cy: r.y + r.h / 2 };
+  return {
+    cx: clamp(centre.cx, b.x[0], b.x[1]),
+    cy: clamp(centre.cy, b.y[0], b.y[1]),
+  };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TelemetryEvent } from "../bundle/types";
 import { cursorAt } from "../cursor/path";
+import { focusBoundsFor, screenQuadFor } from "./viewport";
 import { clampToSource, followPath } from "./camera";
 import type { PlanContext } from "./types";
 
@@ -81,9 +82,51 @@ describe("clampToSource", () => {
    * itself — so the follow camera had nowhere to go and was inert. These tests
    * used to encode that; they encode the new geometry instead.
    */
-  it("clamps so the viewport never leaves the source", () => {
-    const { cx } = clampToSource({ cx: 0, cy: 0.5 }, 1.6, ctx);
-    expect(cx).toBeCloseTo(1 / 1.6 / 2, 9);
+  it("clamps so the window never exposes background", () => {
+    // The bound is a property of the quad, not a constant: 1/1.6/2 was the
+    // sampled-region model's answer and is wrong for a growing window.
+    const { cx, cy } = clampToSource({ cx: 0, cy: 0.5 }, 1.6, ctx);
+    const quad = screenQuadFor(ctx.source, ctx.output, ctx.paddingFactor, {
+      scale: 1.6,
+      cx,
+      cy,
+    });
+
+    expect(quad.w).toBeGreaterThan(ctx.output.w);
+    // Focus hard left, so the left edge is the one that binds.
+    expect(quad.x).toBeCloseTo(0, 6);
+    expect(quad.x + quad.w).toBeGreaterThanOrEqual(ctx.output.w - 1e-6);
+  });
+
+  it("is a fixed point — the quad it implies needs no further clamping", () => {
+    // The first attempt read a centre back off an already-clamped quad, which
+    // is NOT idempotent: feeding it in again moved the quad 135px. Every
+    // clamped centre must now survive a second pass unchanged.
+    for (const scale of [1.05, 1.2, 1 / 0.85, 1.4, 1.6, 2.2]) {
+      for (const cx of [-0.5, 0, 0.25, 0.5, 0.75, 1, 1.5]) {
+        const once = clampToSource({ cx, cy: 0.5 }, scale, ctx);
+        const twice = clampToSource(once, scale, ctx);
+        expect(twice.cx).toBeCloseTo(once.cx, 9);
+        expect(twice.cy).toBeCloseTo(once.cy, 9);
+      }
+    }
+  });
+
+  it("never lets the window expose background, at any scale or centre", () => {
+    for (const scale of [1.05, 1.2, 1 / 0.85, 1.4, 1.6, 2.2]) {
+      for (const cx of [-0.5, 0, 0.3, 0.5, 0.7, 1, 1.5]) {
+        const c = clampToSource({ cx, cy: cx }, scale, ctx);
+        const q = screenQuadFor(ctx.source, ctx.output, ctx.paddingFactor, {
+          scale,
+          cx: c.cx,
+          cy: c.cy,
+        });
+        if (q.w >= ctx.output.w) {
+          expect(q.x).toBeLessThanOrEqual(1e-6);
+          expect(q.x + q.w).toBeGreaterThanOrEqual(ctx.output.w - 1e-6);
+        }
+      }
+    }
   });
 
   it("leaves a centred viewport alone", () => {
@@ -116,9 +159,15 @@ describe("clampToSource", () => {
     expect(clampToSource({ cx: 0.1, cy: 0.9 }, 1, ctx)).toEqual({ cx: 0.5, cy: 0.5 });
   });
 
-  it("keeps a centre inside the source", () => {
+  it("pulls a wild centre onto the bound", () => {
+    // 1/1.6/2 was the sampled-region model's bound. A growing window admits a
+    // WIDER range — 0.283..0.717 here against 0.3125..0.6875 — which is the
+    // extra travel the change is for, so assert the real bound.
+    const b = focusBoundsFor(ctx.source, ctx.output, ctx.paddingFactor, 1.6);
     const { cx, cy } = clampToSource({ cx: -0.4, cy: 1.9 }, 1.6, ctx);
-    expect(cx).toBeGreaterThanOrEqual(1 / 1.6 / 2 - 1e-9);
-    expect(cy).toBeLessThanOrEqual(1 - 1 / 1.6 / 2 + 1e-9);
+
+    expect(cx).toBeCloseTo(b.x[0], 9);
+    expect(cy).toBeCloseTo(b.y[1], 9);
+    expect(b.x[0]).toBeLessThan(1 / 1.6 / 2);
   });
 });

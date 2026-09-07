@@ -4,7 +4,7 @@ import { pixelParityZoom, screenRect } from "./geometry";
 import type { TelemetryEvent } from "../bundle/types";
 import { followPath } from "./camera";
 import { zoomAt } from "./interpolate";
-import { sourceRectFor } from "./viewport";
+import { screenQuadFor } from "./viewport";
 import { depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
 import type { PlanContext, ZoomSegment } from "./types";
 
@@ -218,14 +218,19 @@ describe("a follow segment", () => {
     const frame = screenRect(square.source, square.output, square.paddingFactor);
 
     for (const k of kfs.filter((x) => x.scale > 1)) {
-      // The bound comes from the geometry the renderer actually samples with,
-      // rather than being recomputed here. This test carried its own copy of
-      // the old growing-frame formula and had to be rewritten when the geometry
-      // changed; deriving it means it cannot drift again.
-      const region = sourceRectFor({ scale: k.scale, cx: 0.5, cy: 0.5 }, frame, square.source);
-      const half = region.w / 2;
-      expect(k.cx).toBeGreaterThanOrEqual(half - 1e-9);
-      expect(k.cx).toBeLessThanOrEqual(1 - half + 1e-9);
+      // The bound comes from the quad the renderer actually draws with, not a
+      // copy of the formula. This test has carried its own copy twice now and
+      // had to be rewritten each time the geometry changed.
+      const quad = screenQuadFor(square.source, square.output, square.paddingFactor, {
+        scale: k.scale,
+        cx: k.cx,
+        cy: k.cy,
+      });
+      // An oversized window must never let the background back in.
+      if (quad.w >= square.output.w) {
+        expect(quad.x).toBeLessThanOrEqual(1e-6);
+        expect(quad.x + quad.w).toBeGreaterThanOrEqual(square.output.w - 1e-6);
+      }
     }
   });
 

@@ -14,7 +14,7 @@ import { resolveFrame } from "../../shared/style/frame";
 import { BackgroundTextureCache } from "./backgroundTexture";
 import { CursorTextureCache, padFor } from "./cursorTexture";
 import { screenQuad } from "./layout";
-import { sourceRectFor, sourceToFrame, type SourceRect } from "../../shared/zoom/viewport";
+import { WHOLE_SOURCE, sourceToFrame, type SourceRect } from "../../shared/zoom/viewport";
 import {
   BG_FRAG,
   CURSOR_FRAG,
@@ -210,8 +210,12 @@ export class Renderer {
 
     this.drawBackground(style, out, state.backgroundImageUrl);
 
-    const quad = screenQuad(src, out, style.paddingFactor);
-    const region = sourceRectFor(state.zoom, quad, src);
+    // The zoom is in the quad now: the window grows and travels, and the
+    // shader samples the whole recording into it. `region` stays in the
+    // signature because the cursor and ripples map through the same one
+    // function as the screen (invariant 5) — it is simply total.
+    const quad = screenQuad(src, out, style.paddingFactor, state.zoom);
+    const region = WHOLE_SOURCE;
 
     // Resolved once: every frame read must go through this or the presets
     // silently do nothing.
