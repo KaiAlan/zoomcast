@@ -1,8 +1,44 @@
 # Handoff — the per-segment follow camera
 
 **Written 2026-09-07 at the end of the camera geometry session.**
-**Branch:** `feat/phase-c-camera`, 19 commits ahead of `main`, unmerged, clean.
-**Status:** designed and approved, **not started**.
+**Branch:** `feat/phase-c-camera`, unmerged.
+**Status: BUILT 2026-09-07.** All three design items landed; the switch is
+reachable from the editor and measurably moves the camera. What remains of
+this document is the three open questions at the bottom, which need eyes on an
+export rather than code, and the lever not taken.
+
+## What was built, and how it differs from the design above
+
+- **§3 landed as designed.** `replanSegments` carries `position` across a
+  re-plan by id and does **not** pin the segment. Three tests; two of them
+  were red first.
+- **§1 and §2 landed**, with two additions the design did not anticipate:
+  - `sourceSpanToOutput` in `src/shared/project/timeline.ts`. A segment block
+    needs a source *range* mapped to output, and `sourceToOutput` returns
+    `null` inside a cut — right for a point, useless for a range that merely
+    crosses one. Each endpoint collapses onto the cut's seam instead. Four
+    tests. Doing this arithmetic inline in the component would have put it
+    where nothing can test it.
+  - Shots draw as **regions behind the keyframe markers**, not as their own
+    strip. The track is 78px and the two marker rows already occupy 10–34 and
+    44–68, so a strip would either collide or be too thin to click.
+- **Two defects the work exposed, both fixed.** The footer counted keyframes,
+  so a single follow shot on the 5s fixture read "33 zooms" — it counts
+  `segments.length` now. And the follow sampler's 100ms keyframes drew 43
+  markers over one hold, burying the two that mark a real camera decision;
+  markers whose easing is `linear` are skipped, which is exactly and only the
+  follow samples.
+- **New harness: `ZOOMCAST_UI_SHOT_JS`** runs JS in the page after it settles
+  and before the capture. Without it the UI harness can only photograph the
+  editor as it loads, which is the one state no interaction bug lives in. It
+  is what proved this feature works: click the block → `sk2` selected → switch
+  to follow → `sk2 · follow` survives the re-plan.
+
+**Evidence at the time of writing:** 315 tests / 36 files, typecheck silent,
+`verify:decode` 6/6, `verify:parity` 25/25 at 43.9–46.1dB, and `tune -- all`
+**byte-identical** against the pre-change tree, which is the guard that pacing
+did not move. `camera:travel -- 2026-09-07T12-01-38` reports fixed 0px/s
+against follow 128px/s over 23.2s of hold.
 
 ## The ask, in the user's words
 

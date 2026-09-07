@@ -1,13 +1,20 @@
 import { useState, type RefObject } from "react";
-import { sourceToOutput } from "../../shared/project/timeline";
+import { sourceSpanToOutput, sourceToOutput } from "../../shared/project/timeline";
 import type { Cut } from "../../shared/project/types";
-import type { ZoomKeyframe } from "../../shared/zoom/types";
+import type { ZoomKeyframe, ZoomSegment } from "../../shared/zoom/types";
 
 type Props = {
   durationMs: number;
   outputDurationMs: number;
   cuts: Cut[];
   keyframes: ZoomKeyframe[];
+  /**
+   * The persisted, editable shots. Keyframes above are what renders; these are
+   * what the user selects and edits.
+   */
+  segments: ZoomSegment[];
+  selectedSegmentId: string | null;
+  onSelectSegment: (id: string | null) => void;
   playheadMs: number;
   /**
    * The marker element. The Editor moves it directly during playback rather
@@ -24,6 +31,7 @@ type Props = {
 
 const HEIGHT = 78;
 
+
 function fmt(ms: number): string {
   const total = Math.max(0, ms) / 1000;
   const m = Math.floor(total / 60);
@@ -36,6 +44,9 @@ export function Timeline({
   outputDurationMs,
   cuts,
   keyframes,
+  segments,
+  selectedSegmentId,
+  onSelectSegment,
   playheadMs,
   playheadRef,
   pixelParityZoom,
@@ -100,9 +111,59 @@ export function Timeline({
           />
         ))}
 
+        {/*
+          Shots are drawn as regions behind the keyframe markers rather than as
+          their own strip. The track is only 78px and the two marker rows
+          already occupy 10-34 and 44-68, so a strip would either collide with
+          them or be too thin to click. A region also says the right thing: the
+          markers of a shot sit inside it.
+        */}
+        {segments.map((s) => {
+          const span = sourceSpanToOutput(s.startMs, s.endMs, durationMs, cuts);
+          if (span === null) return null;
+
+          const selected = s.id === selectedSegmentId;
+          const follow = s.position === "follow";
+
+          return (
+            <div
+              key={s.id}
+              title={`${s.id} · ${s.position}${s.waypoints.length > 1 ? ` · ${s.waypoints.length} waypoints` : ""}`}
+              onPointerDown={(e) => {
+                // Without this the track's own handler scrubs to the click,
+                // so selecting a shot would always move the playhead too.
+                e.stopPropagation();
+                onSelectSegment(selected ? null : s.id);
+              }}
+              style={{
+                position: "absolute",
+                left: `${pct(span.startMs)}%`,
+                width: `${Math.max(0, pct(span.endMs) - pct(span.startMs))}%`,
+                top: 4,
+                bottom: 4,
+                borderRadius: 4,
+                boxSizing: "border-box",
+                background: follow
+                  ? "rgba(122, 200, 160, 0.16)"
+                  : "rgba(106, 166, 232, 0.13)",
+                border: `1px solid ${
+                  selected ? "#e8ecf2" : follow ? "rgba(122,200,160,0.45)" : "rgba(106,166,232,0.3)"
+                }`,
+                cursor: "pointer",
+              }}
+            />
+          );
+        })}
+
         {keyframes.map((k) => {
           const out = sourceToOutput(k.tSourceMs, durationMs, cuts);
           if (out === null) return null;
+          // A follow shot emits a sample every 100ms — 43 of them on a
+          // four-second hold — and drawing a marker for each buries the
+          // keyframes that mark an actual camera decision under a picket
+          // fence. `linear` is only ever the follow sampler's easing, which
+          // makes it exactly the right filter.
+          if (k.easing === "linear") return null;
 
           const zoomed = k.scale > 1;
           // Every default zoom is past 1:1 now — the bases are 1.55 and 1.35
@@ -156,8 +217,16 @@ export function Timeline({
       >
         <span>{fmt(playheadMs)}</span>
         <span>
-          {keyframes.filter((k) => k.scale > 1).length} zooms · {cuts.length} cuts ·
+          {/*
+            Segments, not keyframes. A follow shot is one zoom that emits
+            dozens of keyframes, so counting keyframes reported "33 zooms" for
+            a five-second fixture holding a single shot.
+          */}
+          {segments.length} zooms · {cuts.length} cuts ·
           max {maxZoom.toFixed(2)}× · sharp to {pixelParityZoom.toFixed(2)}×
+          {segments.some((s) => s.position === "follow")
+            ? ` · ${segments.filter((s) => s.position === "follow").length} following`
+            : ""}
         </span>
         <span>{fmt(outputDurationMs)}</span>
       </div>

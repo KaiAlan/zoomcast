@@ -1,7 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { normalizeCuts } from "./cuts";
-import { outputDurationMs, outputToSource, sourceToOutput } from "./timeline";
+import {
+  outputDurationMs,
+  outputToSource,
+  sourceSpanToOutput,
+  sourceToOutput,
+} from "./timeline";
 import type { Cut } from "./types";
 
 const DURATION = 10_000;
@@ -108,5 +113,38 @@ describe("timeline — properties", () => {
         }
       }),
     );
+  });
+});
+
+describe("sourceSpanToOutput", () => {
+  it("shifts a span that sits after a cut back by the cut's length", () => {
+    expect(sourceSpanToOutput(5000, 6000, 10_000, [{ startMs: 1000, endMs: 2000 }])).toEqual({
+      startMs: 4000,
+      endMs: 5000,
+    });
+  });
+
+  it("shortens a span that crosses a cut instead of dropping it", () => {
+    // 1000..4000 with 2000..3000 removed occupies 1000..3000 in output.
+    expect(sourceSpanToOutput(1000, 4000, 10_000, [{ startMs: 2000, endMs: 3000 }])).toEqual({
+      startMs: 1000,
+      endMs: 3000,
+    });
+  });
+
+  it("collapses a span swallowed whole by a cut", () => {
+    expect(
+      sourceSpanToOutput(2200, 2800, 10_000, [{ startMs: 2000, endMs: 3000 }]),
+    ).toBeNull();
+  });
+
+  it("agrees with sourceToOutput on both endpoints when neither is cut", () => {
+    const cuts = [{ startMs: 2000, endMs: 3000 }];
+    const span = sourceSpanToOutput(4000, 7000, 10_000, cuts);
+
+    expect(span).toEqual({
+      startMs: sourceToOutput(4000, 10_000, cuts),
+      endMs: sourceToOutput(7000, 10_000, cuts),
+    });
   });
 });

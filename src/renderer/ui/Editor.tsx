@@ -12,7 +12,7 @@ import { followPath } from "../../shared/zoom/camera";
 import { segmentsToKeyframes } from "../../shared/zoom/keyframes";
 import { planZoom } from "../../shared/zoom/planner";
 import { replan, replanSegments } from "../../shared/zoom/replan";
-import type { PlanContext, ZoomConfig } from "../../shared/zoom/types";
+import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
 import { PreviewPlayer } from "../media/PreviewPlayer";
@@ -60,6 +60,14 @@ export function Editor({
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [exporting, setExporting] = useState<string | null>(null);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+
+  // Resolved by lookup rather than held as state. Every re-plan rebuilds the
+  // segments, and a shot whose cluster the new plan no longer produces is
+  // gone — a stored object would go stale, where a missing id simply shows the
+  // empty state.
+  const selectedSegment =
+    project.zoom.segments.find((s) => s.id === selectedSegmentId) ?? null;
 
   const { manifest } = bundle;
 
@@ -409,6 +417,37 @@ export function Editor({
     });
   };
 
+  /**
+   * Switch one shot's camera.
+   *
+   * It re-plans afterwards rather than only patching the segment, because
+   * keyframes are derived: a follow shot emits a sample every 100ms where a
+   * fixed one emits two keyframes, so nothing would change on screen
+   * otherwise. `replanSegments` carries the new position across that re-plan
+   * by id, which is also what makes the choice survive every later re-plan.
+   */
+  const onSegmentCameraChange = (id: string, position: ZoomSegment["position"]): void => {
+    setProject((prev) => {
+      const withSegment = {
+        ...prev,
+        zoom: {
+          ...prev.zoom,
+          segments: prev.zoom.segments.map((s) => (s.id === id ? { ...s, position } : s)),
+        },
+      };
+
+      const next = {
+        ...withSegment,
+        zoom: {
+          ...withSegment.zoom,
+          ...applyPlan(withSegment.zoom.config, withSegment),
+        },
+      };
+      live.current = { ...live.current, project: next };
+      return next;
+    });
+  };
+
   const addCut = (): void => {
     const start = playheadMs;
     const end = Math.min(start + 500, outDuration);
@@ -539,6 +578,9 @@ export function Editor({
           outputDurationMs={outDuration}
           cuts={project.cuts}
           keyframes={project.zoom.keyframes}
+          segments={project.zoom.segments}
+          selectedSegmentId={selectedSegmentId}
+          onSelectSegment={setSelectedSegmentId}
           playheadMs={playheadMs}
           playheadRef={playheadElRef}
           pixelParityZoom={ceiling}
@@ -567,6 +609,8 @@ export function Editor({
           dir={bundle.dir}
           onStyleChange={(style) => setProject((p) => ({ ...p, style }))}
           onOutputChange={onOutputChange}
+          selectedSegment={selectedSegment}
+          onSegmentCameraChange={onSegmentCameraChange}
         />
       </div>
     </div>

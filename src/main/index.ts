@@ -209,6 +209,17 @@ async function runUiShot(): Promise<void> {
   await new Promise<void>((resolve) => win.webContents.once("did-finish-load", resolve));
   await new Promise<void>((resolve) => setTimeout(resolve, settleMs));
 
+  // ZOOMCAST_UI_SHOT_JS runs in the page after it has settled and before the
+  // capture, so a shot can show the editor in a state that only a click can
+  // reach — a selected shot, an opened section. Without it the harness can
+  // only ever photograph the editor as it loads, which is precisely the state
+  // no interaction bug lives in.
+  const js = process.env.ZOOMCAST_UI_SHOT_JS;
+  if (js !== undefined && js.trim() !== "") {
+    console.log(`ui-shot js: ${await win.webContents.executeJavaScript(js)}`);
+    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+  }
+
   const image = await win.webContents.capturePage();
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, image.toPNG());

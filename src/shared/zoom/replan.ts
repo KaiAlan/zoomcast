@@ -38,7 +38,22 @@ export function replanSegments(
   const clashes = (s: ZoomSegment): boolean =>
     keep.some((k) => s.startMs < k.endMs && k.startMs < s.endMs);
 
-  return [...keep, ...generated.filter((s) => !clashes(s))].sort(
-    (a, b) => a.startMs - b.startMs,
+  // Choosing a camera for one shot must NOT pin it. Pinning would keep the
+  // whole segment wholesale, so that shot would stop re-planning its times
+  // when a pacing dial moves — which is not what "switch this shot to follow"
+  // asks for. Only the camera mode rides across, keyed by id.
+  //
+  // Ids come from the cluster anchor, so they survive an ordinary re-plan. If
+  // pacing changes enough that the cluster is gone, so is its override, and
+  // the shot degrades to `fixed` — the safe direction.
+  const cameras = new Map(
+    existing.filter((s) => !keep.includes(s)).map((s) => [s.id, s.position]),
   );
+
+  const fresh = generated.filter((s) => !clashes(s)).map((s) => {
+    const position = cameras.get(s.id);
+    return position === undefined || position === s.position ? s : { ...s, position };
+  });
+
+  return [...keep, ...fresh].sort((a, b) => a.startMs - b.startMs);
 }

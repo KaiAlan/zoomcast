@@ -1,7 +1,8 @@
 # zoomcast — handover
 
 Updated 2026-09-07. **Phases 0–7, A, B and C complete, plus the camera
-geometry and depth rework; all on `feat/phase-c-camera`, unmerged.** The tool records your screen, mic and system
+geometry and depth rework and the per-segment camera switch; all on
+`feat/phase-c-camera`, unmerged.** The tool records your screen, mic and system
 audio, plans zooms from real input telemetry, drives a camera that opens at
 rest and can follow the cursor, draws a synthetic cursor with real shapes and
 click ripples, composes the frame over a procedural or custom background, lets
@@ -14,11 +15,19 @@ genuinely crops toward the pointer and the composition survives being zoomed
 in. Read "The camera" below before touching any of it, and
 `docs/specs/2026-09-07-camera-geometry-and-depth-design.md` for why.
 
-**Start the next session at
-`docs/superpowers/plans/2026-09-07-follow-camera-handoff.md`.** The camera is
-still static during a hold — measurably, 0px/s — and the agreed next step is a
-per-segment switch to the follow camera, which is built but has no UI. That
-document carries the decision, the design and the traps.
+**The per-segment follow camera landed 2026-09-07.** Click a shot in the
+timeline and the inspector's "selected shot" section switches its camera
+between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
+a hold against **128px/s** — the camera keeps tracking the cursor instead of
+arriving and freezing.
+
+**Start the next session by watching an export of a follow shot.** Three open
+questions in `docs/superpowers/plans/2026-09-07-follow-camera-handoff.md` need
+eyes rather than code: whether follow reads well on a short hold, whether a
+follow shot wants to sit deeper than a fixed one, and whether a
+minimum-meaningful-zoom floor is worth adding. That document also carries the
+lever not taken — widening `minRecoveryMs` so the camera travels between focus
+points instead of retreating between them.
 
 Phase A replaced the old "phase 9 — cursor shapes" item. The remaining work is
 tracked as phases C–F in
@@ -42,7 +51,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 279 passing, 34 files
+npm test              # 315 passing, 36 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -121,6 +130,7 @@ answered.
 | --- | --- | --- |
 | C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance — **done** | A, B |
 | C+ | Camera geometry (fixed frame, sampled region), configurable ceiling, depth grading — **done**, spec `2026-09-07-camera-geometry-and-depth-design.md` | C |
+| C+ shots | Per-segment camera switch: segment blocks in the timeline, `fixed`/`follow` in the inspector — **done**, plan `2026-09-07-follow-camera-handoff.md` | C+ |
 | D | Directional motion blur | C |
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
@@ -238,6 +248,7 @@ unit tests could not have caught.
 | `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
 | `npm run camera:travel -- <take>` | How far the camera moves DURING a hold, fixed vs follow. Fixed is 0px/s — it arrives and freezes |
 | `npm run render:camera -- <take>` | Renders a take twice, every zoom fixed then every zoom following, to watch side by side |
+| `ZOOMCAST_UI_SHOT_JS` | JS run in the editor after it settles, before the capture — the only way to photograph a state that takes a click to reach |
 | `npm run icon` | Redraws `build/icon.ico` from `tools/make-icon.ts` |
 
 The record test is the best check on a packaged build, because it exercises the
@@ -329,9 +340,12 @@ follow segment at 1:1 and is 25/25, and its frames differ both from the square
 config and from each other over time, so the camera is provably moving rather
 than silently falling back. What is NOT guarded: follow at the native aspect
 (there is nothing to guard — see above), follow across a cut, and any UI for
-turning it on. **There is no control for `position: "follow"` yet** — a segment
-becomes a follow segment only by being written into `project.json`. That
-control belongs to phase E, which owns segment editing.
+turning it on. **The control for `position: "follow"` landed 2026-09-07**:
+shots draw as blocks in the timeline, clicking one selects it, and the
+inspector's "selected shot" section switches its camera. The choice rides
+across every later re-plan by segment id — it does NOT pin the segment, so the
+shot still re-plans its times when a pacing dial moves. Dragging edges, adding
+and deleting segments and per-segment depth are still phase E.
 
 ### Zoom is a camera now, not a scale
 

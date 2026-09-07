@@ -97,6 +97,31 @@ describe("replanSegments", () => {
     expect(replanSegments([kept], [after]).map((s) => s.id)).toEqual(["mine", "g1"]);
   });
 
+  it("carries a camera override across a re-plan, keyed by id", () => {
+    const switched = seg({ id: "s1", position: "follow" });
+    const out = replanSegments([switched], [seg({ id: "s1", position: "fixed" })]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0]?.position).toBe("follow");
+  });
+
+  it("does not pin the overridden segment — its times still re-plan", () => {
+    const switched = seg({ id: "s1", startMs: 1000, endMs: 3000, position: "follow" });
+    const retimed = seg({ id: "s1", startMs: 1800, endMs: 4200, position: "fixed" });
+    const out = replanSegments([switched], [retimed]);
+
+    expect(out[0]).toEqual({ ...retimed, position: "follow" });
+    expect(out[0]?.pinned).toBe(false);
+  });
+
+  it("drops an override whose cluster the new plan no longer produces", () => {
+    const switched = seg({ id: "s1", position: "follow" });
+    const elsewhere = seg({ id: "s9", startMs: 5000, endMs: 7000 });
+    const out = replanSegments([switched], [elsewhere]);
+
+    expect(out).toEqual([elsewhere]);
+  });
+
   it("returns segments in time order", () => {
     const kept = seg({ id: "mine", startMs: 8000, endMs: 9000, pinned: true });
     const out = replanSegments([kept], [seg({ id: "g1" })]);
