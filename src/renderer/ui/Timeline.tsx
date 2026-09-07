@@ -105,12 +105,16 @@ export function Timeline({
           if (out === null) return null;
 
           const zoomed = k.scale > 1;
-          const overSharp = k.scale > pixelParityZoom + 0.001;
+          // Every default zoom is past 1:1 now — the bases are 1.55 and 1.35
+          // against a parity point of ~1.18 — so colouring them all would make
+          // the warning the norm and the signal nil. The upscale factor goes in
+          // the tooltip instead, where it is information rather than an alarm.
+          const upscale = k.scale / pixelParityZoom;
 
           return (
             <div
               key={k.id}
-              title={`${k.id} · scale ${k.scale.toFixed(3)}${overSharp ? " · past 1:1" : ""}${k.pinned ? " · pinned" : ""}`}
+              title={`${k.id} · scale ${k.scale.toFixed(3)}${upscale > 1.001 ? ` · ${upscale.toFixed(2)}× upscale` : ""}${k.pinned ? " · pinned" : ""}`}
               style={{
                 position: "absolute",
                 left: `${pct(out)}%`,
@@ -119,7 +123,7 @@ export function Timeline({
                 height: 24,
                 marginLeft: -1,
                 borderRadius: 2,
-                background: overSharp ? "#e0894a" : zoomed ? "#6aa6e8" : "#4a5568",
+                background: zoomed ? "#6aa6e8" : "#4a5568",
                 outline: k.pinned ? "1px solid #f0f0f0" : "none",
               }}
             />

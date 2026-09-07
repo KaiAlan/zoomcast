@@ -40,7 +40,6 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   { key: "clusterWindowMs", label: "cluster window (ms)", step: 100, min: 0 },
   { key: "minGapMs", label: "min gap (ms)", step: 50, min: 0 },
   { key: "minWeight", label: "min weight", step: 0.1, min: 0 },
-  { key: "marginPx", label: "margin (px)", step: 10, min: 0 },
   { key: "leadInMs", label: "lead in (ms)", step: 50, min: 0 },
   { key: "trailMs", label: "trail (ms)", step: 50, min: 0 },
   // Below ~100ms a "transition" is a cut, and the dwell floor is twice this.
@@ -48,6 +47,13 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   // Above pixelParityZoom (~1.18 here) the picture is upscaled; the frame's
   // inset means 1.6 costs 1.36x, not 1.6x. Below 1 there is no zoom at all.
   { key: "maxZoom", label: "max zoom (×)", step: 0.05, min: 1 },
+  // The depth grading, as fractions of max zoom. Exposed because they are the
+  // dials that decide how deep a shot goes; without them "max zoom" looks like
+  // the only depth control and the grading is invisible.
+  { key: "depthClick", label: "depth · click", step: 0.05, min: 0 },
+  { key: "depthType", label: "depth · typing", step: 0.05, min: 0 },
+  { key: "depthScroll", label: "depth · scroll", step: 0.05, min: 0 },
+  { key: "contextFraction", label: "context fraction", step: 0.05, min: 0.1 },
 ];
 
 /**

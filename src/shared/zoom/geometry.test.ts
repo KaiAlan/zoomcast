@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ZOOM_CONFIG } from "./config";
 import { pixelParityZoom, screenRect } from "./geometry";
-import type { Cluster, PlanContext } from "./types";
 
 const HD = { w: 1920, h: 1080 };
 const UHD = { w: 3840, h: 2160 };

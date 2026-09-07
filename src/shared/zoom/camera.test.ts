@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { TelemetryEvent } from "../bundle/types";
 import { cursorAt } from "../cursor/path";
 import { clampToSource, followPath } from "./camera";
-import { pixelParityZoom } from "./geometry";
 import type { PlanContext } from "./types";
 
 const ctx: PlanContext = {

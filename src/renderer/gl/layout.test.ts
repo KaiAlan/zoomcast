@@ -16,12 +16,10 @@ describe("screenQuad", () => {
     expect(screenQuad(HD, HD, PAD)).toEqual(screenRect(HD, HD, PAD));
   });
 
-  it("does not move when the zoom changes", () => {
-    // The whole point of the 2026-09-07 change: the frame is presentation, the
-    // sampled region is the camera. There is no longer a zoom argument to pass,
-    // and that is the contract — not an omission.
-    expect(screenQuad(HD, HD, PAD)).toEqual(screenQuad(HD, HD, PAD));
-  });
+  // "The frame does not move when the zoom changes" is NOT a test here: there
+  // is no zoom argument to vary, so any assertion would compare a call to
+  // itself and pass for every implementation. The property is enforced by the
+  // signature. What the camera does with zoom is tested in viewport.test.ts.
 
   it("keeps the padding visible at every output aspect", () => {
     for (const out of [HD, { w: 1080, h: 1080 }, { w: 608, h: 1080 }, { w: 1920, h: 600 }]) {

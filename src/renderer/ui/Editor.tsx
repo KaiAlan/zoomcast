@@ -383,13 +383,16 @@ export function Editor({
   /**
    * Output changes must re-plan, not just re-render.
    *
-   * `pixelParityZoom` is derived from the output size, so every keyframe's
-   * scale belongs to the output it was planned against. Changing the aspect
-   * with a bare setProject updated the context, the ceiling and the timeline
-   * readout while leaving every keyframe carrying a scale computed for the old
-   * shape — which is precisely what applyPlan's own comment says must not
-   * happen. The same applies to paddingFactor if a control for it ever lands,
-   * since it feeds the ceiling too.
+   * The frame comes from the output size, so a segment's centre and its
+   * clamp belong to the shape it was planned against. Changing the aspect with
+   * a bare setProject updated the context and the readout while leaving the
+   * keyframes derived for the old frame.
+   *
+   * Note the reason is no longer the ceiling: since 2026-09-07 that is
+   * `cfg.maxZoom` and independent of output size — the camera samples
+   * 1/scale of the source at any aspect. It is the frame, and therefore the
+   * clamp, that still moves. paddingFactor feeds the same frame if a control
+   * for it ever lands.
    */
   const onOutputChange = (output: Project["output"]): void => {
     setProject((prev) => {

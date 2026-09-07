@@ -25,8 +25,6 @@ export type ZoomConfig = {
   deadzonePx: number;
   /** Excess clusters in a minute are dropped lowest-weight-first. */
   maxZoomsPerMinute: number;
-  /** Padding around cluster bounds when fitting the zoom. */
-  marginPx: number;
   /** Start the camera move this long before the cluster begins. */
   leadInMs: number;
   /** Hold the zoom this long after the cluster ends. */
@@ -44,12 +42,12 @@ export type ZoomConfig = {
    * landed on it and the camera had nowhere to go.
    */
   maxZoom: number;
-  /** Base zoom for a click-led cluster. See depth.ts. */
-  zoomClick: number;
-  /** Base zoom for a typing run — shallower, because reading needs context. */
-  zoomType: number;
-  /** Base zoom for a scroll burst. */
-  zoomScroll: number;
+  /** Depth for a click-led cluster, 0..1 of maxZoom. See depth.ts. */
+  depthClick: number;
+  /** Depth for a typing run — shallower, because reading needs context. */
+  depthType: number;
+  /** Depth for a scroll burst. */
+  depthScroll: number;
   /** What fraction of the frame the activity may occupy before pulling back. */
   contextFraction: number;
   /**

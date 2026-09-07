@@ -20,7 +20,6 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   minRecoveryMs: 700,
   deadzonePx: 120,
   maxZoomsPerMinute: 20,
-  marginPx: 80,
   leadInMs: 250,
   trailMs: 400,
   transitionMs: 600,
@@ -33,9 +32,11 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
    */
   easing: "zoomGlide",
   maxZoom: 1.6,
-  zoomClick: 1.55,
-  zoomType: 1.35,
-  zoomScroll: 1.15,
+  // Fractions of maxZoom, so one dial deepens everything and the grading
+  // between intents survives. At maxZoom 1.6 these are 1.55 / 1.35 / 1.15.
+  depthClick: 0.917,
+  depthType: 0.583,
+  depthScroll: 0.25,
   /**
    * Tuned against real takes, not chosen: at 0.6 and at 0.8 exactly the same
    * single zoom is dropped across every take on disk — the widest cluster,

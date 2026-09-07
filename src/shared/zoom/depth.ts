@@ -1,3 +1,4 @@
+import { DEFAULT_ZOOM_CONFIG } from "./config";
 import { clamp } from "./geometry";
 import type { ImpulseKind, ZoomConfig } from "./types";
 
@@ -24,18 +25,20 @@ export type DepthInputs = {
 };
 
 export type DepthConfig = {
+  /**
+   * Base depth per intent as a FRACTION of the ceiling, 0..1 — the same units
+   * `ZoomSegment.depth` uses, and for the same reason.
+   *
+   * Absolute scales here made `maxZoom` inert: `zoomDepth` returns
+   * `min(base, pullback)` capped at the ceiling, so with a click base of 1.55
+   * every setting above 1.55 produced 1.55, and the only dial the UI exposed
+   * did nothing. That is the second-cap trap this codebase has now hit twice.
+   */
   base: Record<Intent, number>;
   /** What fraction of the frame the activity may occupy. */
   contextFraction: number;
   maxZoom: number;
   intentWeight: Record<ImpulseKind, number>;
-};
-
-export const DEFAULT_DEPTH_CONFIG: DepthConfig = {
-  base: { click: 1.55, type: 1.35, scroll: 1.15 },
-  contextFraction: 0.8,
-  maxZoom: 1.6,
-  intentWeight: { click: 1, key: 0.4, wheel: 0.3 },
 };
 
 /**
@@ -51,7 +54,9 @@ export const DEFAULT_DEPTH_CONFIG: DepthConfig = {
  * Pure: no renderer, no layout, no clock (invariant 9).
  */
 export function zoomDepth(inputs: DepthInputs, cfg: DepthConfig): number {
-  const base = cfg.base[inputs.intent];
+  // The base is relative to the ceiling, so raising maxZoom deepens every
+  // shot and the grading between them is preserved.
+  const base = 1 + cfg.base[inputs.intent] * (cfg.maxZoom - 1);
   const spreadMax = Math.max(inputs.spread.x, inputs.spread.y);
 
   // A zero-spread cluster has no spread constraint. Written out rather than
@@ -75,7 +80,7 @@ export function zoomDepth(inputs: DepthInputs, cfg: DepthConfig): number {
  */
 export function depthConfigFrom(cfg: ZoomConfig): DepthConfig {
   return {
-    base: { click: cfg.zoomClick, type: cfg.zoomType, scroll: cfg.zoomScroll },
+    base: { click: cfg.depthClick, type: cfg.depthType, scroll: cfg.depthScroll },
     contextFraction: cfg.contextFraction,
     maxZoom: cfg.maxZoom,
     intentWeight: {
@@ -85,3 +90,11 @@ export function depthConfigFrom(cfg: ZoomConfig): DepthConfig {
     },
   };
 }
+
+/**
+ * Derived, not hand-copied: the values live in `DEFAULT_ZOOM_CONFIG` and
+ * production reads them through `depthConfigFrom`. Duplicating them meant the
+ * tests asserted against constants that a retune of config.ts would leave
+ * stale — and contextFraction was retuned once already, 0.6 to 0.8.
+ */
+export const DEFAULT_DEPTH_CONFIG: DepthConfig = depthConfigFrom(DEFAULT_ZOOM_CONFIG);
