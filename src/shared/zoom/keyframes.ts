@@ -24,7 +24,10 @@ export function segmentsToKeyframes(
   const kfs: ZoomKeyframe[] = [];
 
   for (const s of segments) {
-    for (const w of s.waypoints) {
+    const waypoints = openAtRest(s, cfg);
+    if (waypoints.length === 0) continue;
+
+    for (const w of waypoints) {
       kfs.push({
         id: `${w.id}i`,
         tSourceMs: w.tMs,
@@ -38,7 +41,7 @@ export function segmentsToKeyframes(
       });
     }
 
-    const last = s.waypoints[s.waypoints.length - 1];
+    const last = waypoints[waypoints.length - 1];
     if (last === undefined) continue;
 
     kfs.push({
@@ -55,6 +58,35 @@ export function segmentsToKeyframes(
   }
 
   return kfs.sort((a, b) => a.tSourceMs - b.tSourceMs);
+}
+
+/**
+ * Move any waypoint whose transition would start before zero.
+ *
+ * A keyframe at t = 0 cannot be eased into — its transition would have to
+ * start at -transitionMs — so `zoomAt` returns the keyframe's own value from
+ * the first frame and the take opens as a hard cut on frame one. The fix is to
+ * move the keyframe to `transitionMs`, NOT to shorten the transition: a
+ * shortened one would make the opening move faster than every other move in
+ * the take, which is the opposite of the intent.
+ *
+ * Two consequences of moving rather than shortening:
+ *
+ *   - A waypoint pushed to or past the segment's own end has no room to
+ *     arrive, so the segment is dropped — the same pathology `segments.ts`
+ *     guards against when a zoom is held for less than its own transitions.
+ *   - Two waypoints that both land on `transitionMs` collide, and the camera
+ *     can only arrive at one. The later one wins: it is where attention was
+ *     when the camera actually gets there.
+ */
+function openAtRest(s: ZoomSegment, cfg: ZoomConfig): ZoomSegment["waypoints"] {
+  const moved = s.waypoints.map((w) => ({ ...w, tMs: Math.max(w.tMs, cfg.transitionMs) }));
+
+  return moved.filter((w, i) => {
+    const next = moved[i + 1];
+    if (next !== undefined && next.tMs <= w.tMs) return false;
+    return w.tMs < s.endMs;
+  });
 }
 
 /**

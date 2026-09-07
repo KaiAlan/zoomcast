@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
 import { maxComfortableZoom } from "./geometry";
+import { zoomAt } from "./interpolate";
 import { depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
 import type { PlanContext, ZoomSegment } from "./types";
 
@@ -97,5 +98,62 @@ describe("depth", () => {
     expect(square).not.toBeCloseTo(CEILING, 3);
     // Full depth is full depth in both: that is the point of storing 0-1.
     expect(depthToScale(1, square)).toBeCloseTo(square, 12);
+  });
+});
+
+/**
+ * Decision 2. A keyframe at t = 0 cannot be eased into — its transition would
+ * have to start at -transitionMs — so zoomAt returns the keyframe's own value
+ * from the first frame and the take opens as a hard cut.
+ */
+describe("opening at rest", () => {
+  it("never emits a keyframe whose transition would start before zero", () => {
+    const segments = [seg({ startMs: 0, endMs: 3000, waypoints: [{ id: "k0", tMs: 0, depth: 1, cx: 0.5, cy: 0.5 }] })];
+    const kfs = segmentsToKeyframes(segments, cfg, ctx);
+
+    for (const k of kfs) {
+      expect(k.tSourceMs - k.transitionMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("opens at rest, then eases in", () => {
+    const kfs = segmentsToKeyframes(
+      [seg({ startMs: 0, endMs: 3000, waypoints: [{ id: "k0", tMs: 0, depth: 1, cx: 0.5, cy: 0.5 }] })],
+      cfg,
+      ctx,
+    );
+
+    expect(zoomAt(kfs, 0).scale).toBe(1);
+    expect(zoomAt(kfs, cfg.transitionMs).scale).toBeGreaterThan(1);
+  });
+
+  it("keeps the opening move the same speed as every other move", () => {
+    // Shortening the transition instead of moving the keyframe would make the
+    // first zoom the fastest one in the take, which is the opposite of intent.
+    const kfs = segmentsToKeyframes(
+      [seg({ startMs: 0, endMs: 3000, waypoints: [{ id: "k0", tMs: 0, depth: 1, cx: 0.5, cy: 0.5 }] })],
+      cfg,
+      ctx,
+    );
+
+    expect(kfs[0]?.transitionMs).toBe(cfg.transitionMs);
+    expect(kfs[0]?.tSourceMs).toBe(cfg.transitionMs);
+  });
+
+  it("drops a segment with no room to arrive", () => {
+    // A zoom that would have to arrive after its own end is the pathology
+    // segments.ts already guards elsewhere.
+    const kfs = segmentsToKeyframes(
+      [seg({ startMs: 0, endMs: 200, waypoints: [{ id: "k0", tMs: 0, depth: 1, cx: 0.5, cy: 0.5 }] })],
+      cfg,
+      ctx,
+    );
+
+    expect(kfs).toEqual([]);
+  });
+
+  it("leaves a segment that already starts late alone", () => {
+    const kfs = segmentsToKeyframes([seg()], cfg, ctx);
+    expect(kfs[0]?.tSourceMs).toBe(1000);
   });
 });

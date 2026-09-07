@@ -104,13 +104,35 @@ describe("planZoom", () => {
     }
   });
 
-  it("never leads in before zero", () => {
+  /**
+   * Decision 2: a keyframe at t = 0 cannot be eased into, so the take used to
+   * open on a hard cut. The lead-in is still clamped to zero — it just is not
+   * where the keyframe ends up.
+   */
+  it("opens at rest rather than leading in before zero", () => {
     const kfs = plan(
       [{ t: 10, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
-    expect(kfs[0]?.tSourceMs).toBe(0);
+    expect(kfs[0]?.tSourceMs).toBe(DEFAULT_ZOOM_CONFIG.transitionMs);
+    expect(kfs[0]?.transitionMs).toBe(DEFAULT_ZOOM_CONFIG.transitionMs);
+  });
+
+  /**
+   * The opening move is paid for by ending later, not by arriving in a hurry:
+   * arrival-to-departure has to stay where enforceDwell was tuned to put it.
+   */
+  it("keeps the opening zoom as long as any other", () => {
+    const kfs = plan(
+      [{ t: 10, k: "down", x: 500, y: 400, b: 1 }],
+      DEFAULT_ZOOM_CONFIG,
+      ctx,
+    );
+    const [inKf, outKf] = kfs;
+    expect((outKf?.tSourceMs ?? 0) - (inKf?.tSourceMs ?? 0)).toBeGreaterThanOrEqual(
+      DEFAULT_ZOOM_CONFIG.transitionMs * 2,
+    );
   });
 
   it("normalises the focus point to 0..1 of the source", () => {

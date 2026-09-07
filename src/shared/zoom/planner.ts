@@ -54,7 +54,7 @@ export function planZoom(
 
   const ceiling = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
 
-  return applySegmentGuards(segments, cfg).map((s) => {
+  return payForTheOpeningMove(applySegmentGuards(segments, cfg), cfg).map((s) => {
     const first = s.waypoints[0];
 
     return {
@@ -74,6 +74,38 @@ export function planZoom(
       })),
       origin: "auto",
       pinned: false,
+    };
+  });
+}
+
+/**
+ * A zoom that opens the take has to pay for its own arrival.
+ *
+ * Decision 2 moves any keyframe whose transition would start before zero to
+ * `transitionMs`, so the take opens at rest instead of on a hard cut
+ * (`openAtRest` in keyframes.ts enforces that for every segment, including
+ * hand-made ones). Doing only that silently shortens the opening zoom: the
+ * camera now arrives 600ms later while still leaving at the same time, which
+ * on the 26.8s take took the shortest hold to 1.04s — under the
+ * `transitionMs * 2` floor `enforceDwell` exists to keep.
+ *
+ * So the segment pays for the move by ending later too, up to the recovery gap
+ * the next segment needs. That keeps arrival-to-departure where the guards
+ * were tuned to put it, and keeps the zoom count unchanged.
+ */
+function payForTheOpeningMove(segs: Segment[], cfg: ZoomConfig): Segment[] {
+  return segs.map((s, i) => {
+    const first = s.waypoints[0];
+    if (first === undefined || first.t >= cfg.transitionMs) return s;
+
+    const shift = cfg.transitionMs - first.t;
+    const next = segs[i + 1];
+    const latestEnd = next === undefined ? Infinity : next.startT - cfg.minRecoveryMs;
+
+    return {
+      startT: s.startT,
+      endT: Math.min(s.endT + shift, latestEnd),
+      waypoints: s.waypoints.map((w) => ({ ...w, t: Math.max(w.t, cfg.transitionMs) })),
     };
   });
 }
