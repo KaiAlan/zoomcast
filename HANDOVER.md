@@ -360,10 +360,15 @@ Things worth knowing before touching it:
   1.6x — checked on a 1:1 crop of a real export, where text stays readable with
   the existing sharpen pass. `pixelParityZoom` is where upscaling starts and is
   reported in the timeline as "sharp to".
-- **Raising the ceiling alone changes nothing.** `fitScale` carried its own
-  clamp at pixel parity, and that is the one that binds — a single click has
-  bounds of zero and asks for ~12x. Deleted now, but the lesson generalises:
-  if a depth change has no effect, look for a second cap.
+- **Look for the second cap. This codebase has hit it twice.** First
+  `fitScale` carried its own clamp at pixel parity, so raising the ceiling
+  changed nothing and `tune` came back byte-identical. Then the intent bases
+  were absolute — a click base of 1.55 against `min(base, pullback)` meant
+  every `maxZoom` above 1.55 produced 1.55, and the one depth dial the UI
+  exposed was inert. The bases are now **fractions of the ceiling**, the same
+  0..1 relative form `ZoomSegment.depth` uses, so one dial deepens everything
+  and the grading survives. If a depth change has no visible effect, something
+  downstream is clamping it.
 - **Depth grading: intent sets the base, spread only pulls back.** Measured, not
   stylistic: of 54 clusters that earn a zoom across every take on disk, 29 have
   zero spatial spread and 38 are under 200px. There is nothing to grade on for
