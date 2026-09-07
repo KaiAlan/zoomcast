@@ -1,10 +1,10 @@
 # zoomcast — handover
 
 Updated 2026-09-07. **Phases 0–7, A, B and C complete, plus the camera
-geometry and depth rework and the per-segment camera switch; all on
-`feat/phase-c-camera`, unmerged.** The tool records your screen, mic and system
-audio, plans zooms from real input telemetry, drives a camera that opens at
-rest and can follow the cursor, draws a synthetic cursor with real shapes and
+geometry and depth rework and the per-segment camera switch — all merged to
+`main` on 2026-09-07, and `feat/phase-c-camera` is gone.** The tool records
+your screen, mic and system audio, plans zooms from real input telemetry,
+drives a camera that opens at rest and can follow the cursor, draws a synthetic cursor with real shapes and
 click ripples, composes the frame over a procedural or custom background, lets
 you cut and scrub, and exports a finished MP4 at a chosen aspect and
 resolution.
@@ -116,12 +116,14 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 Phases D–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
 §13. None has a written plan yet.
 
-Three plans are done and merged, and one is done and unmerged:
+Four plans are done and merged:
 `2026-09-06-phase-c-export-diagnostics.md` (tasks 1–6; task 7 is open but its
 subject, the head-of-file jump, was root-caused and fixed independently),
 `2026-09-06-capture-frame-rate-and-settings.md` (tasks 1–6; task 7, ddagrab,
-is deliberately open), and **`2026-09-06-phase-c-camera.md`, all 8 tasks, on
-`feat/phase-c-camera`**.
+is deliberately open), `2026-09-06-phase-c-camera.md` (all 8 tasks) and
+`2026-09-07-follow-camera-handoff.md`. Phase C, the camera geometry and depth
+rework and the per-segment camera switch all reached `main` together on
+2026-09-07 — 21 commits, fast-forward, green on the merged tree.
 `docs/superpowers/plans/2026-09-05-phase-b-handoff.md` is now history — its
 review happened, its fixes landed, and its three blocking questions were
 answered.

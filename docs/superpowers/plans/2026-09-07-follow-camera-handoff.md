@@ -1,7 +1,7 @@
 # Handoff — the per-segment follow camera
 
 **Written 2026-09-07 at the end of the camera geometry session.**
-**Branch:** `feat/phase-c-camera`, unmerged.
+**Branch:** `feat/phase-c-camera`, merged to `main` 2026-09-07 and deleted.
 **Status: BUILT 2026-09-07.** All three design items landed; the switch is
 reachable from the editor and measurably moves the camera. What remains of
 this document is the three open questions at the bottom, which need eyes on an
@@ -210,4 +210,6 @@ with `--set minRecoveryMs=...` is the way to look at it.
   all 11 tasks done, with a note on what the plan got wrong.
 - 308 tests / 36 files, typecheck silent, `verify:decode` 6/6,
   `verify:parity` 25/25.
-- The branch is **unmerged**. Nothing has gone to `main` since phase B.
+- The branch **merged to `main` on 2026-09-07** — 21 commits, fast-forward,
+  315 tests green on the merged tree. It was the first thing to reach `main`
+  since phase B.
