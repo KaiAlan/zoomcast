@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { sourceToOutput } from "../../shared/project/timeline";
 import type { Cut } from "../../shared/project/types";
 import type { ZoomKeyframe } from "../../shared/zoom/types";
@@ -9,6 +9,12 @@ type Props = {
   cuts: Cut[];
   keyframes: ZoomKeyframe[];
   playheadMs: number;
+  /**
+   * The marker element. The Editor moves it directly during playback rather
+   * than re-rendering this component sixty times a second; `playheadMs` is
+   * still the truth for the readout and for the position at mount.
+   */
+  playheadRef: RefObject<HTMLDivElement | null>;
   maxComfortableZoom: number;
   onSeek: (tOutputMs: number) => void;
 };
@@ -28,6 +34,7 @@ export function Timeline({
   cuts,
   keyframes,
   playheadMs,
+  playheadRef,
   maxComfortableZoom,
   onSeek,
 }: Props) {
@@ -116,6 +123,7 @@ export function Timeline({
         })}
 
         <div
+          ref={playheadRef}
           style={{
             position: "absolute",
             left: `${pct(playheadMs)}%`,

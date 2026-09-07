@@ -21,6 +21,12 @@ export class PreviewPlayer {
     private readonly render: RenderAt,
     private readonly durationMs: () => number,
     private readonly onTick: (tOutputMs: number, playing: boolean) => void,
+    /**
+     * Called after a frame is drawn, with the time the next one will want.
+     * Runs in the gap a dropped tick would otherwise waste, so the decode for
+     * the next source frame is already done when the draw asks for it.
+     */
+    private readonly prefetch: (tOutputMs: number) => void = () => undefined,
   ) {}
 
   get isPlaying(): boolean {
@@ -61,6 +67,7 @@ export class PreviewPlayer {
     this.busy = true;
     try {
       await this.render(tOutputMs);
+      if (this.playing) this.prefetch(tOutputMs);
     } finally {
       this.busy = false;
     }

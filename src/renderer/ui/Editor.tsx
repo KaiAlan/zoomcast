@@ -20,6 +20,16 @@ import { VideoSource } from "../media/VideoSource";
 import { Inspector } from "./Inspector";
 import { Timeline } from "./Timeline";
 
+/** How often the numeric readout catches up with the playhead. */
+const READOUT_INTERVAL_MS = 100;
+
+/**
+ * How far ahead of the playhead to warm the decoder, in output time. One frame
+ * at 60fps: far enough that the next draw finds its frame decoded, near enough
+ * that a seek does not throw the work away.
+ */
+const PREFETCH_LOOKAHEAD_MS = 1000 / 60;
+
 const button: React.CSSProperties = {
   background: "#1c2029",
   color: "#e6e6e6",
@@ -44,6 +54,9 @@ export function Editor({
 
   const [project, setProject] = useState<Project>(bundle.project);
   const [playheadMs, setPlayheadMs] = useState(0);
+  /** The marker element, moved directly during playback. */
+  const playheadElRef = useRef<HTMLDivElement | null>(null);
+  const readoutAtRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [exporting, setExporting] = useState<string | null>(null);
@@ -184,12 +197,50 @@ export function Editor({
       }
     };
 
+    /**
+     * The playhead's position is a style write, not React state.
+     *
+     * onTick fires every animation frame; routing that through setState
+     * re-rendered the whole editor 60 times a second, and the tree it
+     * re-rendered includes the inspector and the timeline's keyframe blocks.
+     * The marker is the only thing that has to move at that rate, so it moves
+     * directly and React hears about the playhead ten times a second, for the
+     * numeric readout alone.
+     */
+    const positionPlayhead = (t: number): void => {
+      const el = playheadElRef.current;
+      if (el === null) return;
+
+      const total = outputDurationMs(manifest.durationMs, live.current.project.cuts);
+      el.style.left = `${total === 0 ? 0 : (t / total) * 100}%`;
+    };
+
     const player = new PreviewPlayer(
       renderAt,
       () => outputDurationMs(manifest.durationMs, live.current.project.cuts),
       (t, isPlaying) => {
-        setPlayheadMs(t);
+        positionPlayhead(t);
+
+        const now = performance.now();
+        // Paused, seeking and stopping all update immediately: a readout that
+        // lags by up to 100ms is fine while playing and wrong when still.
+        if (!isPlaying || now - readoutAtRef.current >= READOUT_INTERVAL_MS) {
+          readoutAtRef.current = now;
+          setPlayheadMs(t);
+        }
+
+        // Identical values bail out of re-rendering, so this is free per tick.
         setPlaying(isPlaying);
+      },
+      (tOutputMs) => {
+        const source = sourceRef.current;
+        if (source === null) return;
+
+        // One frame of lookahead, in source time. See VideoSource.prefetch.
+        const ahead = tOutputMs + PREFETCH_LOOKAHEAD_MS;
+        void source.prefetch(
+          outputToSource(ahead, manifest.durationMs, live.current.project.cuts),
+        );
       },
     );
     playerRef.current = player;
@@ -213,7 +264,17 @@ export function Editor({
           return next;
         });
 
-        setStatus(`${manifest.video.width}×${manifest.video.height} · ${manifest.video.fps}fps`);
+        // The capture rate, not the output rate, and labelled as such: it is
+        // routinely well under what was requested (gdigrab reaches about 28fps
+        // at 1080p on this machine) and cannot be fixed in software, so the
+        // one thing it must not do is get mistaken for a rendering fault.
+        // manifest.video.fps is the achieved rate — checked against
+        // `ffprobe -count_frames` on every take on disk, where it agrees
+        // exactly.
+        setStatus(
+          `${manifest.video.width}×${manifest.video.height} · captured at ` +
+            `${manifest.video.fps.toFixed(1)}fps`,
+        );
 
         // Test hooks for tools/verify-parity.ts. renderAt is awaited directly
         // rather than going through the player, so a screenshot is guaranteed
@@ -281,18 +342,31 @@ export function Editor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // PreviewPlayer draws only on play/seek/toggle and nothing watches `project`,
-  // so a style or output edit is invisible on a paused preview without this.
-  // It is an effect rather than a seek inside each handler because both
-  // `cursorPath` and `ctx` are useMemos on these values: only the re-render
-  // rebuilds them, so a synchronous seek would redraw with the old ones.
-  //
-  // Widened from style.cursor to the whole style deliberately — a third
-  // redraw idiom in this file is the thing HANDOVER warns against, and every
-  // style field reaches the renderer the same way.
+  /**
+   * The one way an edit reaches a paused preview.
+   *
+   * PreviewPlayer draws on play, seek and toggle; nothing watches `project`.
+   * This file used to answer "how does an edit redraw?" three different ways —
+   * this effect for style and output, a functional setProject plus a
+   * synchronous seek for the zoom config, and addCut, which patched
+   * `live.current` and never redrew at all, so adding a cut left a stale frame
+   * on screen until the next scrub.
+   *
+   * It is an effect and not a seek inside each handler because `cursorPath`
+   * and `ctx` are useMemos on `project`: only the re-render rebuilds them, so a
+   * synchronous seek redraws with the old ones. The synchronous version worked
+   * by relying on React's eager-state optimisation, which is an optimisation
+   * and not a contract.
+   *
+   * It watches the whole project on purpose. Every field reaches the renderer
+   * the same way, and a dependency list that enumerates them is a list someone
+   * will forget to extend — which is exactly how addCut's bug happened.
+   * Redrawing one frame more often than strictly needed costs a decode that is
+   * almost always a cache hit.
+   */
   useEffect(() => {
     playerRef.current?.seek(playerRef.current.playheadMs);
-  }, [project.style, project.output]);
+  }, [project]);
 
   const onConfigChange = (config: ZoomConfig): void => {
     setProject((prev) => {
@@ -304,8 +378,6 @@ export function Editor({
       live.current = { ...live.current, project: next };
       return next;
     });
-
-    playerRef.current?.seek(playerRef.current.playheadMs);
   };
 
   /**
@@ -465,6 +537,7 @@ export function Editor({
           cuts={project.cuts}
           keyframes={project.zoom.keyframes}
           playheadMs={playheadMs}
+          playheadRef={playheadElRef}
           maxComfortableZoom={ceiling}
           onSeek={(t) => playerRef.current?.seek(t)}
         />

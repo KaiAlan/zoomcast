@@ -42,6 +42,7 @@ function codecDescription(sample: Sample): Uint8Array {
 export class VideoSource {
   private cachedIndex = -1;
   private cachedFrame: VideoFrame | null = null;
+  private queue: Promise<void> = Promise.resolve();
 
   private constructor(
     /** Decode order: how chunks must be fed. */
@@ -208,13 +209,63 @@ export class VideoSource {
    * and MUST be closed — a leaked frame stalls the decoder within seconds.
    */
   async frameAt(tMs: number): Promise<VideoFrame> {
+    // The clone happens INSIDE the serialised section: decodeTo returns the
+    // cached frame itself, and the next queued decode closes it when it
+    // replaces the cache. Cloning outside would work only by relying on the
+    // order two microtasks happen to run in.
+    return this.serialise(async () => (await this.decodeTo(tMs)).clone());
+  }
+
+  /**
+   * Warm the cache for a time about to be asked for.
+   *
+   * Every seek decodes forward from the nearest keyframe, so the first output
+   * frame that lands on a NEW source frame pays for a whole GOP while the
+   * player's own tick is dropped mid-decode. Doing that decode one frame early,
+   * in the gap after a draw, means the next draw is a cache hit instead.
+   *
+   * Still exactly one VideoFrame alive: this replaces the cached frame rather
+   * than queueing another. Holding a GOP's worth exhausts Chromium's frame pool
+   * and flush() then hangs forever with no error.
+   */
+  async prefetch(tMs: number): Promise<void> {
+    const target = this.sampleAt(tMs);
+    if (target === undefined) return;
+    if (target.decodeIndex === this.cachedIndex) return;
+
+    try {
+      await this.serialise(() => this.decodeTo(tMs));
+    } catch {
+      // A prefetch is an optimisation: if it fails, the real draw will fail
+      // the same way and report it properly.
+    }
+  }
+
+  /**
+   * One decode at a time.
+   *
+   * frameAt and prefetch both configure a decoder and write the cache, so
+   * overlapping them would race on `cachedFrame` and double-decode the same
+   * GOP. Chaining is enough — there is never a queue longer than one draw plus
+   * one prefetch.
+   */
+  private serialise<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(work, work);
+    this.queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  /** Decode the frame displayed at `tMs` into the cache and return it. */
+  private async decodeTo(tMs: number): Promise<VideoFrame> {
     const target = this.sampleAt(tMs);
     if (target === undefined) throw new Error(`no sample at ${tMs}ms`);
 
     const idx = target.decodeIndex;
-    if (idx === this.cachedIndex && this.cachedFrame !== null) {
-      return this.cachedFrame.clone();
-    }
+    const cached = this.cachedFrame;
+    if (idx === this.cachedIndex && cached !== null) return cached;
 
     const from = this.syncIndexAt(idx);
 
@@ -285,7 +336,7 @@ export class VideoSource {
     this.cachedFrame = chosen;
     this.cachedIndex = idx;
 
-    return chosen.clone();
+    return chosen;
   }
 
   close(): void {
