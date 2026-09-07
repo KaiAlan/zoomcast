@@ -17,6 +17,9 @@ export class PreviewPlayer {
 
   playheadMs = 0;
 
+  /** Test hook: called after each completed draw. See __zc.benchPreview. */
+  onDrawn?: () => void;
+
   constructor(
     private readonly render: RenderAt,
     private readonly durationMs: () => number,
@@ -67,6 +70,7 @@ export class PreviewPlayer {
     this.busy = true;
     try {
       await this.render(tOutputMs);
+      this.onDrawn?.();
       if (this.playing) this.prefetch(tOutputMs);
     } finally {
       this.busy = false;

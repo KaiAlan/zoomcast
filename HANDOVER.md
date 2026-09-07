@@ -257,6 +257,7 @@ unit tests could not have caught.
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
 | `ZOOMCAST_RECORD_TEST_RUNS=<n>` | n recordings in **one process**, each reporting `hasCursorShapes` and its cursor-event count. Use 2+ for anything touching process-global state — see the koffi entry below |
+| `npm run bench:preview -- <take> [ms] [runs]` | What the preview actually achieves while playing. **~13fps** on a 60fps take here, p50 40ms, worst 200ms+ |
 | `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
 | `npm run camera:travel -- <take>` | How far the camera moves DURING a hold, fixed vs follow. Fixed is 0px/s — it arrives and freezes |
 | `npm run render:camera -- <take>` | Renders a take twice, every zoom fixed then every zoom following, to watch side by side |
@@ -514,7 +515,36 @@ reasoning about the complaint. Three are addressed; one is not.
    at the top of it the camera was mathematically pinned to centre. Fixed by
    the geometry rework above: the camera now crops toward the pointer, up to a
    configurable 1.6x, at a depth that varies with what you were doing.
-3. **The preview stutter** — improved, not measured. The playhead no longer
+3. **The preview stutter** — NOW MEASURED, and it is the thing the user
+   actually sees. `npm run bench:preview` reports **~13fps** on a real 60fps
+   take (13.6 / 13.0 / 13.0 over three back-to-back runs), p50 frame gap 40ms,
+   worst over 200ms. Judging camera work in the editor is therefore judging
+   the decoder, not the camera — which is exactly what happened on
+   2026-09-07, when "the travel is lagging and glitchy" turned out to be
+   partly a real 495px camera teleport and mostly this.
+
+   **Two traps in that harness, both hit on the first attempt.** A hidden
+   BrowserWindow throttles `requestAnimationFrame` to about 1Hz, so the first
+   run reported "1.0fps" — an artifact, not a measurement; the bench window is
+   shown and `setBackgroundThrottling(false)` now, and it warns when the tick
+   count implies throttling. And the result moves a lot between machine
+   states: 9.6 and 20.7fps were both measured on the same code and take,
+   while back-to-back runs sit within a few percent. **Compare a batch
+   against a batch.**
+
+   **A stateful incremental decoder was tried on 2026-09-07 and REVERTED.**
+   Keeping a `VideoDecoder` alive across frames and feeding it only the chunks
+   between two positions took the preview from ~13fps to **1.5fps**, with
+   `fastHits: 0` — the fast path never once produced a frame, so every draw
+   paid for the failed attempt AND the full-GOP fallback. Two things to know
+   before trying again: after `flush()` a decoder did not usefully accept
+   further delta chunks here, and there is a feedback loop — the playhead
+   follows the wall clock, so a slow draw advances it about a second, which is
+   ~60 frames at 60fps, which is past the next keyframe, so the incremental
+   path cannot engage during playback even when it works. Any retry has to
+   break that loop, not just keep a decoder warm.
+
+   The original note read: improved, not measured. The playhead no longer
    re-renders the editor 60 times a second, and the decode for the next source
    frame now happens in the gap after a draw instead of on the critical path.
    What did NOT change is the cost of that decode: every seek decodes forward

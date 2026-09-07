@@ -307,6 +307,61 @@ export function Editor({
               onProgress: () => undefined,
             });
           },
+          /**
+           * What the preview actually achieves, measured rather than argued.
+           *
+           * Times completed draws, not rAF ticks: a tick that arrives while a
+           * render is in flight is dropped by PreviewPlayer, so counting ticks
+           * would report a healthy 60fps while the picture updated ten times a
+           * second. `droppedTicks` is the gap between the two.
+           */
+          benchPreview: async (ms: number) => {
+            const drawn: number[] = [];
+            let ticks = 0;
+
+            const player = playerRef.current;
+            if (player === null) throw new Error("no player");
+
+            player.seek(0);
+            const t0 = performance.now();
+
+            // Sample the drawn frame by watching the canvas through the same
+            // rAF clock the player runs on.
+            let stop = false;
+            const watch = (): void => {
+              if (stop) return;
+              ticks += 1;
+              requestAnimationFrame(watch);
+            };
+            requestAnimationFrame(watch);
+
+            const onDraw = (): void => {
+              drawn.push(performance.now() - t0);
+            };
+            player.onDrawn = onDraw;
+            player.play();
+
+            await new Promise<void>((r) => setTimeout(r, ms));
+            player.pause();
+            stop = true;
+            player.onDrawn = undefined;
+
+            const seconds = (performance.now() - t0) / 1000;
+            const deltas = drawn.slice(1).map((t, i) => t - (drawn[i] ?? 0));
+            deltas.sort((a, b) => a - b);
+            const pick = (q: number): number =>
+              deltas.length === 0 ? 0 : (deltas[Math.min(deltas.length - 1, Math.floor(deltas.length * q))] ?? 0);
+
+            return {
+              frames: drawn.length,
+              seconds,
+              fps: drawn.length / seconds,
+              p50DeltaMs: pick(0.5),
+              p95DeltaMs: pick(0.95),
+              worstDeltaMs: deltas[deltas.length - 1] ?? 0,
+              droppedTicks: ticks - drawn.length,
+            };
+          },
         };
 
         // ?seek=<ms> lets a screenshot land on a chosen playhead position.

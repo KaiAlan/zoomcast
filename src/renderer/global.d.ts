@@ -7,6 +7,16 @@ declare global {
     __zc?: {
       renderAt: (tOutputMs: number) => Promise<string>;
       exportTo: (outFile: string) => Promise<void>;
+      /** Play for a while and report what the preview actually achieved. */
+      benchPreview: (ms: number) => Promise<{
+        frames: number;
+        seconds: number;
+        fps: number;
+        p50DeltaMs: number;
+        p95DeltaMs: number;
+        worstDeltaMs: number;
+        droppedTicks: number;
+      }>;
     };
   }
 }

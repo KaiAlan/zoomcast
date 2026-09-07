@@ -33,6 +33,7 @@ const HEADLESS_MODES = [
   "ZOOMCAST_UI_SHOT",
   "ZOOMCAST_SHOOT",
   "ZOOMCAST_RECORD_TEST",
+  "ZOOMCAST_PREVIEW_BENCH",
 ];
 
 const headless = HEADLESS_MODES.some((key) => process.env[key] !== undefined);
@@ -229,6 +230,58 @@ async function runUiShot(): Promise<void> {
 }
 
 /**
+ * Measure what the preview actually achieves while playing.
+ *
+ * The handover has claimed the preview is "smoother" twice without a number
+ * behind it. This is that number: real frames drawn per second, and the gap
+ * between rAF ticks and completed draws.
+ *
+ * Driven by ZOOMCAST_PREVIEW_BENCH (bundle dir), ZOOMCAST_PREVIEW_BENCH_MS and
+ * ZOOMCAST_PREVIEW_BENCH_OUT.
+ */
+async function runPreviewBench(): Promise<void> {
+  const dir = process.env.ZOOMCAST_PREVIEW_BENCH ?? "";
+  const ms = Number(process.env.ZOOMCAST_PREVIEW_BENCH_MS ?? "6000");
+  const out =
+    process.env.ZOOMCAST_PREVIEW_BENCH_OUT ??
+    join(app.getPath("userData"), "preview-bench.json");
+
+  // The window MUST be shown. Chromium throttles requestAnimationFrame in a
+  // hidden window to about 1Hz, so the first run of this harness reported
+  // "1.0fps" — an artifact of the harness, not a measurement of the preview.
+  const win = createWindow(true, `?bundle=${encodeURIComponent(dir)}`);
+  win.webContents.setBackgroundThrottling(false);
+  await new Promise<void>((resolve) => win.webContents.once("did-finish-load", resolve));
+
+  for (let tries = 0; tries < 200; tries++) {
+    const ready = (await win.webContents.executeJavaScript(
+      "typeof window.__zc === 'object' && window.__zc !== undefined",
+    )) as boolean;
+    if (ready) break;
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+
+  const result = (await win.webContents.executeJavaScript(
+    `window.__zc.benchPreview(${ms})`,
+  )) as { fps: number; droppedTicks: number; frames: number };
+
+  // A rAF clock that never ticked faster than the draws means the window was
+  // throttled and the number is meaningless.
+  if (result.droppedTicks < result.frames * 0.2 && result.fps < 20) {
+    console.log(
+      `WARNING: only ${result.frames + result.droppedTicks} rAF ticks — window likely throttled, treat this run as invalid`,
+    );
+  }
+
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(`preview bench: ${JSON.stringify(result)}`);
+  console.log(`wrote ${out}`);
+
+  app.quit();
+}
+
+/**
  * Export a bundle headlessly and capture preview frames from the same editor
  * instance, so preview/export parity can be checked automatically.
  *
@@ -385,6 +438,11 @@ void app.whenReady().then(async () => {
       // was invisible to it.
       app.exit(1);
     }
+    return;
+  }
+
+  if (process.env.ZOOMCAST_PREVIEW_BENCH !== undefined) {
+    void runPreviewBench();
     return;
   }
 
