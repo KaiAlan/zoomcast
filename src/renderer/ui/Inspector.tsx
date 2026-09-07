@@ -3,8 +3,8 @@ import type {
   OutputConfig,
   StyleConfig,
 } from "../../shared/project/types";
-import type { ZoomConfig } from "../../shared/zoom/types";
-import { fieldLabel, numberInput, row, sectionHeader } from "./controls";
+import type { EasingName, ZoomConfig } from "../../shared/zoom/types";
+import { fieldLabel, numberInput, row, sectionHeader, selectInput } from "./controls";
 import { StylePanel } from "./StylePanel";
 
 type Props = {
@@ -34,6 +34,16 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number }> = [
   { key: "leadInMs", label: "lead in (ms)", step: 50 },
   { key: "trailMs", label: "trail (ms)", step: 50 },
   { key: "transitionMs", label: "transition (ms)", step: 50 },
+];
+
+/**
+ * The curves worth offering. `linear` is deliberately absent: it is what the
+ * follow camera's own samples use so the precomputed path is what renders, not
+ * a look anyone would choose for a zoom.
+ */
+const CURVES: Array<{ value: EasingName; label: string }> = [
+  { value: "zoomGlide", label: "glide — even, peaks mid-move" },
+  { value: "zoomEase", label: "ease — fast in, drifting tail" },
 ];
 
 export function Inspector({
@@ -67,6 +77,21 @@ export function Inspector({
           />
         </label>
       ))}
+
+      <label style={row}>
+        <span style={fieldLabel}>transition curve</span>
+        <select
+          value={config.easing === "linear" ? "zoomGlide" : config.easing}
+          onChange={(e) => onChange({ ...config, easing: e.target.value as EasingName })}
+          style={selectInput}
+        >
+          {CURVES.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div style={{ marginTop: 16 }}>
         <div style={sectionHeader}>cursor</div>

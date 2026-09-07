@@ -1,4 +1,8 @@
-export type EasingName = "zoomEase" | "linear";
+/**
+ * `linear` is not a style choice: the follow camera's 100ms samples use it so
+ * that what renders between them is the precomputed path and nothing else.
+ */
+export type EasingName = "zoomEase" | "zoomGlide" | "linear";
 
 export type ZoomConfig = {
   /** How stale a click may be and still anchor a keystroke. */

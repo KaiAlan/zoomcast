@@ -76,7 +76,14 @@ describe("screenQuad", () => {
  * Sweeping both cx and cy matters for the same reason. cy = 0.5 is precisely
  * the case where the vertical clamp never binds.
  */
-describe("screenQuad clamping", () => {
+/**
+ * Exhaustive sweeps, not samples: these are what hold the head-of-file jump
+ * closed, and the discontinuity they caught was one float wide. They take a
+ * couple of seconds alone and longer when the rest of the suite is running
+ * beside them, so they get an explicit timeout — a guard that fails on load
+ * rather than on regression is a guard people learn to ignore.
+ */
+describe("screenQuad clamping", { timeout: 60_000 }, () => {
   const CENTRES = [0, 0.05, 0.07005, 0.2, 0.5, 0.8, 0.95, 1];
   const OUTPUTS = [
     { name: "16:9 native", size: HD },

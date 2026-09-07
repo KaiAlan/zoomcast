@@ -35,6 +35,42 @@ describe("cubicBezier", () => {
   });
 });
 
+describe("zoomGlide", () => {
+  const ease = EASINGS.zoomGlide;
+
+  it("pins the endpoints and stays monotonic", () => {
+    expect(ease(0)).toBe(0);
+    expect(ease(1)).toBe(1);
+
+    let prev = -1;
+    for (let x = 0; x <= 1; x += 0.02) {
+      const y = ease(x);
+      expect(y).toBeGreaterThanOrEqual(prev);
+      prev = y;
+    }
+  });
+
+  /**
+   * The property, not the samples. zoomEase puts 61% of the motion in the
+   * first third and then drifts; a curve worth switching to must not.
+   */
+  it("does not front-load the motion", () => {
+    expect(ease(1 / 3)).toBeLessThan(0.55);
+    expect(EASINGS.zoomEase(1 / 3)).toBeGreaterThan(0.55);
+  });
+
+  it("keeps a real move left for the last third", () => {
+    // zoomEase leaves 6% here, which is the drifting tail.
+    expect(1 - ease(2 / 3)).toBeGreaterThan(0.15);
+  });
+
+  it("peaks in the middle rather than near the start", () => {
+    const speedAt = (x: number): number => (ease(x + 0.01) - ease(x - 0.01)) / 0.02;
+    expect(speedAt(0.5)).toBeGreaterThan(speedAt(0.25));
+    expect(speedAt(0.5)).toBeGreaterThan(speedAt(0.75));
+  });
+});
+
 describe("EASINGS", () => {
   it("exposes linear as an identity", () => {
     expect(EASINGS.linear(0.42)).toBeCloseTo(0.42, 6);
