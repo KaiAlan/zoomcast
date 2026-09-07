@@ -46,7 +46,12 @@ const MIN_PSNR_DB = 28;
  * default leaves off, and "square" is the only check that the two paths agree
  * on output size at all — they compute it separately.
  */
-const CONFIGS: Array<{ name: string; style?: Partial<Project["style"]>; output?: Partial<Project["output"]> }> = [
+const CONFIGS: Array<{
+  name: string;
+  style?: Partial<Project["style"]>;
+  output?: Partial<Project["output"]>;
+  zoom?: Partial<Project["zoom"]>;
+}> = [
   { name: "default" },
   {
     name: "styled",
@@ -72,6 +77,35 @@ const CONFIGS: Array<{ name: string; style?: Partial<Project["style"]>; output?:
     },
   },
   { name: "square", output: { aspect: "1:1" } },
+  {
+    /**
+     * The follow camera, which nothing else here exercises: the planner only
+     * ever emits "fixed", so without this config the whole follow path — the
+     * precomputed camera, its clamp and the 100ms sample keyframes — would
+     * render in preview and export with no guard that the two agree.
+     *
+     * 1:1 on purpose. At the native aspect nothing is ever cropped (cropping
+     * would start above 1 / paddingFactor, which is exactly where the ceiling
+     * lands), so a follow there has no viewport to move and the config would
+     * prove nothing. The segment is pinned so it survives the re-plan the
+     * editor plays on load.
+     */
+    name: "follow",
+    output: { aspect: "1:1" },
+    zoom: {
+      segments: [
+        {
+          id: "follow-1",
+          startMs: 800,
+          endMs: 4200,
+          position: "follow",
+          waypoints: [{ id: "f0", tMs: 800, depth: 1, cx: 0.5, cy: 0.5 }],
+          origin: "manual",
+          pinned: true,
+        },
+      ],
+    },
+  },
   {
     // The one branch that never binds the background program at all, so a
     // divergence in the skip path itself has nowhere else to show up.
@@ -145,6 +179,7 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
     ...base,
     style: { ...base.style, ...config.style },
     output: { ...base.output, ...config.output },
+    zoom: { ...base.zoom, ...config.zoom },
   };
 
   assertSurvivesMigration(project);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { replan } from "./replan";
-import type { ZoomKeyframe } from "./types";
+import { replan, replanSegments } from "./replan";
+import type { ZoomKeyframe, ZoomSegment } from "./types";
 
 const kf = (over: Partial<ZoomKeyframe> & { id: string }): ZoomKeyframe => ({
   tSourceMs: 1000,
@@ -56,5 +56,51 @@ describe("replan", () => {
   it("drops an unpinned auto keyframe the new plan no longer generates", () => {
     const out = replan([kf({ id: "stale" })], []);
     expect(out).toEqual([]);
+  });
+});
+
+describe("replanSegments", () => {
+  const seg = (over: Partial<ZoomSegment> = {}): ZoomSegment => ({
+    id: "s1",
+    startMs: 1000,
+    endMs: 3000,
+    position: "fixed",
+    waypoints: [{ id: "k0", tMs: 1000, depth: 1, cx: 0.5, cy: 0.5 }],
+    origin: "auto",
+    pinned: false,
+    ...over,
+  });
+
+  it("regenerates everything the user has not touched", () => {
+    const generated = [seg({ id: "g1" }), seg({ id: "g2", startMs: 5000, endMs: 7000 })];
+    expect(replanSegments([seg({ id: "old" })], generated)).toEqual(generated);
+  });
+
+  it("keeps a pinned segment and drops what would compete with it", () => {
+    const kept = seg({ id: "mine", pinned: true, position: "follow" });
+    const out = replanSegments([kept], [seg({ id: "g1", startMs: 2000, endMs: 4000 })]);
+
+    expect(out).toEqual([kept]);
+  });
+
+  it("keeps a manual segment", () => {
+    const kept = seg({ id: "mine", origin: "manual" });
+    expect(replanSegments([kept], [])).toEqual([kept]);
+  });
+
+  it("keeps a generated segment that merely abuts a kept one", () => {
+    // Touching is not overlapping: a segment starting exactly where another
+    // ends is the travelling case, not a competing one.
+    const kept = seg({ id: "mine", pinned: true });
+    const after = seg({ id: "g1", startMs: 3000, endMs: 5000 });
+
+    expect(replanSegments([kept], [after]).map((s) => s.id)).toEqual(["mine", "g1"]);
+  });
+
+  it("returns segments in time order", () => {
+    const kept = seg({ id: "mine", startMs: 8000, endMs: 9000, pinned: true });
+    const out = replanSegments([kept], [seg({ id: "g1" })]);
+
+    expect(out.map((s) => s.startMs)).toEqual([1000, 8000]);
   });
 });

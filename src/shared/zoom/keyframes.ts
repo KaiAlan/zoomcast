@@ -1,5 +1,18 @@
+import { cursorAt, type CursorPath } from "../cursor/path";
+import { clampToSource } from "./camera";
 import { maxComfortableZoom } from "./geometry";
 import type { PlanContext, ZoomConfig, ZoomKeyframe, ZoomSegment } from "./types";
+
+/**
+ * How often a follow segment emits a keyframe.
+ *
+ * The path it samples is already damped at a several-hundred-millisecond
+ * half-life, so 100ms with a linear ramp between samples reproduces it to well
+ * under a pixel; the alternative — one keyframe per frame — would put the
+ * output frame rate into the keyframe list, which is exactly what precomputing
+ * the path exists to avoid.
+ */
+export const FOLLOW_SAMPLE_MS = 100;
 
 /**
  * Segments to keyframes: the render-time representation, derived.
@@ -19,6 +32,12 @@ export function segmentsToKeyframes(
   segments: ZoomSegment[],
   cfg: ZoomConfig,
   ctx: PlanContext,
+  /**
+   * The precomputed camera path, in source pixels. Only `position: "follow"`
+   * segments read it; without one they fall back to their waypoints, so the
+   * planner, the tune tool and the tests need not build a path at all.
+   */
+  follow: CursorPath | null = null,
 ): ZoomKeyframe[] {
   const ceiling = maxComfortableZoom(ctx.source, ctx.output, ctx.paddingFactor);
   const kfs: ZoomKeyframe[] = [];
@@ -28,12 +47,16 @@ export function segmentsToKeyframes(
     if (waypoints.length === 0) continue;
 
     for (const w of waypoints) {
+      const centre =
+        s.position === "follow" && follow !== null
+          ? followCentre(follow, w.tMs, depthToScale(w.depth, ceiling), ctx, w)
+          : { cx: w.cx, cy: w.cy };
+
       kfs.push({
         id: `${w.id}i`,
         tSourceMs: w.tMs,
         scale: depthToScale(w.depth, ceiling),
-        cx: w.cx,
-        cy: w.cy,
+        ...centre,
         easing: cfg.easing,
         transitionMs: cfg.transitionMs,
         origin: s.origin,
@@ -44,12 +67,24 @@ export function segmentsToKeyframes(
     const last = waypoints[waypoints.length - 1];
     if (last === undefined) continue;
 
+    // A follow segment tracks between its waypoints too: sample the path on a
+    // fixed cadence and let zoomAt ramp linearly between the samples. The
+    // samples come from one precomputed array, so preview and export see the
+    // same camera.
+    const tail =
+      s.position === "follow" && follow !== null
+        ? sampleFollow(follow, last, s, cfg, ctx, ceiling)
+        : [];
+    kfs.push(...tail);
+
+    const end = tail[tail.length - 1] ?? { cx: last.cx, cy: last.cy };
+
     kfs.push({
       id: `${last.id}o`,
       tSourceMs: s.endMs,
       scale: 1,
-      cx: last.cx,
-      cy: last.cy,
+      cx: end.cx,
+      cy: end.cy,
       easing: cfg.easing,
       transitionMs: cfg.transitionMs,
       origin: s.origin,
@@ -58,6 +93,56 @@ export function segmentsToKeyframes(
   }
 
   return kfs.sort((a, b) => a.tSourceMs - b.tSourceMs);
+}
+
+/** The camera path at one instant, normalised and clamped, in 0..1 of source. */
+function followCentre(
+  path: CursorPath,
+  tMs: number,
+  scale: number,
+  ctx: PlanContext,
+  fallback: { cx: number; cy: number },
+): { cx: number; cy: number } {
+  const at = cursorAt(path, tMs);
+  if (at === null) return fallback;
+
+  return clampToSource(
+    { cx: at.x / ctx.source.w, cy: at.y / ctx.source.h },
+    scale,
+    ctx,
+  );
+}
+
+/** The follow samples between a segment's last waypoint and its end. */
+function sampleFollow(
+  path: CursorPath,
+  last: ZoomSegment["waypoints"][number],
+  s: ZoomSegment,
+  cfg: ZoomConfig,
+  ctx: PlanContext,
+  ceiling: number,
+): ZoomKeyframe[] {
+  const scale = depthToScale(last.depth, ceiling);
+  const out: ZoomKeyframe[] = [];
+
+  // Stop short of the end: the pull-out transition starts at
+  // endMs - transitionMs, and a follow sample inside it would fight it.
+  const until = s.endMs - cfg.transitionMs;
+
+  for (let t = last.tMs + FOLLOW_SAMPLE_MS, n = 0; t < until; t += FOLLOW_SAMPLE_MS, n++) {
+    out.push({
+      id: `${last.id}f${n}`,
+      tSourceMs: t,
+      scale,
+      ...followCentre(path, t, scale, ctx, last),
+      easing: "linear",
+      transitionMs: FOLLOW_SAMPLE_MS,
+      origin: s.origin,
+      pinned: s.pinned,
+    });
+  }
+
+  return out;
 }
 
 /**

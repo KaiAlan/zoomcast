@@ -8,9 +8,10 @@ import { bundleAssetUrl } from "../media/assetUrl";
 import type { Cut, Project } from "../../shared/project/types";
 import { maxComfortableZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
+import { followPath } from "../../shared/zoom/camera";
 import { segmentsToKeyframes } from "../../shared/zoom/keyframes";
 import { planZoom } from "../../shared/zoom/planner";
-import { replan } from "../../shared/zoom/replan";
+import { replan, replanSegments } from "../../shared/zoom/replan";
 import type { PlanContext, ZoomConfig } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
@@ -106,6 +107,13 @@ export function Editor({
   const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl });
   live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl };
 
+  /**
+   * The camera's own path: the same function the cursor uses, at a
+   * camera-scale half-life. Built once per take — it is a pure function of
+   * telemetry, which is what keeps preview and export showing one camera.
+   */
+  const cameraPath = useMemo(() => followPath(bundle.telemetry), [bundle.telemetry]);
+
   /** Plan on load, then merge so pinned edits survive a config change. */
   const applyPlan = useCallback(
     (config: ZoomConfig, existing: Project) => {
@@ -121,18 +129,22 @@ export function Editor({
         durationMs: manifest.durationMs,
       };
 
-      const segments = planZoom(bundle.telemetry, config, planCtx);
+      const segments = replanSegments(
+        existing.zoom.segments,
+        planZoom(bundle.telemetry, config, planCtx),
+      );
 
       return {
         segments,
         keyframes: replan(
           existing.zoom.keyframes,
-          segmentsToKeyframes(segments, config, planCtx),
+          segmentsToKeyframes(segments, config, planCtx, cameraPath),
         ),
       };
     },
     [
       bundle.telemetry,
+      cameraPath,
       manifest.video.width,
       manifest.video.height,
       manifest.durationMs,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
-import { maxComfortableZoom } from "./geometry";
+import { maxComfortableZoom, screenRect } from "./geometry";
+import type { TelemetryEvent } from "../bundle/types";
+import { followPath } from "./camera";
 import { zoomAt } from "./interpolate";
 import { depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
 import type { PlanContext, ZoomSegment } from "./types";
@@ -155,5 +157,84 @@ describe("opening at rest", () => {
   it("leaves a segment that already starts late alone", () => {
     const kfs = segmentsToKeyframes([seg()], cfg, ctx);
     expect(kfs[0]?.tSourceMs).toBe(1000);
+  });
+});
+
+describe("a follow segment", () => {
+  // A 1:1 output crops a 16:9 source, which is where a follow has room to pan.
+  const square: PlanContext = { ...ctx, output: { w: 1080, h: 1080 } };
+  const events: TelemetryEvent[] = [
+    { k: "move", t: 0, x: 200, y: 540 },
+    { k: "move", t: 1500, x: 1700, y: 540 },
+    { k: "move", t: 5000, x: 1700, y: 540 },
+  ];
+  const path = followPath(events);
+  const seg5 = seg({ startMs: 1000, endMs: 5000, position: "follow" });
+
+  it("tracks the cursor between waypoints instead of holding one centre", () => {
+    const kfs = segmentsToKeyframes([seg5], cfg, square, path);
+    const centres = new Set(kfs.filter((k) => k.scale > 1).map((k) => k.cx));
+
+    expect(centres.size).toBeGreaterThan(5);
+  });
+
+  it("moves the same way the smoothed path does", () => {
+    const kfs = segmentsToKeyframes([seg5], cfg, square, path);
+    const moving = kfs.filter((k) => k.scale > 1);
+    const first = moving[0]?.cx ?? 0;
+    const last = moving[moving.length - 1]?.cx ?? 0;
+
+    // The cursor crosses left to right, so the camera does too — lagging it.
+    expect(last).toBeGreaterThan(first);
+  });
+
+  it("never leaves the source", () => {
+    const kfs = segmentsToKeyframes([seg5], cfg, square, path);
+
+    const base = screenRect(square.source, square.output, square.paddingFactor);
+
+    for (const k of kfs.filter((x) => x.scale > 1)) {
+      const half = Math.min(1, square.output.w / (base.w * k.scale)) / 2;
+      expect(k.cx).toBeGreaterThanOrEqual(half - 1e-9);
+      expect(k.cx).toBeLessThanOrEqual(1 - half + 1e-9);
+    }
+  });
+
+  it("ramps linearly between samples so the precomputed path is what renders", () => {
+    const kfs = segmentsToKeyframes([seg5], cfg, square, path);
+    const samples = kfs.filter((k) => k.id.includes("f"));
+
+    expect(samples.length).toBeGreaterThan(0);
+    for (const k of samples) {
+      expect(k.easing).toBe("linear");
+      expect(k.transitionMs).toBe(100);
+    }
+  });
+
+  it("still pulls out at the segment's end", () => {
+    const kfs = segmentsToKeyframes([seg5], cfg, square, path);
+    const last = kfs[kfs.length - 1];
+
+    expect(last?.tSourceMs).toBe(5000);
+    expect(last?.scale).toBe(1);
+  });
+
+  /**
+   * Without a path there is nothing to follow — the tune tool and the planner
+   * tests derive keyframes without building one, and must still get a shot.
+   */
+  it("falls back to its waypoints when no path is supplied", () => {
+    const withPath = segmentsToKeyframes([seg5], cfg, square, path);
+    const without = segmentsToKeyframes([seg5], cfg, square);
+
+    expect(without).toHaveLength(2);
+    expect(without[0]?.cx).toBe(0.25);
+    expect(withPath.length).toBeGreaterThan(without.length);
+  });
+
+  it("leaves a fixed segment alone even when a path exists", () => {
+    expect(segmentsToKeyframes([seg()], cfg, square, path)).toEqual(
+      segmentsToKeyframes([seg()], cfg, square),
+    );
   });
 });
