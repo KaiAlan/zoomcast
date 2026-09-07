@@ -615,6 +615,17 @@ Each of these cost real time; none is hypothetical.
   pulls it back — and the cap is `ZoomConfig.maxZoom`, default 1.6.
   `pixelParityZoom` is where upscaling begins, reported in the timeline as
   "sharp to", and is no longer a cap.
+- **A transition may not begin before the keyframe it departs from.**
+  `zoomAt` used to run the window back past the previous keyframe, so at the
+  instant the camera should have ARRIVED there it was already part-way to the
+  next one, and the value jumped — the closer the pair, the bigger the jump.
+  Measured over every take on disk: 9 of 134 transitions overlapped, and the
+  worst single-frame camera move was **495px at 60fps**, which is a teleport.
+  Clamping the window to the previous keyframe's time takes that to 85px.
+  The transition is shortened rather than the keyframe moved, because `zoomAt`
+  has to stay a pure function of the keyframes it is handed — including ones
+  hand-written into `project.json`. Widening `minRecoveryMs` to 1500 and
+  giving the pan its own 1000ms window made this common; it was always latent.
 - **A pan is not a zoom, and must not share its curve.** The first waypoint in
   a shot is the zoom-in and uses `easing`/`transitionMs`; every later one is
   the camera travelling inside a shot it has already arrived in, and uses the
