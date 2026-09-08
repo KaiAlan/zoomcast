@@ -1,6 +1,22 @@
 export type RenderAt = (tOutputMs: number) => Promise<void>;
 
 /**
+ * Where the playhead comes from during playback.
+ *
+ * The wall-clock loop advances the playhead by elapsed real time, so a slow
+ * draw jumps it by ~60 frames at 60fps -- past the next keyframe -- and no
+ * incremental decode path can engage during playback even when it works.
+ * A media clock reports the presentation time of the frame actually about to
+ * be drawn, which removes that loop rather than mitigating it.
+ */
+export type PreviewClock = {
+  start(fromMs: number): void;
+  stop(): void;
+  /** Register for the next frame; `cb` receives that frame's presentation time. */
+  onFrame(cb: (tMs: number) => void): void;
+};
+
+/**
  * Drives rendering on requestAnimationFrame.
  *
  * Rendering a frame is asynchronous (it may decode), so ticks that arrive while
@@ -30,6 +46,11 @@ export class PreviewPlayer {
      * the next source frame is already done when the draw asks for it.
      */
     private readonly prefetch: (tOutputMs: number) => void = () => undefined,
+    /**
+     * Absent, the wall-clock loop runs exactly as it always has -- which is
+     * what keeps export, verify:decode and shoot.ts untouched by this.
+     */
+    private readonly clock?: PreviewClock,
   ) {}
 
   get isPlaying(): boolean {
@@ -39,15 +60,31 @@ export class PreviewPlayer {
   play(): void {
     if (this.playing) return;
     this.playing = true;
-    this.wallAtStart = performance.now();
     this.outputAtStart = this.playheadMs >= this.durationMs() ? 0 : this.playheadMs;
+
+    if (this.clock !== undefined) {
+      this.clock.onFrame(this.onMediaFrame);
+      this.clock.start(this.outputAtStart);
+      return;
+    }
+
+    this.wallAtStart = performance.now();
     this.loop();
   }
 
   pause(): void {
     this.playing = false;
-    cancelAnimationFrame(this.raf);
-    this.raf = 0;
+
+    if (this.clock !== undefined) {
+      // The media-clock path never schedules a rAF, so there is nothing to
+      // cancel -- and reaching for it would be the only DOM dependency in an
+      // otherwise plain state machine.
+      this.clock.stop();
+    } else {
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    }
+
     this.onTick(this.playheadMs, false);
   }
 
@@ -77,6 +114,28 @@ export class PreviewPlayer {
     }
   }
 
+  /**
+   * A frame is about to be presented at `tMs`. Composing against this rather
+   * than against a requested time aligns the draw to the frame actually on
+   * screen.
+   */
+  private onMediaFrame = (tMs: number): void => {
+    if (!this.playing) return;
+
+    const end = this.durationMs();
+    if (tMs >= end) {
+      this.playheadMs = end;
+      this.onTick(end, false);
+      void this.draw(end);
+      this.pause();
+      return;
+    }
+
+    this.playheadMs = tMs;
+    this.onTick(tMs, true);
+    void this.draw(tMs);
+  };
+
   private loop = (): void => {
     if (!this.playing) return;
 
@@ -101,6 +160,7 @@ export class PreviewPlayer {
 
   dispose(): void {
     this.playing = false;
-    cancelAnimationFrame(this.raf);
+    this.clock?.stop();
+    if (this.clock === undefined) cancelAnimationFrame(this.raf);
   }
 }
