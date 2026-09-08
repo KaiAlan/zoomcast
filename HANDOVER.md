@@ -38,9 +38,20 @@ stateful decoder that was tried and reverted with the feedback loop any retry
 has to break, the fully measured motion-blur recipe, and the mistakes made
 that day so they are not repeated.
 
-**The headline: the editor preview runs at ~13fps, and that is what "lagging
-and glitchy" was.** `npm run bench:preview` measures it. Judge camera work on
-an export, not in the editor, until that changes.
+**The headline: the preview is fixed. It runs at the take's own frame rate.**
+`npm run bench:preview -- 2026-09-07T17-22-48 6000 5` went from **median
+10.2fps, spread 9.2-13.2** to **median 29.7fps, spread 29.5-30.0** on a take
+captured at 32.6fps — about 91% of the source rate, which is the ceiling,
+because rVFC fires once per presented frame. p95 frame gap fell from 215-279ms
+to 49-56ms.
+
+**Camera work can be judged in the editor again.** The instruction to judge it
+only on an export is withdrawn.
+
+The fix was not a faster decoder. The preview now draws from an
+`HTMLVideoElement` and the browser owns demux, buffering and frame timing;
+export keeps the decoder because it needs frame-exact random access. See
+`docs/specs/2026-09-08-preview-frame-source-split-design.md`.
 
 The `minRecoveryMs` lever that document's predecessor called "not taken" HAS
 now been taken — shots chain at 1500ms and pan between focus points on their
@@ -264,7 +275,7 @@ unit tests could not have caught.
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
 | `ZOOMCAST_RECORD_TEST_RUNS=<n>` | n recordings in **one process**, each reporting `hasCursorShapes` and its cursor-event count. Use 2+ for anything touching process-global state — see the koffi entry below |
-| `npm run bench:preview -- <take> [ms] [runs]` | What the preview actually achieves while playing. **~13fps** on a 60fps take here, p50 40ms, worst 200ms+ |
+| `npm run bench:preview -- <take> [ms] [runs]` | What the preview actually achieves while playing. **~29.7fps** on a take captured at 32.6fps, p50 35ms, p95 ~50ms. The source rate is the ceiling |
 | `npm run tune -- <take\|all>` | Replays real recordings through the planner: zoom count, pacing, holds, gaps, travel, and the cluster funnel |
 | `npm run camera:travel -- <take>` | How far the camera moves DURING a hold, fixed vs follow. Fixed is 0px/s — it arrives and freezes |
 | `npm run render:camera -- <take>` | Renders a take twice, every zoom fixed then every zoom following, to watch side by side |
@@ -522,13 +533,18 @@ reasoning about the complaint. Three are addressed; one is not.
    at the top of it the camera was mathematically pinned to centre. Fixed by
    the geometry rework above: the camera now crops toward the pointer, up to a
    configurable 1.6x, at a depth that varies with what you were doing.
-3. **The preview stutter** — NOW MEASURED, and it is the thing the user
-   actually sees. `npm run bench:preview` reports **~13fps** on a real 60fps
-   take (13.6 / 13.0 / 13.0 over three back-to-back runs), p50 frame gap 40ms,
-   worst over 200ms. Judging camera work in the editor is therefore judging
-   the decoder, not the camera — which is exactly what happened on
-   2026-09-07, when "the travel is lagging and glitchy" turned out to be
-   partly a real 495px camera teleport and mostly this.
+3. **The preview stutter** — MEASURED, then FIXED on 2026-09-08. It reported
+   **~13fps** and was the thing the user actually saw; judging camera work in
+   the editor was judging the decoder, which is exactly what happened on
+   2026-09-07 when "the travel is lagging and glitchy" turned out to be partly
+   a real 495px camera teleport and mostly this.
+
+   **The cause was never decode speed.** `VideoDecoder` is Chromium's hardware
+   decoder. `frameAt` built a fresh one per frame and decoded from the nearest
+   keyframe, so against a GOP of 30 it paid ~15 decoded frames for every one
+   displayed. The preview now draws from an `HTMLVideoElement` instead, which
+   deletes both that amplification and the feedback loop below rather than
+   solving either. Median 10.2 -> 29.7fps. Export still uses the decoder.
 
    **Two traps in that harness, both hit on the first attempt.** A hidden
    BrowserWindow throttles `requestAnimationFrame` to about 1Hz, so the first
@@ -540,6 +556,8 @@ reasoning about the complaint. Three are addressed; one is not.
    against a batch.**
 
    **A stateful incremental decoder was tried on 2026-09-07 and REVERTED.**
+   Kept here because it explains why the fix took the shape it did, not
+   because it is still worth retrying — the `<video>` path made it moot.
    Keeping a `VideoDecoder` alive across frames and feeding it only the chunks
    between two positions took the preview from ~13fps to **1.5fps**, with
    `fastHits: 0` — the fast path never once produced a frame, so every draw
