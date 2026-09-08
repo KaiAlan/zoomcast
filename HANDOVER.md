@@ -1,8 +1,9 @@
 # zoomcast — handover
 
-Updated 2026-09-07. **Phases 0–7, A, B and C complete, plus the camera
-geometry and depth rework, the per-segment camera switch, and a day of camera
-retiming measured against a Recordly export — all on `main`.** The tool records
+Updated 2026-09-08. **Phases 0–7, A, B, C and D complete, plus the camera
+geometry and depth rework, the per-segment camera switch, the preview
+frame-source split, and a day of camera-feel work driven entirely by
+measurement — all on `main`.** The tool records
 your screen, mic and system audio, plans zooms from real input telemetry,
 drives a camera that opens at rest and can follow the cursor, draws a synthetic cursor with real shapes and
 click ripples, composes the frame over a procedural or custom background, lets
@@ -32,13 +33,22 @@ a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
 
 **Start the next session at
-`docs/superpowers/plans/2026-09-07-camera-feel-handoff.md`.** It carries the
-state of the camera-feel work, the three routes open for the preview, the
-stateful decoder that was tried and reverted with the feedback loop any retry
-has to break, the fully measured motion-blur recipe, and the mistakes made
-that day so they are not repeated.
+`docs/superpowers/plans/2026-09-08-capture-backend-handoff.md`.** Capture is
+running on the **gdigrab fallback**, so every take is ~32fps instead of 60, and
+that caps the export, the camera read and the preview at once. The adapter and
+output sweeps are already done and written up there, along with the one
+hypothesis worth testing first. It predates the 2026-09-08 session and was
+found while verifying something else.
 
-**The headline: the preview is fixed. It runs at the take's own frame rate.**
+`docs/superpowers/plans/2026-09-07-camera-feel-handoff.md` is now largely
+history — its three preview routes were overtaken by a fourth (the `<video>`
+source), and its motion-blur recipe has shipped. Keep it for the stateful
+decoder it warns against retrying.
+
+**The 2026-09-08 session, in one line: the preview is fixed, the camera no
+longer staggers, and every fix was found by measurement rather than taste.**
+
+**The preview is fixed. It runs at the take's own frame rate.**
 `npm run bench:preview -- 2026-09-07T17-22-48 6000 5` went from **median
 10.2fps, spread 9.2-13.2** to **median 29.7fps, spread 29.5-30.0** on a take
 captured at 32.6fps — about 91% of the source rate, which is the ceiling,
@@ -79,11 +89,11 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 326 passing, 36 files
+npm test              # 383 passing, 43 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
-npm run verify:parity # 25/25 at 43-49dB, over five configurations (builds first)
+npm run verify:parity # 30/30 at 43-47dB, over six configurations (builds first)
 npm run tune -- all   # zoom plan over every take on disk
 ```
 
@@ -139,6 +149,38 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 13.7/min including one held 0.89s against 1.2s of transition and one starting
 0.14s after the previous ended.
 
+## What landed 2026-09-08
+
+Every item below was found by measuring, and several first attempts were
+**wrong and caught by the numbers** — that is the method, not an accident.
+
+| Change | The measurement that drove it |
+| --- | --- |
+| Preview draws from an `HTMLVideoElement` | `bench:preview` median 10.2 → 29.7fps, spread 9.2-13.2 → 29.5-30.0 |
+| `zc://` honours HTTP Range | Chromium seeks by range request; without it a media element buffers the whole take |
+| `FrameSource` split | Export keeps the decoder: it needs frame-exact random access, which a `<video>` cannot give |
+| `cameraZoom` easing | `screenStudio` is an ease-OUT and left rest at peak speed: 0.05px one frame, 93px the next |
+| `minWaypointGapMs: 900` | Two waypoints 260ms apart with a 0.667 depth gap = 190px in one frame |
+| Pull-out moved off the segment end | `trailMs` 400 < `transitionOutMs` 1000, so the camera left 600ms **before** the last click |
+| `maxZoom` 1.6 → 2.0 | Isolated as pacing-neutral first; a click zoom now lands at 1.917x |
+| `lateralAuthority`, smoothstepped | Below `1/paddingFactor` the clamp, not the camera, chose the framing: 28.8px lateral reversal mid-zoom → ~2.5px |
+| `zoomInOverlapMs: 500` | Recordly's constant; a FLOOR relative to region start, not an increment |
+
+**Three things were tried and rejected by measurement, not opinion:**
+
+- Raising `trailMs` to fix the early pull-out **merged shots** — one take went
+  7 zooms to 3. The fix moved the keyframe instead.
+- Clamping `cx` against `focusBoundsFor` to fix the lateral wobble was a
+  **no-op**: `focusRange` is derived from the same expression as the quad clamp.
+- Bundling `ffmpeg-static` **broke capture**. Its 6.1.1 *essentials* build has
+  `ddagrab` but not `scale_d3d11`, and `probeBackend` only checks the former,
+  so it passed the probe and then produced no frames. Reverted; replaced with a
+  startup capability check over the whole filter list.
+
+**`verify:parity` is now 30 comparisons, not 25** — a `blurred` configuration
+was added, because every other config took the `u_blurPx <= 0` branch and the
+whole motion-blur pass was rendering unguarded.
+
 ## What is NOT built
 
 Phases D–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
@@ -161,7 +203,7 @@ answered.
 | C | Persisted zoom segments, follow-cursor camera, retuned transitions, preview performance — **done** | A, B |
 | C+ | Camera geometry (fixed frame, sampled region), configurable ceiling, depth grading — **done**, spec `2026-09-07-camera-geometry-and-depth-design.md` | C |
 | C+ shots | Per-segment camera switch: segment blocks in the timeline, `fixed`/`follow` in the inspector — **done**, plan `2026-09-07-follow-camera-handoff.md` | C+ |
-| D | Directional motion blur | C |
+| D | Directional motion blur — **done** 2026-09-08, off by default (`style.motionBlurAmount`) | C |
 | E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
@@ -270,7 +312,7 @@ unit tests could not have caught.
 | Command | Checks |
 | --- | --- |
 | `npm run verify:decode` | Every seek returns the frame that actually sits at that timestamp |
-| `npm run verify:parity` | Preview and export render identically, across five configurations (default, styled, 1:1, follow, hidden) — 25 comparisons |
+| `npm run verify:parity` | Preview and export render identically, across six configurations (default, styled, 1:1, blurred, follow, hidden) — 30 comparisons. It carries more weight since 2026-09-08: the two paths now DECODE differently, so this is what proves they still compose the same |
 | `ZOOMCAST_SHOOT` | Renders arbitrary frame specs to PNG through the real compositor |
 | `ZOOMCAST_UI_SHOT` | Opens a bundle in the real editor and captures the window |
 | `ZOOMCAST_RECORD_TEST=<seconds>` | Full record→stop cycle headlessly; result to `%APPDATA%\zoomcast\record-test.json` |
@@ -367,7 +409,7 @@ Things worth knowing before touching it:
   segments, which is spec §6's contract one level up from `replan`.
 
 **What follow is and is not guarded by.** `verify:parity`'s fifth config pins a
-follow segment at 1:1 and is 25/25, and its frames differ both from the square
+follow segment at 1:1 and is 30/30, and its frames differ both from the square
 config and from each other over time, so the camera is provably moving rather
 than silently falling back. What is NOT guarded: follow at the native aspect
 (there is nothing to guard — see above), follow across a cut, and any UI for
