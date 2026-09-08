@@ -47,11 +47,22 @@ export type SourceRect = { x: number; y: number; w: number; h: number };
  * Attenuating cx rather than post-clamping x is what makes it monotonic: the
  * clamp then never binds during a zoom-in, so there is no bound left to fight.
  */
-const LATERAL_RAMP = 0.2;
+/** Widest ramp that still satisfies layout.test.ts "moves the focus point
+ * toward the centre as scale grows" -- the spec invariant that a zoom grows
+ * the window AND travels it. 0.5 breaks it: the camera holds only 58% of its
+ * framing at scale 1.5, so the focus point drifts away before it arrives. */
+const LATERAL_RAMP = 0.4;
 
 export function lateralAuthority(scale: number, paddingFactor: number): number {
   const cover = 1 / paddingFactor;
-  return Math.min(1, Math.max(0, (scale - cover) / (cover * LATERAL_RAMP)));
+  const u = Math.min(1, Math.max(0, (scale - cover) / (cover * LATERAL_RAMP)));
+
+  // Smoothstep, not the raw ramp. A linear ramp has a non-zero derivative at
+  // u=0, and scale is moving at its fastest exactly where authority engages,
+  // so the camera went from 0 to 24px/frame of lateral motion in one frame --
+  // the same lurch as the easing bug, moved onto the sideways axis. Smoothstep
+  // is flat at both ends, so authority arrives and departs at zero rate.
+  return u * u * (3 - 2 * u);
 }
 
 export function screenQuadFor(
