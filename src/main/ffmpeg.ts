@@ -1,55 +1,64 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
 /**
- * Resolve the ffmpeg binary.
+ * Resolve the ffmpeg binary. ffmpeg is deliberately NOT vendored.
  *
- * REVERSED on 2026-09-08. This used to read "ffmpeg is deliberately NOT
- * vendored: the target machine already has it on PATH". That was true of the
- * one machine it was written on and false of every other: the installer
- * succeeded on a clean machine and then failed at record time, with no signal
- * until someone pressed the hotkey.
+ * This was reversed on 2026-09-08 and reverted the same day, so the reason is
+ * worth recording properly rather than being rediscovered a third time.
  *
- * The blocker was never size, it was `ddagrab`. Capture needs it (see
- * `probeFilters` below) and a generic ffmpeg build may not carry it, so
- * bundling the wrong binary would have broken a working install rather than
- * fixing a broken one. Probed before committing to it: ffmpeg-static ships
- * gyan.dev's 6.1.1 essentials build, which has ddagrab, h264_amf, h264_nvenc
- * and libx264 — everything this app asks for.
+ * The tempting fix for "a clean machine installs fine and then fails at record
+ * time" is to bundle ffmpeg-static. It does not work. Capture runs
+ * `ddagrab=...,scale_d3d11=format=nv12`, and while ffmpeg-static's 6.1.1
+ * ESSENTIALS build has `ddagrab`, it does NOT have `scale_d3d11` — that filter
+ * is only in the FULL builds. Bundling it therefore breaks capture on a
+ * machine where capture previously worked, which is strictly worse than the
+ * problem it set out to solve.
  *
- * Order: the ZOOMCAST_FFMPEG override, then the bundled binary, then PATH.
- * The override stays first so a newer or differently-built ffmpeg can still be
- * pointed at without a rebuild, and PATH stays last so a dev checkout without
- * node_modules still works.
+ * Checking only `ddagrab` is not enough to clear a candidate binary. The whole
+ * filter chain has to be there. `assertCaptureCapable` below is what actually
+ * answers the question.
+ *
+ * Order: the ZOOMCAST_FFMPEG override, then PATH.
  */
-function bundledFfmpeg(): string | null {
-  // Packaged: electron-builder's extraResources puts it beside the asar rather
-  // than inside it — an 80MB binary has no business in the archive, and an
-  // executable cannot be spawned from within one anyway.
-  //
-  // Guarded because `process.resourcesPath` is an Electron addition and is
-  // undefined under plain Node. exportRunner is reached by the e2e suite
-  // directly, outside Electron, where an unguarded join() throws
-  // "The path argument must be of type string".
-  const resources: string | undefined = process.resourcesPath;
-  if (typeof resources === "string" && resources !== "") {
-    const packaged = join(resources, "ffmpeg.exe");
-    if (existsSync(packaged)) return packaged;
-  }
-
-  // Dev and the verify tools, which all run from the project root.
-  const dev = join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg.exe");
-  if (existsSync(dev)) return dev;
-
-  return null;
+export function resolveFfmpeg(): string {
+  return process.env.ZOOMCAST_FFMPEG ?? "ffmpeg";
 }
 
-export function resolveFfmpeg(): string {
-  return process.env.ZOOMCAST_FFMPEG ?? bundledFfmpeg() ?? "ffmpeg";
+/** Every filter the capture chain needs, not just the headline one. */
+export const REQUIRED_CAPTURE_FILTERS = ["ddagrab", "scale_d3d11"] as const;
+
+/**
+ * Fail loudly, at startup, with a message that says what to do.
+ *
+ * The failure this replaces was silent until the moment someone pressed the
+ * hotkey, and then surfaced as "capture produced no frame within 10s" — which
+ * names a symptom and not a cause.
+ */
+export async function captureCapabilityError(bin = resolveFfmpeg()): Promise<string | null> {
+  let filters: string[];
+  try {
+    filters = await probeFilters(bin);
+  } catch {
+    return (
+      `ffmpeg was not found. Install a FULL ffmpeg build (gyan.dev "full" or ` +
+      `BtbN's, 6.0+) and put it on PATH, or point ZOOMCAST_FFMPEG at one. ` +
+      `Screen capture needs the ddagrab and scale_d3d11 filters, which the ` +
+      `"essentials" builds do not carry.`
+    );
+  }
+
+  const have = new Set(filters);
+  const missing = REQUIRED_CAPTURE_FILTERS.filter((f) => !have.has(f));
+  if (missing.length === 0) return null;
+
+  return (
+    `ffmpeg at "${bin}" is missing ${missing.join(" and ")}, which screen ` +
+    `capture needs. This is usually an "essentials" build; install a FULL ` +
+    `ffmpeg 6.0+ build and put it on PATH, or point ZOOMCAST_FFMPEG at one.`
+  );
 }
 
 export async function probeEncoders(bin = resolveFfmpeg()): Promise<string[]> {

@@ -40,10 +40,14 @@ You need:
 - **Node.js 20.19+** and npm (Vite 7's floor; developed on v24)
 - **Windows 10/11** with a GPU that supports Desktop Duplication
 
-**ffmpeg is bundled** — you do not need to install it. The app ships gyan.dev's
-ffmpeg 6.1.1 essentials build, which carries the `ddagrab` filter capture
-requires. To use your own instead, set `ZOOMCAST_FFMPEG` to its full path; it
-takes precedence over the bundled one.
+- **ffmpeg 6.0+, a FULL build**, on PATH — gyan.dev's "full" or BtbN's.
+
+**The "essentials" builds are not enough.** Screen capture runs
+`ddagrab,scale_d3d11` and the essentials builds ship `ddagrab` but not
+`scale_d3d11`, so they pass a naive check and then produce no frames. zoomcast
+checks for both at startup and says so in the log if either is missing.
+
+Point `ZOOMCAST_FFMPEG` at a specific binary to override PATH.
 
 ## Setup
 
@@ -122,7 +126,7 @@ natively on Windows.
 
 | Command | What it checks |
 | --- | --- |
-| `npm test` | Unit suite — 371 tests across 41 files |
+| `npm test` | Unit suite — 373 tests across 42 files |
 | `npm run typecheck` | `tsc --noEmit`, must be silent |
 | `npm run verify:decode` | That a frame rendered at time *t* really is the frame at *t* |
 | `npm run verify:parity` | That the preview and the export compose identically, across 6 configurations × 5 times |

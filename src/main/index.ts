@@ -1,5 +1,7 @@
 import { app, BrowserWindow, Menu, net, protocol } from "electron";
 import { registerIpc } from "./ipc";
+import { captureCapabilityError } from "./ffmpeg";
+import { logDiag } from "./log";
 import { abortRecording } from "./capture/SessionController";
 import { startedHidden } from "./autostart";
 import {
@@ -457,6 +459,19 @@ void app.whenReady().then(async () => {
   registerSettingsOpener(openSettings);
 
   app.on("second-instance", showEditor);
+
+  // Answer "can this machine actually record?" at startup rather than at the
+  // moment someone presses the hotkey. The failure this replaces surfaced as
+  // "capture produced no frame within 10s", which names a symptom and not a
+  // cause -- and it takes ten seconds to say it.
+  //
+  // Deliberately not awaited: it spawns ffmpeg, and startup should not wait on
+  // that. A machine that cannot capture can still open and export old takes.
+  void captureCapabilityError()
+    .then((err) => {
+      if (err !== null) logDiag("capture:unavailable", err);
+    })
+    .catch((err) => logDiag("capture:probe-failed", err));
 
   // Registered before any headless mode returns, so screenshots and the record
   // test see the same tray and hotkey state the real app has.
