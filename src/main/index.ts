@@ -10,9 +10,12 @@ import {
 } from "./recording";
 import { registerDisplayMediaHandler } from "./capture/AudioRecorder";
 import { preloadPath, rendererUrl } from "./windows";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, createReadStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveByteRange } from "./byteRange";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -91,6 +94,39 @@ function registerBundleProtocol(): void {
       : join(RENDERER_DIR, normalize(pathname.replace(/^\//, "")) || "index.html");
 
     try {
+      // Chromium's media stack seeks by issuing Range requests. Without this
+      // a <video> must buffer the whole recording before seeking behaves,
+      // which is invisible to anything that reads whole files up front (as
+      // VideoSource does) and load-bearing for the preview's media element.
+      const info = await stat(filePath);
+      const range = resolveByteRange(request.headers.get("range") ?? undefined, info.size);
+
+      if (range === "unsatisfiable") {
+        return new Response(null, {
+          status: 416,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Accept-Ranges": "bytes",
+            "Content-Range": `bytes */${info.size}`,
+          },
+        });
+      }
+
+      if (range !== null) {
+        const length = range.end - range.start + 1;
+        const stream = createReadStream(filePath, { start: range.start, end: range.end });
+
+        return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
+          status: 206,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Accept-Ranges": "bytes",
+            "Content-Range": `bytes ${range.start}-${range.end}/${info.size}`,
+            "Content-Length": String(length),
+          },
+        });
+      }
+
       const res = await net.fetch(pathToFileURL(filePath).toString());
 
       // In production the page is zc://app, so this is same-origin. Under
@@ -98,6 +134,9 @@ function registerBundleProtocol(): void {
       // zc:// is cross-origin, which needs an explicit allow.
       const headers = new Headers(res.headers);
       headers.set("Access-Control-Allow-Origin", "*");
+      // Advertise range support even on a whole-file reply, so a media element
+      // knows it may ask for one next time.
+      headers.set("Accept-Ranges", "bytes");
 
       return new Response(res.body, { status: res.status, headers });
     } catch (err) {
