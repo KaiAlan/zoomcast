@@ -47,6 +47,13 @@ export type CursorStyle = {
 
 export type StyleConfig = {
   paddingFactor: number;
+  /**
+   * Directional motion blur strength, 0..1. 0 is off, which is the default.
+   *
+   * A camera property, not a frame one -- FrameStyle is corner radius, shadow
+   * and border.
+   */
+  motionBlurAmount: number;
   frame: FrameStyle;
   background: Background;
   cursor: CursorStyle;

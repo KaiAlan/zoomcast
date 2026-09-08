@@ -211,6 +211,17 @@ export function StylePanel({ style, output, dir, onStyleChange, onOutputChange }
           onChange={(preset) => setFrame({ preset })}
         />
 
+        <NumberRow
+          label="motion blur"
+          value={style.motionBlurAmount}
+          step={0.1}
+          onChange={(motionBlurAmount) =>
+            // Clamped downstream in normalizeProject, matching the comment on
+            // NumberRow: the model owns the range, not the input.
+            onStyleChange({ ...style, motionBlurAmount })
+          }
+        />
+
         {frame.preset === "default" && (
           <>
             <NumberRow

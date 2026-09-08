@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blurAt } from "./motionBlur";
+import { blurAt, blurForCamera } from "./motionBlur";
 
 const OUT = { w: 1920, h: 1080 };
 const still = { x: 0, y: 0, scale: 1 };
@@ -75,5 +75,29 @@ describe("blurAt", () => {
     const a = blurAt(still, { x: 37, y: 12, scale: 1.05 }, 33.3, OUT, 0.7);
     const b = blurAt(still, { x: 37, y: 12, scale: 1.05 }, 33.3, OUT, 0.7);
     expect(a).toEqual(b);
+  });
+});
+
+describe("blurForCamera", () => {
+  const OUT2 = { w: 1920, h: 1080 };
+  const a = { scale: 1, cx: 0.5, cy: 0.5 };
+
+  it("is undefined when the amount is zero, so the default path is untouched", () => {
+    expect(blurForCamera(a, { scale: 1, cx: 0.9, cy: 0.5 }, OUT2, 0)).toBeUndefined();
+  });
+
+  it("is undefined for a still camera", () => {
+    expect(blurForCamera(a, a, OUT2, 1)).toBeUndefined();
+  });
+
+  it("produces blur for a fast pan", () => {
+    const blur = blurForCamera(a, { scale: 1, cx: 0.9, cy: 0.5 }, OUT2, 1);
+    expect(blur?.px).toBeGreaterThan(0);
+  });
+
+  it("does not depend on real frame timing, so preview and export agree", () => {
+    // Same source time, same result, regardless of how fast either side draws.
+    const next = { scale: 1.2, cx: 0.7, cy: 0.4 };
+    expect(blurForCamera(a, next, OUT2, 1)).toEqual(blurForCamera(a, next, OUT2, 1));
   });
 });

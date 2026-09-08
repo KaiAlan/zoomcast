@@ -9,6 +9,9 @@ export function defaultProject(bundleId: string): Project {
     zoom: { config: { ...DEFAULT_ZOOM_CONFIG }, segments: [], keyframes: [] },
     style: {
       paddingFactor: 0.85,
+      // Off by default: it may stay off if export time suffers, and an
+      // off-by-default setting cannot move the default parity configuration.
+      motionBlurAmount: 0,
       frame: {
         preset: "default",
         cornerRadiusPx: 12,

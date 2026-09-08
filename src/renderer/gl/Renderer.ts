@@ -40,6 +40,14 @@ export type FrameState = {
    * cannot be fetched from the custom scheme at all.
    */
   backgroundImageUrl?: string;
+  /**
+   * Directional motion blur for this frame, already resolved by `blurAt`.
+   *
+   * Computed by the CALLER, on the fixed grid, not from real elapsed time --
+   * a per-displayed-frame formulation makes a 60fps preview and a 30fps
+   * export diverge and fails verify:parity.
+   */
+  motionBlur?: { px: number; angleRad: number; kernel: number };
 };
 
 type ResolvedFrame = ReturnType<typeof resolveFrame>;
@@ -174,6 +182,9 @@ export class Renderer {
       "u_texel",
       "u_borderPx",
       "u_borderColor",
+      "u_blurPx",
+      "u_blurDir",
+      "u_blurKernel",
     ]);
     this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow"]);
     this.rippleProgram = link(gl, RIPPLE_FRAG, ["u_progress"]);
@@ -222,7 +233,7 @@ export class Renderer {
     const frame = resolveFrame(style.frame);
 
     this.drawShadow(quad, out, frame);
-    this.drawScreen(quad, region, out, src, frame, state.screen);
+    this.drawScreen(quad, region, out, src, frame, state.screen, state.motionBlur);
 
     // Ripples are their own toggle, independent of cursor visibility: a click
     // near the ends of the path can outlive the cursor sample that produced
@@ -402,6 +413,7 @@ export class Renderer {
     src: Size,
     frame: ResolvedFrame,
     source: TexImageSource,
+    blur: FrameState["motionBlur"],
   ): void {
     const gl = this.gl;
 
@@ -426,6 +438,14 @@ export class Renderer {
     gl.uniform4f(this.screen.uniforms.u_borderColor ?? null, br, bg2, bb, ba);
     gl.uniform1f(this.screen.uniforms.u_sharpen ?? null, sharpen);
     gl.uniform2f(this.screen.uniforms.u_texel ?? null, 1 / src.w, 1 / src.h);
+    gl.uniform1f(this.screen.uniforms.u_blurPx ?? null, blur?.px ?? 0);
+    gl.uniform2f(
+      this.screen.uniforms.u_blurDir ?? null,
+      blur === undefined ? 0 : Math.cos(blur.angleRad),
+      blur === undefined ? 0 : Math.sin(blur.angleRad),
+    );
+    gl.uniform1i(this.screen.uniforms.u_blurKernel ?? null, blur?.kernel ?? 5);
+
     gl.uniform2f(this.screen.uniforms.u_uv0 ?? null, region.x, region.y);
     gl.uniform2f(
       this.screen.uniforms.u_uv1 ?? null,

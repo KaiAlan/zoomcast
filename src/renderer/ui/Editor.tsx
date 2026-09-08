@@ -18,6 +18,7 @@ import { exportClip } from "../media/exportClip";
 import { PreviewPlayer } from "../media/PreviewPlayer";
 import { VideoElementSource } from "../media/VideoElementSource";
 import { DecodedFrameSource } from "../media/VideoSource";
+import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
 import { type PreviewClock } from "../media/PreviewPlayer";
 import { Inspector } from "./Inspector";
 import { Timeline } from "./Timeline";
@@ -192,9 +193,15 @@ export function Editor({
 
       const frame = await source.frameAt(tSource);
       try {
+        // Sampled on the fixed grid, never on real elapsed time: this must be
+        // the same value the export computes for the same source time.
+        const zoomNow = zoomAt(p.zoom.keyframes, tSource);
+        const zoomPrev = zoomAt(p.zoom.keyframes, tSource - BLUR_GRID_MS);
+
         renderer.drawFrame({
           screen: frame.image,
-          zoom: zoomAt(p.zoom.keyframes, tSource),
+          zoom: zoomNow,
+          motionBlur: blurForCamera(zoomPrev, zoomNow, c.output, p.style.motionBlurAmount),
           style: p.style,
           outputSize: c.output,
           sourceSize: c.source,

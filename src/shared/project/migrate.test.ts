@@ -215,3 +215,29 @@ it("gives a project written before maxZoom the default ceiling", () => {
   const p = normalizeProject({ zoom: { config: { minHoldMs: 1500 } } }, "b");
   expect(p.zoom.config.maxZoom).toBe(1.6);
 });
+
+describe("motion blur amount", () => {
+  const withAmount = (motionBlurAmount: unknown): unknown => {
+    const base = defaultProject("b1");
+    return { ...base, style: { ...base.style, motionBlurAmount } };
+  };
+
+  it("clamps into 0..1", () => {
+    expect(normalizeProject(withAmount(5), "b1").style.motionBlurAmount).toBe(1);
+    expect(normalizeProject(withAmount(-1), "b1").style.motionBlurAmount).toBe(0);
+  });
+
+  it("keeps a value already in range", () => {
+    expect(normalizeProject(withAmount(0.4), "b1").style.motionBlurAmount).toBeCloseTo(0.4, 5);
+  });
+
+  it("fills in for a project saved before the field existed", () => {
+    // Every bundle on disk predates this field, and exportRunner writes
+    // project.json so a bundle can be re-exported identically. A missing
+    // value must normalize to 0, not NaN.
+    const old = defaultProject("b1") as { style: { motionBlurAmount?: number } };
+    delete old.style.motionBlurAmount;
+
+    expect(normalizeProject(old, "b1").style.motionBlurAmount).toBe(0);
+  });
+});

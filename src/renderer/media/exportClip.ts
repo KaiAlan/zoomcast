@@ -10,6 +10,7 @@ import type { Project } from "../../shared/project/types";
 import { outputSizeFor } from "../../shared/style/aspect";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import type { Renderer } from "../gl/Renderer";
+import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
 import type { VideoSource } from "./VideoSource";
 
 export type ExportProgress = { done: number; total: number };
@@ -117,9 +118,15 @@ export async function exportClip(opts: {
 
       const videoFrame = await source.frameAt(localMs);
       try {
+        // The same fixed grid the preview uses. Real elapsed time here would
+        // make a 30fps export disagree with a 60fps preview and fail parity.
+        const zoomNow = zoomAt(project.zoom.keyframes, frame.tSourceMs);
+        const zoomPrev = zoomAt(project.zoom.keyframes, frame.tSourceMs - BLUR_GRID_MS);
+
         renderer.drawFrame({
           screen: videoFrame.image,
-          zoom: zoomAt(project.zoom.keyframes, frame.tSourceMs),
+          zoom: zoomNow,
+          motionBlur: blurForCamera(zoomPrev, zoomNow, output, project.style.motionBlurAmount),
           style: project.style,
           outputSize: output,
           sourceSize,

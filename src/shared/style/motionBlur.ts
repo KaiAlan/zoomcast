@@ -55,3 +55,41 @@ export function blurAt(
 
   return { px, angleRad, kernel };
 }
+
+/**
+ * The fixed grid the blur is evaluated on.
+ *
+ * A CONSTANT, deliberately, and not the real elapsed frame time. Both the
+ * preview and the export sample the camera at `t` and `t - BLUR_GRID_MS`, so
+ * the blur is a pure function of source time and identical in both -- which is
+ * what verify:parity requires. Using real elapsed time would make a 60fps
+ * preview and a 30fps export disagree.
+ */
+export const BLUR_GRID_MS = 1000 / 60;
+
+/**
+ * Blur for the camera at one source time, or undefined when it is off.
+ *
+ * Takes the normalised zoom centres the planner produces and converts them to
+ * output pixels, which is the space the control law is calibrated in.
+ * Returning undefined at zero amount keeps the default configuration
+ * bit-identical to before the feature existed.
+ */
+export function blurForCamera(
+  prev: { scale: number; cx: number; cy: number },
+  next: { scale: number; cx: number; cy: number },
+  outputSize: { w: number; h: number },
+  amount: number,
+): { px: number; angleRad: number; kernel: number } | undefined {
+  if (amount <= 0) return undefined;
+
+  const blur = blurAt(
+    { x: prev.cx * outputSize.w, y: prev.cy * outputSize.h, scale: prev.scale },
+    { x: next.cx * outputSize.w, y: next.cy * outputSize.h, scale: next.scale },
+    BLUR_GRID_MS,
+    outputSize,
+    amount,
+  );
+
+  return blur.px > 0 ? blur : undefined;
+}

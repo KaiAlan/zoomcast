@@ -129,6 +129,9 @@ uniform float u_borderPx;
 uniform vec4  u_borderColor;
 uniform vec2  u_uv0;
 uniform vec2  u_uv1;
+uniform float u_blurPx;      // directional motion blur, in OUTPUT pixels
+uniform vec2  u_blurDir;     // unit vector along the camera velocity
+uniform int   u_blurKernel;  // 5, 9 or 11
 out vec4 frag;
 ${SD_ROUND_RECT}
 void main() {
@@ -136,7 +139,30 @@ void main() {
   // v_uv still drives the rounded-rect SDF below, because that is in quad
   // space and the quad no longer changes.
   vec2 uv = u_uv0 + v_uv * (u_uv1 - u_uv0);
-  vec3 c = texture(u_tex, uv).rgb;
+
+  // Directional motion blur. Taps are spread along the velocity vector so the
+  // total smear is u_blurPx OUTPUT pixels: the sampled region (u_uv1 - u_uv0)
+  // spans u_quadPx output pixels, which is the conversion. Doing it in output
+  // space means the smear does not change with zoom depth for a given camera
+  // speed, which is what makes it read as motion rather than as softness.
+  vec3 c;
+  if (u_blurPx > 0.0) {
+    vec2 uvPerOutPx = (u_uv1 - u_uv0) / max(u_quadPx, vec2(1.0));
+    vec2 tap = u_blurDir * uvPerOutPx * u_blurPx;
+    float halfK = float(u_blurKernel - 1) * 0.5;
+
+    vec3 sum = vec3(0.0);
+    // Constant loop bound with an inner break: GLSL ES 3.0 requires the bound
+    // to be a constant expression. 11 is the largest kernel step.
+    for (int i = 0; i < 11; i++) {
+      if (i >= u_blurKernel) break;
+      float off = (float(i) - halfK) / max(halfK, 1.0);
+      sum += texture(u_tex, uv + tap * off).rgb;
+    }
+    c = sum / float(u_blurKernel);
+  } else {
+    c = texture(u_tex, uv).rgb;
+  }
 
   if (u_sharpen > 0.0) {
     vec3 blur = texture(u_tex, uv + vec2(u_texel.x, 0.0)).rgb

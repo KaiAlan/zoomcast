@@ -79,6 +79,21 @@ const CONFIGS: Array<{
   { name: "square", output: { aspect: "1:1" } },
   {
     /**
+     * Motion blur on, which nothing else here exercises: it defaults to 0, so
+     * every other config takes the `u_blurPx > 0.0` branch's else and the
+     * whole directional pass would render unguarded. A guard only guards what
+     * it exercises.
+     *
+     * This is the config that proves the blur is computed on the fixed grid.
+     * Preview and export draw the same source times at different real frame
+     * rates, so a blur derived from elapsed time rather than BLUR_GRID_MS
+     * would diverge here and nowhere else.
+     */
+    name: "blurred",
+    style: { motionBlurAmount: 1 },
+  },
+  {
+    /**
      * The follow camera, which nothing else here exercises: the planner only
      * ever emits "fixed", so without this config the whole follow path — the
      * precomputed camera, its clamp and the 100ms sample keyframes — would

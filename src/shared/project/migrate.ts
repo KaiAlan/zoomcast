@@ -21,6 +21,10 @@ function num(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+function num01(v: unknown, fallback: number): number {
+  return Math.min(1, Math.max(0, num(v, fallback)));
+}
+
 function bool(v: unknown, fallback: boolean): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
@@ -108,6 +112,7 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     },
     style: {
       paddingFactor: num(style.paddingFactor, base.style.paddingFactor),
+      motionBlurAmount: num01(style.motionBlurAmount, base.style.motionBlurAmount),
       frame: {
         preset: oneOf(frame.preset, FRAME_PRESETS, base.style.frame.preset),
         cornerRadiusPx: num(
