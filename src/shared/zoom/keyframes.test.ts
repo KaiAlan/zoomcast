@@ -53,7 +53,8 @@ describe("segmentsToKeyframes", () => {
     expect(kfs).toHaveLength(2);
     expect(kfs[0]).toMatchObject({
       id: "k0i",
-      tSourceMs: START,
+      // The zoom-in settles zoomInOverlapMs into the region, not at its edge.
+      tSourceMs: START + cfg.zoomInOverlapMs,
       cx: 0.25,
       cy: 0.5,
       easing: cfg.easing,
@@ -93,7 +94,12 @@ describe("segmentsToKeyframes", () => {
       ctx,
     );
 
-    expect(kfs.map((k) => k.tSourceMs)).toEqual([START, END, 9000, 11_000]);
+    expect(kfs.map((k) => k.tSourceMs)).toEqual([
+      START + cfg.zoomInOverlapMs,
+      END,
+      9000 + cfg.zoomInOverlapMs,
+      11_000,
+    ]);
   });
 
   it("drops a segment with no waypoints rather than emitting a bare pull-out", () => {
@@ -171,9 +177,11 @@ describe("opening at rest", () => {
   });
 
   it("leaves a segment that already starts late alone", () => {
+    // openAtRest must not move it. The zoom-in overlap still applies on top,
+    // which is a separate rule -- hence START + the overlap, not START.
     const kfs = segmentsToKeyframes([seg()], cfg, ctx);
     expect(START).toBeGreaterThan(cfg.transitionMs);
-    expect(kfs[0]?.tSourceMs).toBe(START);
+    expect(kfs[0]?.tSourceMs).toBe(START + cfg.zoomInOverlapMs);
   });
 });
 
@@ -347,5 +355,33 @@ describe("panning between focus points", () => {
     const out = kfs.find((k) => k.scale === 1);
 
     expect(out?.transitionMs).toBe(cfg.transitionOutMs);
+  });
+});
+
+describe("zoomInOverlapMs", () => {
+  it("finishes the zoom-in after the region starts, not at it", () => {
+    const kfs = segmentsToKeyframes([seg()], { ...cfg, zoomInOverlapMs: 500 }, ctx);
+
+    expect(kfs[0]).toMatchObject({ id: "k0i", tSourceMs: START + 500 });
+  });
+
+  it("is a no-op at zero overlap", () => {
+    const kfs = segmentsToKeyframes([seg()], { ...cfg, zoomInOverlapMs: 0 }, ctx);
+
+    expect(kfs[0]).toMatchObject({ id: "k0i", tSourceMs: START });
+  });
+
+  it("still emits exactly the in/out pair", () => {
+    // The overlap shifts when a keyframe lands. If it changes how many are
+    // emitted, it is leaking into segment selection, which is a bug.
+    expect(segmentsToKeyframes([seg()], { ...cfg, zoomInOverlapMs: 500 }, ctx)).toHaveLength(2);
+  });
+
+  it("never pushes the zoom-in past the end of its own segment", () => {
+    // A short segment with a long overlap must not settle after it is over.
+    const short = seg({ startMs: START, endMs: START + 200 });
+    const kfs = segmentsToKeyframes([short], { ...cfg, zoomInOverlapMs: 5000 }, ctx);
+
+    expect(kfs[0]?.tSourceMs).toBeLessThanOrEqual(short.endMs);
   });
 });

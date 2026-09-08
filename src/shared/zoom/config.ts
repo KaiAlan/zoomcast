@@ -34,6 +34,15 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   trailMs: 400,
   transitionMs: 1500,
   transitionOutMs: 1000,
+  /**
+   * How long after a region starts the zoom-in finishes.
+   *
+   * The camera is still arriving as activity begins, rather than sitting
+   * settled and waiting for it. Measured off Recordly's ZOOM_IN_OVERLAP_MS.
+   * Clamped at emission so it can never push the zoom-in past the next
+   * waypoint or the end of its own segment.
+   */
+  zoomInOverlapMs: 500,
   /** Recordly's CONNECTED_ZOOM_PAN_DURATION_MS, which is its own constant too. */
   panMs: 1000,
   /**

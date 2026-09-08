@@ -54,9 +54,36 @@ export function segmentsToKeyframes(
           ? followCentre(follow, w.tMs, depthToScale(w.depth, ceiling), ctx, w)
           : { cx: w.cx, cy: w.cy };
 
+      // The zoom-in settles `zoomInOverlapMs` into its own region, so the
+      // camera is still arriving as activity begins.
+      //
+      // A FLOOR, not an increment. openAtRest already delays a segment that
+      // starts too early to transition from rest into, and that camera is
+      // arriving late for a physical reason -- pushing it later again would
+      // double-delay it for no gain. Only the first waypoint is the zoom-in;
+      // the rest are travel inside a shot already arrived in.
+      //
+      // Clamped against the next waypoint and the segment end: a short region
+      // with a long overlap must not settle after it is over, and must never
+      // reorder the waypoints.
+      //
+      // The overlap may never eat the hold. planZoom guarantees every shot
+      // keeps minDwellMs, and enough room to run its own exit; taking 500ms
+      // off the front of that left 950ms against a required 1450ms. When the
+      // segment is too short to give the overlap away, it simply does not
+      // apply -- the guarantee outranks the flourish.
+      const latestSettleMs = Math.min(
+        waypoints[i + 1]?.tMs ?? s.endMs,
+        s.endMs - Math.max(cfg.minDwellMs, cfg.transitionOutMs),
+      );
+      const settleMs =
+        i === 0
+          ? Math.max(w.tMs, Math.min(Math.max(w.tMs, s.startMs + cfg.zoomInOverlapMs), latestSettleMs))
+          : w.tMs;
+
       kfs.push({
         id: `${w.id}i`,
-        tSourceMs: w.tMs,
+        tSourceMs: settleMs,
         scale: depthToScale(w.depth, ceiling),
         ...centre,
         // The first waypoint is the zoom-in; the rest are the camera

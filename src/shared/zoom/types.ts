@@ -48,6 +48,7 @@ export type ZoomConfig = {
    * over 1015ms, and one number for both made the exit as slow as the entry.
    */
   transitionOutMs: number;
+  zoomInOverlapMs: number;
   easing: EasingName;
   /**
    * The deepest the camera goes. A sharpness choice, not a geometric limit:
