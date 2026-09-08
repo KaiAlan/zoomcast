@@ -30,8 +30,16 @@ function bundledFfmpeg(): string | null {
   // Packaged: electron-builder's extraResources puts it beside the asar rather
   // than inside it — an 80MB binary has no business in the archive, and an
   // executable cannot be spawned from within one anyway.
-  const packaged = join(process.resourcesPath, "ffmpeg.exe");
-  if (existsSync(packaged)) return packaged;
+  //
+  // Guarded because `process.resourcesPath` is an Electron addition and is
+  // undefined under plain Node. exportRunner is reached by the e2e suite
+  // directly, outside Electron, where an unguarded join() throws
+  // "The path argument must be of type string".
+  const resources: string | undefined = process.resourcesPath;
+  if (typeof resources === "string" && resources !== "") {
+    const packaged = join(resources, "ffmpeg.exe");
+    if (existsSync(packaged)) return packaged;
+  }
 
   // Dev and the verify tools, which all run from the project root.
   const dev = join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg.exe");
