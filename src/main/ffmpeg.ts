@@ -1,17 +1,47 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
 /**
- * Resolve the ffmpeg binary. ffmpeg is deliberately NOT vendored: the target
- * machine already has it on PATH, and a ~100MB binary in a single-user repo
- * buys nothing.
+ * Resolve the ffmpeg binary.
  *
- * Order: the ZOOMCAST_FFMPEG override, then PATH.
+ * REVERSED on 2026-09-08. This used to read "ffmpeg is deliberately NOT
+ * vendored: the target machine already has it on PATH". That was true of the
+ * one machine it was written on and false of every other: the installer
+ * succeeded on a clean machine and then failed at record time, with no signal
+ * until someone pressed the hotkey.
+ *
+ * The blocker was never size, it was `ddagrab`. Capture needs it (see
+ * `probeFilters` below) and a generic ffmpeg build may not carry it, so
+ * bundling the wrong binary would have broken a working install rather than
+ * fixing a broken one. Probed before committing to it: ffmpeg-static ships
+ * gyan.dev's 6.1.1 essentials build, which has ddagrab, h264_amf, h264_nvenc
+ * and libx264 — everything this app asks for.
+ *
+ * Order: the ZOOMCAST_FFMPEG override, then the bundled binary, then PATH.
+ * The override stays first so a newer or differently-built ffmpeg can still be
+ * pointed at without a rebuild, and PATH stays last so a dev checkout without
+ * node_modules still works.
  */
+function bundledFfmpeg(): string | null {
+  // Packaged: electron-builder's extraResources puts it beside the asar rather
+  // than inside it — an 80MB binary has no business in the archive, and an
+  // executable cannot be spawned from within one anyway.
+  const packaged = join(process.resourcesPath, "ffmpeg.exe");
+  if (existsSync(packaged)) return packaged;
+
+  // Dev and the verify tools, which all run from the project root.
+  const dev = join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg.exe");
+  if (existsSync(dev)) return dev;
+
+  return null;
+}
+
 export function resolveFfmpeg(): string {
-  return process.env.ZOOMCAST_FFMPEG ?? "ffmpeg";
+  return process.env.ZOOMCAST_FFMPEG ?? bundledFfmpeg() ?? "ffmpeg";
 }
 
 export async function probeEncoders(bin = resolveFfmpeg()): Promise<string[]> {

@@ -33,6 +33,20 @@ files:
 asarUnpack:
   - "**/*.node"
 
+# ffmpeg, as a plain resource rather than a dependency inside the asar.
+#
+# ffmpeg-static stays a devDependency on purpose: promoting it would make
+# electron-builder copy the same 80MB binary into the archive as well, where it
+# could not be spawned anyway. This copies just the executable to
+# resources/ffmpeg.exe, which is what resolveFfmpeg looks for first.
+#
+# It is gyan.dev's 6.1.1 essentials build. Verified before adopting it that it
+# carries `ddagrab` — capture hard-requires that filter, and shipping a build
+# without it would have broken a machine that previously worked.
+extraResources:
+  - from: node_modules/ffmpeg-static/ffmpeg.exe
+    to: ffmpeg.exe
+
 win:
   target: nsis
   icon: build/icon.ico
