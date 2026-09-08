@@ -70,5 +70,21 @@ export const EASINGS: Record<EasingName, (x: number) => number> = {
    * sideways camera move into its first third reads as a lurch.
    */
   cameraPan: cubicBezier(0.1, 0, 0.2, 1),
+  /**
+   * What the zoom actually uses.
+   *
+   * `screenStudio` is an ease-OUT: it leaves x=0 at maximum velocity. For a
+   * camera sitting still that is a step change in speed, and it measured as
+   * one — 0.05px in the frame before a transition and 93px in the frame after,
+   * on 2026-09-07T17-22-48 at t=1517ms. That lurch is what "it staggers every
+   * zoom" was.
+   *
+   * This eases in as well as out. Over a 1500ms transition at 60fps the first
+   * frame moves 0.2px against screenStudio's 35.9px, and the peak frame is
+   * 16.8px against 35.9px — the move is spread across the transition instead
+   * of being spent at the start. The long tail (x2=0.15, y2=1) keeps the slow
+   * arrival that gives the reference its character.
+   */
+  cameraZoom: cubicBezier(0.33, 0, 0.15, 1),
   linear: (x: number): number => Math.min(1, Math.max(0, x)),
 };

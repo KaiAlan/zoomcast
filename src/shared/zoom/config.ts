@@ -31,6 +31,15 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   deadzonePx: 120,
   maxZoomsPerMinute: 20,
   leadInMs: 250,
+  /**
+   * How long a segment runs past its last event.
+   *
+   * MUST be >= transitionOutMs. The pull-out starts at endMs - transitionOutMs,
+   * so a trail shorter than the pull-out means the camera begins leaving
+   * BEFORE the activity ends: at 400ms against a 1000ms pull-out it started
+   * 600ms before the last click, every time. Reported as "sometimes it zooms
+   * out while I'm clicking, a little too early". Guarded in cameraFeel.test.ts.
+   */
   trailMs: 400,
   transitionMs: 1500,
   transitionOutMs: 1000,
@@ -46,6 +55,19 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   /** Recordly's CONNECTED_ZOOM_PAN_DURATION_MS, which is its own constant too. */
   panMs: 1000,
   /**
+   * The least time a waypoint gets to arrive after the one before it.
+   *
+   * Without it two waypoints inside one segment could sit 260ms apart with a
+   * 0.667 depth difference, and the camera was asked to cover ~640px in a
+   * quarter second -- about 2,460px/s, measured as 190px in a single frame at
+   * 60fps on 2026-09-07T17-22-48 at t=1533ms. No easing curve rescues a move
+   * that large in that little time; it needs room instead.
+   *
+   * Raising maxZoom to 2.0 made it worse, because the same depth gap became a
+   * bigger scale gap.
+   */
+  minWaypointGapMs: 900,
+  /**
    * Measured off a Recordly export the user pointed at as the target look,
    * then confirmed in its source. 90/9/1 across the thirds over a 1523ms
    * window: commit hard, arrive at 95% in 648ms, then settle invisibly.
@@ -56,8 +78,10 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
    * the lack of early commitment was. All three stay pickable in the
    * inspector; this line is the only thing that makes one the default.
    */
-  easing: "screenStudio",
-  maxZoom: 1.6,
+  easing: "cameraZoom",
+  // 1.6 was too shallow to be worth the camera move. At 2.0 a full-depth
+  // click zoom lands at 1.92x rather than 1.55x.
+  maxZoom: 2.0,
   // Fractions of maxZoom, so one dial deepens everything and the grading
   // between intents survives. At maxZoom 1.6 these are 1.55 / 1.35 / 1.15.
   depthClick: 0.917,

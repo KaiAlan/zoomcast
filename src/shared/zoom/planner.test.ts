@@ -63,8 +63,16 @@ describe("planZoom", () => {
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
+    // Plus the pull-out shift: the out keyframe sits transitionOutMs - trailMs
+    // past the segment end so the transition begins at the last event.
+    const outShift = Math.max(
+      0,
+      DEFAULT_ZOOM_CONFIG.transitionOutMs - DEFAULT_ZOOM_CONFIG.trailMs,
+    );
     expect(kfs[1]?.tSourceMs).toBe(
-      Math.max(750, DEFAULT_ZOOM_CONFIG.transitionMs) + DEFAULT_ZOOM_CONFIG.minDwellMs,
+      Math.max(750, DEFAULT_ZOOM_CONFIG.transitionMs) +
+        DEFAULT_ZOOM_CONFIG.minDwellMs +
+        outShift,
     );
   });
 

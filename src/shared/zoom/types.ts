@@ -6,6 +6,7 @@ export type EasingName =
   | "zoomEase"
   | "zoomGlide"
   | "screenStudio"
+  | "cameraZoom"
   | "cameraPan"
   | "linear";
 
@@ -42,6 +43,7 @@ export type ZoomConfig = {
    * `cameraPan` curve.
    */
   panMs: number;
+  minWaypointGapMs: number;
   /**
    * How long it takes to leave. Separate from `transitionMs` because a good
    * exit is quicker than the entrance: Recordly zooms in over 1523ms and out

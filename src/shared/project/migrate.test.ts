@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultProject } from "./defaults";
 import { normalizeProject } from "./migrate";
+import { DEFAULT_ZOOM_CONFIG } from "../zoom/config";
 
 /** A project.json as any build before the cursor pipeline would have written it. */
 const PRE_CURSOR = {
@@ -212,8 +213,12 @@ it("keeps stored segments", () => {
 });
 
 it("gives a project written before maxZoom the default ceiling", () => {
+  // Pinned to DEFAULT_ZOOM_CONFIG rather than a literal: the point is that an
+  // old project inherits whatever the current ceiling is, not that the ceiling
+  // never changes. It moved 1.6 -> 2.0 on 2026-09-08.
   const p = normalizeProject({ zoom: { config: { minHoldMs: 1500 } } }, "b");
-  expect(p.zoom.config.maxZoom).toBe(1.6);
+  expect(p.zoom.config.maxZoom).toBe(DEFAULT_ZOOM_CONFIG.maxZoom);
+  expect(p.zoom.config.maxZoom).toBe(2.0);
 });
 
 describe("motion blur amount", () => {

@@ -111,9 +111,26 @@ export function segmentsToKeyframes(
 
     const end = tail[tail.length - 1] ?? { cx: last.cx, cy: last.cy };
 
+    // The pull-out must not START before the activity ends.
+    //
+    // A segment ends at lastEvent + trailMs and the transition into this
+    // keyframe starts transitionOutMs before it, so with trailMs 400 against a
+    // 1000ms pull-out the camera began leaving 600ms BEFORE the last click --
+    // reported as "sometimes it zooms out while I'm clicking, a little too
+    // early".
+    //
+    // Fixed here rather than by raising trailMs, because trailMs also feeds
+    // clustering: at 1200 it merged adjacent shots and took one take from 7
+    // zooms to 3. Extending only the keyframe leaves the planner's spacing
+    // untouched -- measured identical on all 13 takes.
+    const outMs = Math.min(
+      s.endMs + Math.max(0, cfg.transitionOutMs - cfg.trailMs),
+      ctx.durationMs,
+    );
+
     kfs.push({
       id: `${last.id}o`,
-      tSourceMs: s.endMs,
+      tSourceMs: outMs,
       scale: 1,
       cx: end.cx,
       cy: end.cy,
@@ -197,7 +214,17 @@ function sampleFollow(
  *     when the camera actually gets there.
  */
 function openAtRest(s: ZoomSegment, cfg: ZoomConfig): ZoomSegment["waypoints"] {
-  const moved = s.waypoints.map((w) => ({ ...w, tMs: Math.max(w.tMs, cfg.transitionMs) }));
+  // Two passes. The first gives the opening move room to arrive from rest; the
+  // second gives every later waypoint room to arrive from the one before it,
+  // which is what stops a large depth change being crushed into a 260ms gap.
+  const moved: ZoomSegment["waypoints"] = [];
+  for (const w of s.waypoints) {
+    const floor = Math.max(
+      cfg.transitionMs,
+      (moved[moved.length - 1]?.tMs ?? Number.NEGATIVE_INFINITY) + cfg.minWaypointGapMs,
+    );
+    moved.push({ ...w, tMs: Math.max(w.tMs, floor) });
+  }
 
   return moved.filter((w, i) => {
     const next = moved[i + 1];

@@ -30,6 +30,9 @@ const PARITY = pixelParityZoom(ctx.source, ctx.output, ctx.paddingFactor);
  * moves it and tests about everything else quietly become tests of that rule.
  * It was 1000 while the transition was 600.
  */
+/** transitionOutMs - trailMs: how far past the segment end the pull-out lands. */
+const OUT_SHIFT = Math.max(0, cfg.transitionOutMs - cfg.trailMs);
+
 const START = 4000;
 const END = 7000;
 
@@ -65,7 +68,7 @@ describe("segmentsToKeyframes", () => {
     expect(kfs[0]?.scale).toBeCloseTo(CEILING, 12);
     // The out-keyframe sits at the segment's end, at rest, where the last
     // waypoint left the camera.
-    expect(kfs[1]).toMatchObject({ id: "k0o", tSourceMs: END, scale: 1, cx: 0.25 });
+    expect(kfs[1]).toMatchObject({ id: "k0o", tSourceMs: END + OUT_SHIFT, scale: 1, cx: 0.25 });
   });
 
   it("emits one in-keyframe per waypoint and a single out-keyframe", () => {
@@ -96,9 +99,9 @@ describe("segmentsToKeyframes", () => {
 
     expect(kfs.map((k) => k.tSourceMs)).toEqual([
       START + cfg.zoomInOverlapMs,
-      END,
+      END + OUT_SHIFT,
       9000 + cfg.zoomInOverlapMs,
-      11_000,
+      11_000 + OUT_SHIFT,
     ]);
   });
 
@@ -253,11 +256,11 @@ describe("a follow segment", () => {
     }
   });
 
-  it("still pulls out at the segment's end", () => {
+  it("pulls out so the transition begins at the segment's end", () => {
     const kfs = segmentsToKeyframes([seg5], cfg, square, path);
     const last = kfs[kfs.length - 1];
 
-    expect(last?.tSourceMs).toBe(5000);
+    expect(last?.tSourceMs).toBe(5000 + OUT_SHIFT);
     expect(last?.scale).toBe(1);
   });
 

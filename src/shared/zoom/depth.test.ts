@@ -87,7 +87,8 @@ describe("zoomDepth", () => {
 
   /** DEFAULT_DEPTH_CONFIG is derived, so a retune of config.ts reaches here. */
   it("tracks the shipped config rather than a copy of it", () => {
-    expect(cfg.maxZoom).toBe(1.6);
+    // Raised from 1.6 on 2026-09-08: too shallow to be worth the move.
+    expect(cfg.maxZoom).toBe(2.0);
     expect(cfg.base.click).toBeGreaterThan(cfg.base.type);
     expect(cfg.base.type).toBeGreaterThan(cfg.base.scroll);
   });
