@@ -4,6 +4,7 @@ import type { ZoomState } from "../shared/zoom/interpolate";
 import type { Size } from "../shared/zoom/types";
 import { Renderer } from "./gl/Renderer";
 import { VideoSource } from "./media/VideoSource";
+import type { FrameHandle } from "./media/FrameSource";
 
 export type ShotSpec = {
   zoom: ZoomState;
@@ -91,7 +92,7 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
 
     let screen: TexImageSource;
     let sourceSize: Size;
-    let frame: VideoFrame | null = null;
+    let frame: FrameHandle | null = null;
 
     if (spec.video !== undefined) {
       let source = sources.get(spec.video);
@@ -101,7 +102,7 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
       }
 
       frame = await source.frameAt(spec.tMs ?? 0);
-      screen = frame;
+      screen = frame.image;
       sourceSize = { w: source.width, h: source.height };
     } else {
       sourceSize = spec.sourceSize ?? { w: 1920, h: 1080 };
@@ -136,7 +137,7 @@ export function installShootHook(canvas: HTMLCanvasElement): void {
       });
       return canvas.toDataURL("image/png");
     } finally {
-      frame?.close();
+      frame?.release();
     }
   };
 }

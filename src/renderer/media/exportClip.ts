@@ -118,7 +118,7 @@ export async function exportClip(opts: {
       const videoFrame = await source.frameAt(localMs);
       try {
         renderer.drawFrame({
-          screen: videoFrame,
+          screen: videoFrame.image,
           zoom: zoomAt(project.zoom.keyframes, frame.tSourceMs),
           style: project.style,
           outputSize: output,
@@ -128,7 +128,7 @@ export async function exportClip(opts: {
           backgroundImageUrl,
         });
       } finally {
-        videoFrame.close();
+        videoFrame.release();
       }
 
       await window.zoomcast.exportFrame(id, renderer.readPixels(output));

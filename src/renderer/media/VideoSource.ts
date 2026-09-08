@@ -1,4 +1,5 @@
 import { DataStream, MP4BoxBuffer, createFile, type Sample } from "mp4box";
+import { type FrameHandle, type FrameSource, videoFrameHandle } from "./FrameSource";
 
 type IndexEntry = {
   /** Position in decode order — the order chunks must be fed to the decoder. */
@@ -39,7 +40,7 @@ function codecDescription(sample: Sample): Uint8Array {
  * decode — which is why a simple decode-from-keyframe strategy is fast enough
  * and a stateful incremental decoder is not worth its bugs.
  */
-export class VideoSource {
+export class VideoSource implements FrameSource {
   private cachedIndex = -1;
   private cachedFrame: VideoFrame | null = null;
   private queue: Promise<void> = Promise.resolve();
@@ -208,12 +209,14 @@ export class VideoSource {
    * The frame shown at `tMs`. The returned VideoFrame belongs to the caller
    * and MUST be closed — a leaked frame stalls the decoder within seconds.
    */
-  async frameAt(tMs: number): Promise<VideoFrame> {
+  async frameAt(tMs: number): Promise<FrameHandle> {
     // The clone happens INSIDE the serialised section: decodeTo returns the
     // cached frame itself, and the next queued decode closes it when it
     // replaces the cache. Cloning outside would work only by relying on the
     // order two microtasks happen to run in.
-    return this.serialise(async () => (await this.decodeTo(tMs)).clone());
+    return videoFrameHandle(
+      await this.serialise(async () => (await this.decodeTo(tMs)).clone()),
+    );
   }
 
   /**
@@ -345,3 +348,10 @@ export class VideoSource {
     this.cachedIndex = -1;
   }
 }
+
+/**
+ * The decoder-backed source, named for what it is at the call sites that
+ * require it. Export needs frame-exact random access; a <video> cannot give
+ * that, so this is not interchangeable with VideoElementSource there.
+ */
+export { VideoSource as DecodedFrameSource };

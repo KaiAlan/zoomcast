@@ -191,7 +191,7 @@ export function Editor({
       const frame = await source.frameAt(tSource);
       try {
         renderer.drawFrame({
-          screen: frame,
+          screen: frame.image,
           zoom: zoomAt(p.zoom.keyframes, tSource),
           style: p.style,
           outputSize: c.output,
@@ -201,7 +201,7 @@ export function Editor({
           backgroundImageUrl,
         });
       } finally {
-        frame.close();
+        frame.release();
       }
     };
 
