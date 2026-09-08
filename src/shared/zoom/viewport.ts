@@ -28,6 +28,32 @@ export type SourceRect = { x: number; y: number; w: number; h: number };
  * and has no discontinuity when a zoom begins; as scale grows, k approaches 1
  * and the subject ends up centred.
  */
+/**
+ * How much of the intended off-centre framing the camera is allowed to use, at
+ * a given scale.
+ *
+ * Below `1 / paddingFactor` the window is SMALLER than the output: it floats
+ * inside the frame, and `screenQuadFor`'s clamp holds it there so background
+ * cannot appear on one side. In that regime the clamp, not the camera, decides
+ * where the window sits — and because the bound moves as the window grows, the
+ * effective centre drifted one way and then snapped back the other. Measured
+ * on real takes: a 28.8px lateral reversal in the middle of a zoom-in, which
+ * reads as the camera taking a couple of sideways steps on its way in.
+ *
+ * So the camera stays centred while it cannot pan, and takes up its framing
+ * over a short ramp once the window covers the output. Same measurement after:
+ * worst reversal 2.2px, which is below noticing on a 1920-wide frame.
+ *
+ * Attenuating cx rather than post-clamping x is what makes it monotonic: the
+ * clamp then never binds during a zoom-in, so there is no bound left to fight.
+ */
+const LATERAL_RAMP = 0.2;
+
+export function lateralAuthority(scale: number, paddingFactor: number): number {
+  const cover = 1 / paddingFactor;
+  return Math.min(1, Math.max(0, (scale - cover) / (cover * LATERAL_RAMP)));
+}
+
 export function screenQuadFor(
   source: Size,
   output: Size,
@@ -39,13 +65,19 @@ export function screenQuadFor(
   const w = base.w * zoom.scale;
   const h = base.h * zoom.scale;
 
-  const focusX = base.x + zoom.cx * base.w;
-  const focusY = base.y + zoom.cy * base.h;
+  // See lateralAuthority: while the window is smaller than the output it
+  // cannot pan, and letting it try is what made the camera step sideways.
+  const f = lateralAuthority(zoom.scale, paddingFactor);
+  const cx = 0.5 + (zoom.cx - 0.5) * f;
+  const cy = 0.5 + (zoom.cy - 0.5) * f;
+
+  const focusX = base.x + cx * base.w;
+  const focusY = base.y + cy * base.h;
 
   const k = 1 - 1 / zoom.scale;
 
-  let x = focusX - zoom.cx * w + (output.w / 2 - focusX) * k;
-  let y = focusY - zoom.cy * h + (output.h / 2 - focusY) * k;
+  let x = focusX - cx * w + (output.w / 2 - focusX) * k;
+  let y = focusY - cy * h + (output.h / 2 - focusY) * k;
 
   // Both bounds must be ONE continuous range. Gating on `w >= output.w`
   // instead makes the range [output.w - w, 0] collapse to zero width at
@@ -98,9 +130,18 @@ export function focusBoundsFor(
 ): { x: [number, number]; y: [number, number] } {
   const b = screenRect(source, output, paddingFactor);
 
+  // screenQuadFor attenuates cx by lateralAuthority before using it, so the
+  // range of INPUT cx that survives unclamped is the attenuated range widened
+  // by 1/f. At f = 0 every cx maps to 0.5, so the honest answer is the fixed
+  // point rather than an open range: a follow path there has nowhere to pan,
+  // and reporting otherwise would let it chase a centre the quad ignores.
+  const f = lateralAuthority(scale, paddingFactor);
+  const widen = ([lo, hi]: [number, number]): [number, number] =>
+    f <= 0 ? [0.5, 0.5] : [0.5 + (lo - 0.5) / f, 0.5 + (hi - 0.5) / f];
+
   return {
-    x: focusRange(b.x, b.w, output.w, scale),
-    y: focusRange(b.y, b.h, output.h, scale),
+    x: widen(focusRange(b.x, b.w, output.w, scale)),
+    y: widen(focusRange(b.y, b.h, output.h, scale)),
   };
 }
 

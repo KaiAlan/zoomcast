@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG as cfg } from "./config";
 import { EASINGS } from "./easing";
 import { segmentsToKeyframes } from "./keyframes";
+import { lateralAuthority, screenQuadFor } from "./viewport";
 
 /**
  * Guards for the three camera-feel defects found on 2026-09-08, all reported
@@ -122,5 +123,52 @@ describe("no waypoint is crushed against the one before it", () => {
     expect((ins[1]?.tSourceMs ?? 0) - (ins[0]?.tSourceMs ?? 0)).toBeGreaterThanOrEqual(
       cfg.minWaypointGapMs,
     );
+  });
+});
+
+describe("the camera does not step sideways on its way in", () => {
+  /**
+   * The bug: below 1/paddingFactor the window is smaller than the output, so
+   * screenQuadFor's clamp — not the camera — decided where it sat. The bound
+   * moves as the window grows, so the effective centre drifted one way and
+   * snapped back the other: a 28.8px lateral reversal mid-zoom, reported as
+   * "very slight left right motion to the final zoom".
+   */
+  const src = { w: 1920, h: 1080 };
+  const PAD = 0.85;
+
+  it("has no lateral authority while the window cannot cover the output", () => {
+    expect(lateralAuthority(1, PAD)).toBe(0);
+    expect(lateralAuthority(1 / PAD, PAD)).toBe(0);
+  });
+
+  it("takes up full framing once zoomed past the ramp", () => {
+    expect(lateralAuthority(2.0, PAD)).toBe(1);
+  });
+
+  it("moves the effective centre monotonically through a zoom-in", () => {
+    // The signature of the bug was a direction reversal, not a large motion.
+    const target = { cx: 0.219, cy: 0.5 };
+    let prevCentre: number | null = null;
+    let prevDir = 0;
+    let worstReversal = 0;
+
+    for (let scale = 1; scale <= 1.917; scale += 0.002) {
+      const q = screenQuadFor(src, src, PAD, { scale, ...target });
+      const centre = (src.w / 2 - q.x) / q.w;
+      if (prevCentre !== null) {
+        const d = (centre - prevCentre) * src.w;
+        if (Math.abs(d) > 0.01) {
+          const dir = Math.sign(d);
+          if (prevDir !== 0 && dir !== prevDir) worstReversal = Math.max(worstReversal, Math.abs(d));
+          prevDir = dir;
+        }
+      }
+      prevCentre = centre;
+    }
+
+    // Was 28.8px before the fix. Anything under a couple of px is below
+    // noticing on a 1920-wide frame.
+    expect(worstReversal).toBeLessThan(3);
   });
 });
