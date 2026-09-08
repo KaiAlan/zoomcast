@@ -92,7 +92,7 @@ export class VideoElementSource implements FrameSource {
   }
 
   /** The browser's own buffering replaces this. */
-  async prefetch(): Promise<void> {}
+  async prefetch(_tMs: number): Promise<void> {}
 
   close(): void {
     this.el.pause();

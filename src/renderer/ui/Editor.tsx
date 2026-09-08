@@ -16,7 +16,9 @@ import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/typ
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
 import { PreviewPlayer } from "../media/PreviewPlayer";
-import { VideoSource } from "../media/VideoSource";
+import { VideoElementSource } from "../media/VideoElementSource";
+import { DecodedFrameSource } from "../media/VideoSource";
+import { type PreviewClock } from "../media/PreviewPlayer";
 import { Inspector } from "./Inspector";
 import { Timeline } from "./Timeline";
 
@@ -49,7 +51,7 @@ export function Editor({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
-  const sourceRef = useRef<VideoSource | null>(null);
+  const sourceRef = useRef<VideoElementSource | null>(null);
   const playerRef = useRef<PreviewPlayer | null>(null);
 
   const [project, setProject] = useState<Project>(bundle.project);
@@ -223,6 +225,40 @@ export function Editor({
       el.style.left = `${total === 0 ? 0 : (t / total) * 100}%`;
     };
 
+    /**
+     * The playhead during playback, taken from the video element itself.
+     *
+     * rVFC reports the presentation time of the frame about to be composited,
+     * so the composition is aligned to the frame actually on screen rather
+     * than to a time derived from the wall clock. That alignment is what
+     * removes the feedback loop the old loop had: a slow draw used to advance
+     * the playhead by ~60 frames and put it past the next keyframe.
+     *
+     * It reads through sourceRef because the player is constructed before the
+     * source is opened.
+     */
+    const clock: PreviewClock = {
+      start(fromMs) {
+        const source = sourceRef.current;
+        if (source === null) return;
+        source.el.currentTime = fromMs / 1000;
+        void source.el.play();
+      },
+      stop() {
+        sourceRef.current?.el.pause();
+      },
+      onFrame(cb) {
+        const tick = (_now: number, meta: VideoFrameCallbackMetadata): void => {
+          const source = sourceRef.current;
+          if (source === null) return;
+          source.lastMediaTimeMs = meta.mediaTime * 1000;
+          cb(meta.mediaTime * 1000);
+          source.el.requestVideoFrameCallback(tick);
+        };
+        sourceRef.current?.el.requestVideoFrameCallback(tick);
+      },
+    };
+
     const player = new PreviewPlayer(
       renderAt,
       () => outputDurationMs(manifest.durationMs, live.current.project.cuts),
@@ -250,12 +286,13 @@ export function Editor({
           outputToSource(ahead, manifest.durationMs, live.current.project.cuts),
         );
       },
+      clock,
     );
     playerRef.current = player;
 
     void (async () => {
       try {
-        const source = await VideoSource.open(bundle.media.screen);
+        const source = await VideoElementSource.open(bundle.media.screen);
         if (disposed) {
           source.close();
           return;
@@ -284,6 +321,27 @@ export function Editor({
             `${manifest.video.fps.toFixed(1)}fps`,
         );
 
+        /**
+         * Export decodes through DecodedFrameSource, never through the
+         * preview's <video>.
+         *
+         * A media element seeks asynchronously and lands on the nearest
+         * decodable frame, so "give me exactly the frame at t" is not a
+         * question it can answer -- and that is the only question export asks.
+         * Opened per export rather than held for the session: exports are
+         * infrequent and a live decoder holds frame-pool memory.
+         */
+        const withExportSource = async <T,>(
+          fn: (exportSource: DecodedFrameSource) => Promise<T>,
+        ): Promise<T> => {
+          const exportSource = await DecodedFrameSource.open(bundle.media.screen);
+          try {
+            return await fn(exportSource);
+          } finally {
+            exportSource.close();
+          }
+        };
+
         // Test hooks for tools/verify-parity.ts. renderAt is awaited directly
         // rather than going through the player, so a screenshot is guaranteed
         // to be taken after the frame has actually been drawn.
@@ -293,19 +351,21 @@ export function Editor({
             return canvas.toDataURL("image/png");
           },
           exportTo: async (outFile: string) => {
-            await exportClip({
-              manifest,
-              project: live.current.project,
-              cursorPath: live.current.cursorPath,
-              clicks: live.current.clicks,
-              backgroundImageUrl: live.current.backgroundImageUrl,
-              mediaDir: bundle.dir.replace(/\\/g, "/"),
-              renderer,
-              source,
-              outFile,
-              encoder: "libx264",
-              onProgress: () => undefined,
-            });
+            await withExportSource((exportSource) =>
+              exportClip({
+                manifest,
+                project: live.current.project,
+                cursorPath: live.current.cursorPath,
+                clicks: live.current.clicks,
+                backgroundImageUrl: live.current.backgroundImageUrl,
+                mediaDir: bundle.dir.replace(/\\/g, "/"),
+                renderer,
+                source: exportSource,
+                outFile,
+                encoder: "libx264",
+                onProgress: () => undefined,
+              }),
+            );
           },
           /**
            * What the preview actually achieves, measured rather than argued.
@@ -521,8 +581,8 @@ export function Editor({
 
   const runExport = (): void => {
     const renderer = rendererRef.current;
-    const source = sourceRef.current;
-    if (renderer === null || source === null || exporting !== null) return;
+    // Only a liveness check: export does not draw from the preview's source.
+    if (renderer === null || sourceRef.current === null || exporting !== null) return;
 
     void (async () => {
       const target = await window.zoomcast.pickExportTarget(`${manifest.id}.mp4`);
@@ -538,6 +598,12 @@ export function Editor({
       playerRef.current?.pause();
       setExporting("starting…");
 
+      // Export decodes through DecodedFrameSource, never the preview's
+      // <video>: a media element seeks to the nearest decodable frame, and
+      // export needs exactly the frame at t. Opened per export and closed
+      // after -- a live decoder holds frame-pool memory.
+      const exportSource = await DecodedFrameSource.open(bundle.media.screen);
+
       try {
         await exportClip({
           manifest,
@@ -547,7 +613,7 @@ export function Editor({
           backgroundImageUrl: live.current.backgroundImageUrl,
           mediaDir: bundle.dir.replace(/\\/g, "/"),
           renderer,
-          source,
+          source: exportSource,
           outFile: target,
           encoder: "h264_amf",
           onProgress: ({ done, total }) =>
@@ -560,6 +626,7 @@ export function Editor({
         setExporting(null);
         setStatus(err instanceof Error ? err.message : String(err));
       } finally {
+        exportSource.close();
         // The export drew at output size; put the preview back where it was.
         playerRef.current?.seek(playerRef.current.playheadMs);
       }
