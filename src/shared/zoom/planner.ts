@@ -69,7 +69,7 @@ export function planZoom(
 
   const ceiling = cfg.maxZoom;
 
-  return payForTheOpeningMove(applySegmentGuards(segments, cfg), cfg).map((s) => {
+  return payForTheOpeningMove(applySegmentGuards(segments, cfg, ctx), cfg).map((s) => {
     const first = s.waypoints[0];
 
     return {

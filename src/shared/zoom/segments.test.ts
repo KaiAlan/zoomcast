@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
 import { applySegmentGuards, type Segment } from "./segments";
-import type { ZoomConfig } from "./types";
+import type { PlanContext, ZoomConfig } from "./types";
 
 const cfg: ZoomConfig = {
   ...DEFAULT_ZOOM_CONFIG,
@@ -123,5 +123,98 @@ describe("applySegmentGuards", () => {
 
   it("handles an empty plan", () => {
     expect(applySegmentGuards([], cfg)).toEqual([]);
+  });
+});
+
+/**
+ * Measured over the 13 takes on disk on 2026-09-08: 12 of 17 interior triples
+ * reverse direction, median detour 728px. Most are fine — the camera rests
+ * three to five seconds at the middle waypoint. The two that read as a wobble
+ * barely rest at all.
+ */
+describe("doubling back inside one shot", () => {
+  const ctx: PlanContext = {
+    source: { w: 1920, h: 1080 },
+    output: { w: 1920, h: 1080 },
+    paddingFactor: 0.85,
+    durationMs: 90_000,
+  };
+
+  /** The real shape, from 2026-09-07T17-22-48: cx 0.319 -> 0.608 -> 0.449. */
+  const travelling = (cs: number[], ts: number[], scale = 1.25): Segment => ({
+    startT: ts[0] ?? 0,
+    endT: (ts[ts.length - 1] ?? 0) + 3000,
+    waypoints: cs.map((cx, i) => ({
+      id: `k${i}`,
+      t: ts[i] ?? 0,
+      scale,
+      cx,
+      cy: 0.5,
+    })),
+  });
+
+  const centres = (s: Segment | undefined): number[] =>
+    (s?.waypoints ?? []).map((w) => w.cx);
+
+  it("drops a waypoint the camera comes straight back from", () => {
+    // 1064ms of rest once the 1000ms move out is paid for — under minDwellMs.
+    const out = applySegmentGuards([travelling([0.319, 0.608, 0.449], [0, 14102, 16166])], cfg, ctx);
+
+    expect(centres(out[0])).toEqual([0.319, 0.449]);
+  });
+
+  it("keeps one the camera actually rests at", () => {
+    const out = applySegmentGuards([travelling([0.319, 0.608, 0.449], [0, 14102, 19000])], cfg, ctx);
+
+    expect(centres(out[0])).toEqual([0.319, 0.608, 0.449]);
+  });
+
+  it("keeps a waypoint that carries on in the same direction", () => {
+    const out = applySegmentGuards([travelling([0.3, 0.5, 0.7], [0, 14102, 16166])], cfg, ctx);
+
+    expect(centres(out[0])).toEqual([0.3, 0.5, 0.7]);
+  });
+
+  /**
+   * The trip is what goes, never the sight of what happened there.
+   *
+   * At scale 2 the camera has full lateral authority and the frame is 1.7x the
+   * output, so a waypoint 0.8 of the source away is genuinely off screen from
+   * both neighbours. Below `1 / paddingFactor * 1.4` — see lateralAuthority —
+   * the camera barely pans and almost nothing is ever off screen, which is
+   * itself a reason the trip is not worth taking.
+   */
+  it("keeps one whose activity would otherwise never be seen", () => {
+    const out = applySegmentGuards(
+      [travelling([0.1, 0.9, 0.5], [0, 14102, 16166], 2)],
+      cfg,
+      ctx,
+    );
+
+    expect(centres(out[0])).toEqual([0.1, 0.9, 0.5]);
+  });
+
+  it("repeats until nothing more comes out", () => {
+    const out = applySegmentGuards(
+      [travelling([0.30, 0.58, 0.42, 0.60, 0.45], [0, 4000, 6000, 8000, 10_000])],
+      cfg,
+      ctx,
+    );
+
+    expect(centres(out[0]).length).toBeLessThan(5);
+  });
+
+  it("does nothing without a context, because nothing can be judged visible", () => {
+    const out = applySegmentGuards([travelling([0.319, 0.608, 0.449], [0, 14102, 16166])], cfg);
+
+    expect(centres(out[0])).toEqual([0.319, 0.608, 0.449]);
+  });
+
+  it("never touches the first or last waypoint", () => {
+    const out = applySegmentGuards([travelling([0.319, 0.608, 0.449], [0, 14102, 16166])], cfg, ctx);
+    const ws = out[0]?.waypoints ?? [];
+
+    expect(ws[0]?.cx).toBe(0.319);
+    expect(ws[ws.length - 1]?.cx).toBe(0.449);
   });
 });

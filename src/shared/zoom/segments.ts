@@ -1,4 +1,5 @@
-import type { ZoomConfig } from "./types";
+import type { PlanContext, ZoomConfig } from "./types";
+import { screenQuadFor } from "./viewport";
 
 /**
  * One waypoint the camera visits without pulling back out. The id is the
@@ -31,8 +32,104 @@ export type Segment = { startT: number; endT: number; waypoints: Waypoint[] };
  *
  * Both are about the emitted segments, so they are guarded here.
  */
-export function applySegmentGuards(segs: Segment[], cfg: ZoomConfig): Segment[] {
-  return enforceDwell(mergeForRecovery(segs, cfg), cfg);
+export function applySegmentGuards(
+  segs: Segment[],
+  cfg: ZoomConfig,
+  /**
+   * Needed only by `dropDoubleBacks`, which has to know what is on screen.
+   * Without it that guard does not run — the same fallback `segmentsToKeyframes`
+   * uses for a missing follow path, so callers that only care about timing (the
+   * tune tool, most of segments.test.ts) need not build a context.
+   */
+  ctx: PlanContext | null = null,
+): Segment[] {
+  const merged = enforceDwell(mergeForRecovery(segs, cfg), cfg);
+  return ctx === null ? merged : dropDoubleBacks(merged, cfg, ctx);
+}
+
+/** Is a source point inside the frame the camera draws at this waypoint? */
+function onScreen(ctx: PlanContext, w: Waypoint, px: number, py: number): boolean {
+  const q = screenQuadFor(ctx.source, ctx.output, ctx.paddingFactor, {
+    scale: w.scale,
+    cx: w.cx,
+    cy: w.cy,
+  });
+
+  const x = q.x + (px / ctx.source.w) * q.w;
+  const y = q.y + (py / ctx.source.h) * q.h;
+
+  return x >= 0 && x <= ctx.output.w && y >= 0 && y <= ctx.output.h;
+}
+
+/**
+ * Drop a waypoint the camera visits only to come straight back from.
+ *
+ * `mergeForRecovery` concatenates the waypoints of everything it merges, so a
+ * travelling shot follows attention in the order attention moved — which is
+ * correct, and on real footage doubles back constantly. Measured over the 13
+ * takes on disk: 12 of 17 interior triples reverse direction, median detour
+ * 728px, max 1652px.
+ *
+ * Most of those are fine. The camera sits at the middle waypoint for three to
+ * five seconds, and a considered move followed by another considered move is
+ * not a wobble. The ones that read badly are the ones where it barely arrives
+ * before leaving again — measured on 2026-09-07T17-22-48 as
+ * `cx 0.319 -> 0.608 -> 0.449`, 555px right and 305px back with 1064ms of rest
+ * between them.
+ *
+ * So the test is rest, not reversal, and the threshold is the one a shot
+ * already has to clear: the move in costs `panMs`, so what is left of the gap
+ * must still be `minDwellMs`. No new constant.
+ *
+ * The visibility test is what makes dropping safe rather than merely tidier. A
+ * dropped waypoint's activity has to be on screen from BOTH its neighbours, so
+ * nothing the camera would have shown stops being shown — it is only the trip
+ * that goes. Of the 12 reversals, 2 satisfy every condition.
+ */
+function dropDoubleBacks(segs: Segment[], cfg: ZoomConfig, ctx: PlanContext): Segment[] {
+  return segs.map((s) => {
+    // Dropping one waypoint gives its neighbours a new relationship, so this
+    // repeats until nothing more comes out. Bounded by the list shrinking.
+    let ws = s.waypoints;
+
+    for (;;) {
+      const next = dropOne(ws, cfg, ctx);
+      if (next === ws) break;
+      ws = next;
+    }
+
+    return ws === s.waypoints ? s : { ...s, waypoints: ws };
+  });
+}
+
+/** One pass: the first waypoint that qualifies, removed. */
+function dropOne(ws: Waypoint[], cfg: ZoomConfig, ctx: PlanContext): Waypoint[] {
+  for (let i = 1; i < ws.length - 1; i += 1) {
+    const a = ws[i - 1];
+    const b = ws[i];
+    const c = ws[i + 1];
+    if (a === undefined || b === undefined || c === undefined) continue;
+
+    const ax = a.cx * ctx.source.w;
+    const ay = a.cy * ctx.source.h;
+    const bx = b.cx * ctx.source.w;
+    const by = b.cy * ctx.source.h;
+    const cx = c.cx * ctx.source.w;
+    const cy = c.cy * ctx.source.h;
+
+    // Reversal: the leg out of b points back along the leg into it.
+    if ((bx - ax) * (cx - bx) + (by - ay) * (cy - by) >= 0) continue;
+
+    // Rest: what is left of the gap once the move out of b is paid for.
+    if (c.t - b.t - cfg.panMs >= cfg.minDwellMs) continue;
+
+    // Safety: b's activity must already be visible from both neighbours.
+    if (!onScreen(ctx, a, bx, by) || !onScreen(ctx, c, bx, by)) continue;
+
+    return [...ws.slice(0, i), ...ws.slice(i + 1)];
+  }
+
+  return ws;
 }
 
 /**
