@@ -5,11 +5,12 @@ import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
-import type { Cut, Project } from "../../shared/project/types";
+import type { Project } from "../../shared/project/types";
+import { addCut, setSegmentCamera } from "../../shared/project/edits";
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
-import { deriveKeyframes, replanFrom, type DeriveContext } from "../../shared/zoom/derive";
+import { type DeriveContext } from "../../shared/zoom/derive";
 import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
@@ -20,6 +21,7 @@ import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
 import { type PreviewClock } from "../media/PreviewPlayer";
 import { Inspector } from "./Inspector";
 import { Timeline } from "./Timeline";
+import { useProjectHistory } from "./useProjectHistory";
 
 /** How often the numeric readout catches up with the playhead. */
 const READOUT_INTERVAL_MS = 100;
@@ -53,7 +55,47 @@ export function Editor({
   const sourceRef = useRef<VideoElementSource | null>(null);
   const playerRef = useRef<PreviewPlayer | null>(null);
 
-  const [project, setProject] = useState<Project>(bundle.project);
+  const { manifest } = bundle;
+
+  /**
+   * The camera's own path: the same function the cursor uses, at a
+   * camera-scale half-life. Built once per take — it is a pure function of
+   * telemetry, which is what keeps preview and export showing one camera.
+   */
+  const cameraPath = useMemo(() => followPath(bundle.telemetry), [bundle.telemetry]);
+
+  /** Everything replanFrom/deriveKeyframes need that does not live on the project. */
+  const deriveCtx = useMemo<DeriveContext>(
+    () => ({
+      telemetry: bundle.telemetry,
+      cameraPath,
+      source: { w: manifest.video.width, h: manifest.video.height },
+      durationMs: manifest.durationMs,
+    }),
+    [bundle.telemetry, cameraPath, manifest.video.width, manifest.video.height, manifest.durationMs],
+  );
+
+  /**
+   * The only thing in this file that changes the project.
+   *
+   * Every handler below goes through `edit`, and the callback here is the one
+   * place `live.current`'s project is patched. It used to be patched by hand at
+   * each `setProject`, which is how addCut ended up patching the ref and never
+   * redrawing at all.
+   *
+   * `live` is declared further down, because it also carries values derived
+   * from the project this hook owns. The forward reference is safe: this
+   * callback is only ever invoked from an event handler or an effect, long
+   * after the binding exists.
+   */
+  const edit = useProjectHistory(bundle.project, deriveCtx, (p) => {
+    live.current = { ...live.current, project: p };
+  });
+  const project = edit.project;
+
+  /** The timeline still speaks in segment ids; `Selection` is the wider type. */
+  const selectedSegmentId = edit.selection?.kind === "segment" ? edit.selection.id : null;
+
   const [playheadMs, setPlayheadMs] = useState(0);
   /** The marker element, moved directly during playback. */
   const playheadElRef = useRef<HTMLDivElement | null>(null);
@@ -61,7 +103,6 @@ export function Editor({
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [exporting, setExporting] = useState<string | null>(null);
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
 
   // Resolved by lookup rather than held as state. Every re-plan rebuilds the
   // segments, and a shot whose cluster the new plan no longer produces is
@@ -69,8 +110,6 @@ export function Editor({
   // empty state.
   const selectedSegment =
     project.zoom.segments.find((s) => s.id === selectedSegmentId) ?? null;
-
-  const { manifest } = bundle;
 
   const ctx: PlanContext = useMemo(
     () => ({
@@ -129,23 +168,9 @@ export function Editor({
   const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl });
   live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl };
 
-  /**
-   * The camera's own path: the same function the cursor uses, at a
-   * camera-scale half-life. Built once per take — it is a pure function of
-   * telemetry, which is what keeps preview and export showing one camera.
-   */
-  const cameraPath = useMemo(() => followPath(bundle.telemetry), [bundle.telemetry]);
-
-  /** Everything replanFrom/deriveKeyframes need that does not live on the project. */
-  const deriveCtx = useMemo<DeriveContext>(
-    () => ({
-      telemetry: bundle.telemetry,
-      cameraPath,
-      source: { w: manifest.video.width, h: manifest.video.height },
-      durationMs: manifest.durationMs,
-    }),
-    [bundle.telemetry, cameraPath, manifest.video.width, manifest.video.height, manifest.durationMs],
-  );
+  // Stable across history changes, unlike `edit` itself, so the mount effect
+  // below can depend on it without being torn down on every edit.
+  const { reset: resetProject } = edit;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -279,14 +304,10 @@ export function Editor({
 
         sourceRef.current = source;
 
-        setProject((prev) => {
-          const next = {
-            ...prev,
-            zoom: { ...prev.zoom, ...replanFrom(prev.zoom.config, prev, deriveCtx) },
-          };
-          live.current = { ...live.current, project: next };
-          return next;
-        });
+        // The plan the bundle opens with. `reset` and not `apply`: this is not
+        // an edit the user made, and pushing it would leave the editor with an
+        // undo step back to a project that has no segments in it.
+        resetProject((p) => p, { replan: true });
 
         // The capture rate, not the output rate, and labelled as such: it is
         // routinely well under what was requested (gdigrab reaches about 28fps
@@ -419,7 +440,10 @@ export function Editor({
       renderer.dispose();
       rendererRef.current = null;
     };
-  }, [bundle, manifest, deriveCtx]);
+    // `resetProject` is stable, so this still tears down only when the bundle
+    // changes. `deriveCtx` has left the list because the load-time re-plan now
+    // reads its context from inside the hook.
+  }, [bundle, manifest, resetProject]);
 
   // Space toggles playback. preventDefault matters twice over: it stops the
   // page scrolling, and it stops Space from re-activating whichever button was
@@ -470,16 +494,9 @@ export function Editor({
     playerRef.current?.seek(playerRef.current.playheadMs);
   }, [project]);
 
+  /** A pacing dial is a global change: it must regenerate unclaimed shots. */
   const onConfigChange = (config: ZoomConfig): void => {
-    setProject((prev) => {
-      const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
-      const next = {
-        ...withConfig,
-        zoom: { ...withConfig.zoom, config, ...replanFrom(config, withConfig, deriveCtx) },
-      };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => ({ ...p, zoom: { ...p.zoom, config } }), { replan: true });
   };
 
   /**
@@ -497,18 +514,7 @@ export function Editor({
    * for it ever lands.
    */
   const onOutputChange = (output: Project["output"]): void => {
-    setProject((prev) => {
-      const withOutput = { ...prev, output };
-      const next = {
-        ...withOutput,
-        zoom: {
-          ...withOutput.zoom,
-          ...replanFrom(withOutput.zoom.config, withOutput, deriveCtx),
-        },
-      };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => ({ ...p, output }), { replan: true });
   };
 
   /**
@@ -521,41 +527,19 @@ export function Editor({
    * by id, which is also what makes the choice survive every later re-plan.
    */
   const onSegmentCameraChange = (id: string, position: ZoomSegment["position"]): void => {
-    setProject((prev) => {
-      const withSegment = {
-        ...prev,
-        zoom: {
-          ...prev.zoom,
-          segments: prev.zoom.segments.map((s) => (s.id === id ? { ...s, position } : s)),
-        },
-      };
-
-      const next = {
-        ...withSegment,
-        zoom: {
-          ...withSegment.zoom,
-          ...replanFrom(withSegment.zoom.config, withSegment, deriveCtx),
-        },
-      };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => setSegmentCamera(p, id, position), { replan: true });
   };
 
-  const addCut = (): void => {
+  /** Interim: Task 10 replaces this with a real cut tool on the timeline. */
+  const onAddCut = (): void => {
     const start = playheadMs;
     const end = Math.min(start + 500, outDuration);
     if (end <= start) return;
 
     const srcStart = outputToSource(start, manifest.durationMs, project.cuts);
     const srcEnd = outputToSource(end, manifest.durationMs, project.cuts);
-    const cut: Cut = { id: crypto.randomUUID(), startMs: srcStart, endMs: srcEnd };
 
-    setProject((prev) => {
-      const next = { ...prev, cuts: [...prev.cuts, cut] };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => addCut(p, crypto.randomUUID(), srcStart, srcEnd, manifest.durationMs));
   };
 
   const runExport = (): void => {
@@ -654,7 +638,7 @@ export function Editor({
           <button type="button" style={button} onClick={() => playerRef.current?.seek(0)}>
             start
           </button>
-          <button type="button" style={button} onClick={addCut}>
+          <button type="button" style={button} onClick={onAddCut}>
             cut 0.5s here
           </button>
           <button
@@ -681,7 +665,9 @@ export function Editor({
           keyframes={project.zoom.keyframes}
           segments={project.zoom.segments}
           selectedSegmentId={selectedSegmentId}
-          onSelectSegment={setSelectedSegmentId}
+          onSelectSegment={(id) =>
+            edit.select(id === null ? null : { kind: "segment", id })
+          }
           playheadMs={playheadMs}
           playheadRef={playheadElRef}
           pixelParityZoom={ceiling}
@@ -703,12 +689,12 @@ export function Editor({
           onChange={onConfigChange}
           cursor={project.style.cursor}
           onCursorChange={(cursor) =>
-            setProject((p) => ({ ...p, style: { ...p.style, cursor } }))
+            edit.apply((p) => ({ ...p, style: { ...p.style, cursor } }))
           }
           style={project.style}
           output={project.output}
           dir={bundle.dir}
-          onStyleChange={(style) => setProject((p) => ({ ...p, style }))}
+          onStyleChange={(style) => edit.apply((p) => ({ ...p, style }))}
           onOutputChange={onOutputChange}
           selectedSegment={selectedSegment}
           onSegmentCameraChange={onSegmentCameraChange}
