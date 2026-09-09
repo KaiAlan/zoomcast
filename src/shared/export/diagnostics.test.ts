@@ -9,7 +9,7 @@ const OPTS: ExportArgsOptions = {
   bitrateMbps: 12,
   encoder: "h264_amf",
   durationMs: 26767,
-  cuts: [{ startMs: 1000, endMs: 2000 }],
+  cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }],
   audio: [
     { file: "C:/x/mic.webm", gainDb: 0, startOffsetMs: -6587 },
     { file: "C:/x/system.webm", gainDb: -6, startOffsetMs: -938 },

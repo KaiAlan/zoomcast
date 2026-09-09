@@ -57,7 +57,7 @@ describe.each(availableEncoders())("export end to end (%s)", (encoder) => {
     rmSync(OUT, { force: true });
 
     const durationMs = 5000;
-    const cuts = [{ startMs: 1000, endMs: 2000 }];
+    const cuts = [{ id: "c1", startMs: 1000, endMs: 2000 }];
     const fps = 30;
     const width = 320;
     const height = 180;

@@ -50,7 +50,7 @@ describe("buildExportArgs", () => {
   });
 
   it("splits and concatenates one segment per kept span", () => {
-    const s = joined({ ...base, cuts: [{ startMs: 1000, endMs: 2000 }] });
+    const s = joined({ ...base, cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }] });
     expect(s).toContain("asplit=2");
     expect(s).toContain("concat=n=2:v=0:a=1");
     expect(s).toContain("atrim=start=0:end=1");
@@ -61,8 +61,8 @@ describe("buildExportArgs", () => {
     const s = joined({
       ...base,
       cuts: [
-        { startMs: 1000, endMs: 2000 },
-        { startMs: 3000, endMs: 3500 },
+        { id: "c1", startMs: 1000, endMs: 2000 },
+        { id: "c2", startMs: 3000, endMs: 3500 },
       ],
     });
     expect(s).toContain("asplit=3");
@@ -98,7 +98,7 @@ describe("buildExportArgs", () => {
   it("gives every filter label a single consumer", () => {
     const args = buildExportArgs({
       ...base,
-      cuts: [{ startMs: 1000, endMs: 2000 }],
+      cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }],
       audio: [
         { file: "mic.webm", gainDb: 0, startOffsetMs: 142 },
         { file: "system.webm", gainDb: -6, startOffsetMs: 138 },

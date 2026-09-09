@@ -34,7 +34,7 @@ describe("normalizeProject", () => {
 
   it("preserves everything the old file did carry", () => {
     const p = normalizeProject(PRE_CURSOR, "b");
-    expect(p.cuts).toEqual([{ startMs: 100, endMs: 600 }]);
+    expect(p.cuts).toEqual([{ id: "cut-0", startMs: 100, endMs: 600 }]);
     expect(p.zoom.keyframes).toHaveLength(1);
     expect(p.style.frame.shadow.blurPx).toBe(48);
     // from/to/angle are gone with the union; kind survives the rename.

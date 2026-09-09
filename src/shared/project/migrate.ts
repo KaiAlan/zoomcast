@@ -95,7 +95,17 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     // The caller's id wins: the directory a bundle was loaded from is the
     // truth, and a copied project directory would otherwise keep a stale id.
     bundleId,
-    cuts: Array.isArray(raw.cuts) ? (raw.cuts as Project["cuts"]) : base.cuts,
+    cuts: Array.isArray(raw.cuts)
+      ? (raw.cuts as unknown[]).flatMap((c, i) => {
+          if (!isRecord(c)) return [];
+          const startMs = num(c.startMs, 0);
+          const endMs = num(c.endMs, 0);
+          if (endMs <= startMs) return [];
+          // Cuts written before ids existed get a deterministic one, so the
+          // same project.json migrates to the same ids every load.
+          return [{ id: str(c.id, `cut-${i}`), startMs, endMs }];
+        })
+      : base.cuts,
     zoom: {
       config: isRecord(zoom.config)
         ? { ...base.zoom.config, ...(zoom.config as Partial<Project["zoom"]["config"]>) }

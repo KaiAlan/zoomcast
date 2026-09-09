@@ -549,7 +549,7 @@ export function Editor({
 
     const srcStart = outputToSource(start, manifest.durationMs, project.cuts);
     const srcEnd = outputToSource(end, manifest.durationMs, project.cuts);
-    const cut: Cut = { startMs: srcStart, endMs: srcEnd };
+    const cut: Cut = { id: crypto.randomUUID(), startMs: srcStart, endMs: srcEnd };
 
     setProject((prev) => {
       const next = { ...prev, cuts: [...prev.cuts, cut] };

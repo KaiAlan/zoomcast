@@ -16,18 +16,18 @@ describe("planExportFrames", () => {
   });
 
   it("shortens the frame count by the cut length", () => {
-    const cuts: Cut[] = [{ startMs: 200, endMs: 400 }];
+    const cuts: Cut[] = [{ id: "c1", startMs: 200, endMs: 400 }];
     expect(planExportFrames(1000, cuts, 60)).toHaveLength(48); // 800ms at 60fps
   });
 
   it("skips over the cut in source time", () => {
-    const cuts: Cut[] = [{ startMs: 200, endMs: 400 }];
+    const cuts: Cut[] = [{ id: "c1", startMs: 200, endMs: 400 }];
     const atCut = planExportFrames(1000, cuts, 60).find((f) => f.tOutputMs === 200);
     expect(atCut?.tSourceMs).toBe(400);
   });
 
   it("never emits a source time inside a cut", () => {
-    const cuts: Cut[] = [{ startMs: 200, endMs: 400 }];
+    const cuts: Cut[] = [{ id: "c1", startMs: 200, endMs: 400 }];
     for (const f of planExportFrames(1000, cuts, 60)) {
       expect(f.tSourceMs >= 200 && f.tSourceMs < 400).toBe(false);
     }
@@ -45,6 +45,6 @@ describe("planExportFrames", () => {
   });
 
   it("returns nothing for a fully cut recording", () => {
-    expect(planExportFrames(1000, [{ startMs: 0, endMs: 1000 }], 60)).toEqual([]);
+    expect(planExportFrames(1000, [{ id: "c1", startMs: 0, endMs: 1000 }], 60)).toEqual([]);
   });
 });
