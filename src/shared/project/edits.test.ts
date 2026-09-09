@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  addCut,
+  deleteCut,
   deleteSegment,
   minSegmentMs,
+  MIN_CUT_MS,
+  moveCut,
   moveSegment,
   resetSegment,
+  resizeCut,
   resizeSegment,
   setSegmentCamera,
   setSegmentDepth,
 } from "./edits";
 import { defaultProject } from "./defaults";
-import type { Project } from "./types";
+import type { Cut, Project } from "./types";
 import type { ZoomSegment } from "../zoom/types";
 
 const DURATION = 30_000;
@@ -248,5 +253,86 @@ describe("resetSegment", () => {
   it("unpins so the planner reclaims it", () => {
     const pinned = withSegments([{ ...seg("a", 2000, 6000), pinned: true }]);
     expect(find(resetSegment(pinned, "a"), "a").pinned).toBe(false);
+  });
+});
+
+function withCuts(cuts: Cut[]): Project {
+  return { ...defaultProject("test-bundle"), cuts };
+}
+
+describe("addCut", () => {
+  it("appends a cut with the id it was given", () => {
+    const p = addCut(withCuts([]), "c1", 2000, 3000, DURATION);
+    expect(p.cuts).toEqual([{ id: "c1", startMs: 2000, endMs: 3000 }]);
+  });
+
+  it("merges into an overlapping cut", () => {
+    const p = addCut(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "c1", 3000, 5000, DURATION);
+    expect(p.cuts).toEqual([{ id: "a", startMs: 2000, endMs: 5000 }]);
+  });
+
+  it("ignores a zero-length cut", () => {
+    const p = withCuts([]);
+    expect(addCut(p, "c1", 2000, 2000, DURATION).cuts).toEqual([]);
+  });
+});
+
+describe("moveCut", () => {
+  it("shifts both edges", () => {
+    const p = moveCut(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", 1000, DURATION);
+    expect(p.cuts).toEqual([{ id: "a", startMs: 3000, endMs: 5000 }]);
+  });
+
+  it("clamps at zero without shrinking", () => {
+    const p = moveCut(withCuts([{ id: "a", startMs: 1000, endMs: 3000 }]), "a", -5000, DURATION);
+    expect(p.cuts).toEqual([{ id: "a", startMs: 0, endMs: 2000 }]);
+  });
+
+  it("keeps the moved cut's id when it merges into another", () => {
+    const p = moveCut(
+      withCuts([
+        { id: "a", startMs: 2000, endMs: 4000 },
+        { id: "b", startMs: 8000, endMs: 10_000 },
+      ]),
+      "b",
+      -5000,
+      DURATION,
+    );
+    expect(p.cuts).toEqual([{ id: "b", startMs: 2000, endMs: 5000 }]);
+  });
+});
+
+describe("resizeCut", () => {
+  it("moves the end edge", () => {
+    const p = resizeCut(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 6000, DURATION);
+    expect(p.cuts).toEqual([{ id: "a", startMs: 2000, endMs: 6000 }]);
+  });
+
+  it("stops the end edge at the minimum cut length", () => {
+    const p = resizeCut(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 2010, DURATION);
+    expect(p.cuts[0]?.endMs).toBe(2000 + MIN_CUT_MS);
+  });
+
+  it("stops the start edge at the minimum cut length", () => {
+    const p = resizeCut(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "start", 3990, DURATION);
+    expect(p.cuts[0]?.startMs).toBe(4000 - MIN_CUT_MS);
+  });
+});
+
+describe("deleteCut", () => {
+  it("removes it", () => {
+    const p = deleteCut(
+      withCuts([
+        { id: "a", startMs: 2000, endMs: 4000 },
+        { id: "b", startMs: 8000, endMs: 10_000 },
+      ]),
+      "a",
+    );
+    expect(p.cuts.map((c) => c.id)).toEqual(["b"]);
+  });
+
+  it("returns the project unchanged for an unknown id", () => {
+    const p = withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]);
+    expect(deleteCut(p, "nope")).toBe(p);
   });
 });

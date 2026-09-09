@@ -1,5 +1,6 @@
 import type { ZoomConfig, ZoomSegment, ZoomWaypoint } from "../zoom/types";
-import type { Project } from "./types";
+import { normalizeCuts } from "./cuts";
+import type { Cut, Project } from "./types";
 
 /**
  * The shortest shot with any hold in it.
@@ -210,4 +211,87 @@ export function resetSegment(p: Project, id: string): Project {
     (s) => ({ ...s, pinned: false }),
     Number.POSITIVE_INFINITY,
   );
+}
+
+/**
+ * The shortest cut worth having.
+ *
+ * Unlike a segment's floor this is arbitrary — a cut has no transitions to pay
+ * for. It exists only so a stray click cannot author a 1ms cut that is
+ * invisible and unclickable on the timeline.
+ */
+export const MIN_CUT_MS = 100;
+
+function withCuts(p: Project, cuts: Cut[], durationMs: number, preferId?: string): Project {
+  return { ...p, cuts: normalizeCuts(cuts, durationMs, preferId) };
+}
+
+/** The id comes from the caller so this stays pure and the tests stay stable. */
+export function addCut(
+  p: Project,
+  id: string,
+  startMs: number,
+  endMs: number,
+  durationMs: number,
+): Project {
+  return withCuts(p, [...p.cuts, { id, startMs, endMs }], durationMs);
+}
+
+/**
+ * Slide a cut, keeping its length.
+ *
+ * `preferId` makes this cut the survivor of any merge: without it, dragging
+ * one cut onto another destroys the dragged cut mid-gesture and the drag is
+ * left addressing something that no longer exists.
+ */
+export function moveCut(
+  p: Project,
+  id: string,
+  deltaMs: number,
+  durationMs: number,
+): Project {
+  const target = p.cuts.find((c) => c.id === id);
+  if (target === undefined) return p;
+
+  const length = target.endMs - target.startMs;
+  const startMs = Math.max(0, Math.min(durationMs - length, target.startMs + deltaMs));
+
+  return withCuts(
+    p,
+    p.cuts.map((c) => (c.id === id ? { ...c, startMs, endMs: startMs + length } : c)),
+    durationMs,
+    id,
+  );
+}
+
+export function resizeCut(
+  p: Project,
+  id: string,
+  edge: "start" | "end",
+  tMs: number,
+  durationMs: number,
+): Project {
+  const target = p.cuts.find((c) => c.id === id);
+  if (target === undefined) return p;
+
+  const next =
+    edge === "start"
+      ? { ...target, startMs: Math.max(0, Math.min(target.endMs - MIN_CUT_MS, tMs)) }
+      : {
+          ...target,
+          endMs: Math.min(durationMs, Math.max(target.startMs + MIN_CUT_MS, tMs)),
+        };
+
+  return withCuts(
+    p,
+    p.cuts.map((c) => (c.id === id ? next : c)),
+    durationMs,
+    id,
+  );
+}
+
+export function deleteCut(p: Project, id: string): Project {
+  const cuts = p.cuts.filter((c) => c.id !== id);
+  if (cuts.length === p.cuts.length) return p;
+  return { ...p, cuts };
 }
