@@ -15,6 +15,7 @@
     "fixture": "tsx tools/make-fixture.ts",
     "verify:decode": "tsx tools/verify-decode.ts",
     "verify:parity": "npm run build && tsx tools/verify-parity.ts",
+    "verify:capture": "tsx tools/verify-capture.ts",
     "tune": "tsx tools/tune-planner.ts",
     "bench:encoders": "tsx tools/bench-encoders.ts",
     "bench:preview": "tsx tools/bench-preview.ts",

@@ -1,6 +1,8 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { resolveFfmpeg } from "../ffmpeg";
+import { resolveFfmpeg, resolveFfmpegExePath } from "../ffmpeg";
+import { classifyProbe, type DuplicationPair, sweepDuplication } from "./duplicationSweep";
+import { pinToIntegratedGpu } from "./gpuPreference";
 
 const run = promisify(execFile);
 
@@ -14,6 +16,8 @@ export type ScreenCaptureOptions = {
   drawMouse: boolean;
   /** D3D11 adapter index for ddagrab; ignored by gdigrab. */
   adapterIndex: number;
+  /** DXGI output index on that adapter; ignored by gdigrab. */
+  outputIndex: number;
 };
 
 export type RecordedVideoInfo = {
@@ -38,10 +42,25 @@ export type RecordedVideoInfo = {
  * whichever is requested.
  *
  * So asking for more than you expect is worth something, but ~28fps is the
- * ceiling here. Anything better needs ddagrab. It exists because DDA is not always
- * available — on this machine's hybrid AMD/NVIDIA setup, neither adapter
- * enumerates a DXGI output at all ("Failed to enumerate DXGI output 0"), even
- * though GDI capture of the same desktop works fine.
+ * ceiling here. Anything better needs ddagrab, which reaches ~58fps of a
+ * requested 60 on the same machine.
+ *
+ * **The chain does not use `scale_d3d11`, and must not.** It was the obvious
+ * filter for this — BGRA to NV12 without leaving the GPU — and it fails on this
+ * AMD iGPU with `Could not create the texture (80070057)`, E_INVALIDARG, when
+ * the frames context allocates its NV12 texture array. Feeding the BGRA D3D11
+ * frames straight to `h264_amf` instead fails too: AMF takes the surfaces and
+ * then errors on the first frame.
+ *
+ * `hwdownload,format=bgra,format=nv12` is what actually works, and it costs
+ * nothing measurable — 58.3fps against the 58fps ddagrab manages on its own
+ * with no encoder attached at all. The download is free because the capturing
+ * GPU is the integrated one and its memory is system memory.
+ *
+ * `format=nv12` is not optional. Left to itself ffmpeg picks `yuvj420p` and
+ * writes a full-range file, which would disagree with the limited-range
+ * `yuv420p` the gdigrab path produces — the same take would grade differently
+ * depending on which backend recorded it.
  */
 export function buildCaptureArgs(
   backend: CaptureBackend,
@@ -57,7 +76,12 @@ export function buildCaptureArgs(
     "-nostats",
   ];
 
-  const encode = [
+  // gdigrab hands over BGRA and needs telling what to encode to. The ddagrab
+  // chain has already settled on nv12 in the filtergraph, and repeating it as
+  // -pix_fmt inserts an auto_scale the D3D11 frames cannot pass through:
+  // "Impossible to convert between the formats supported by the filter
+  // 'Parsed_scale_d3d11_1' and the filter 'auto_scale_0'".
+  const encode = (pixFmt: string | null): string[] => [
     "-c:v",
     opts.encoder,
     "-g",
@@ -66,8 +90,7 @@ export function buildCaptureArgs(
     String(opts.gop),
     "-sc_threshold",
     "0",
-    "-pix_fmt",
-    "yuv420p",
+    ...(pixFmt === null ? [] : ["-pix_fmt", pixFmt]),
     // Fragmented, so an abnormal exit still leaves a playable file
     "-movflags",
     "+frag_keyframe+empty_moov",
@@ -81,8 +104,9 @@ export function buildCaptureArgs(
       "-init_hw_device",
       `d3d11va=dx:${opts.adapterIndex}`,
       "-filter_complex",
-      `ddagrab=output_idx=0:draw_mouse=${mouse}:framerate=${opts.fps},scale_d3d11=format=nv12`,
-      ...encode,
+      `ddagrab=output_idx=${opts.outputIndex}:draw_mouse=${mouse}:framerate=${opts.fps},` +
+        `hwdownload,format=bgra,format=nv12`,
+      ...encode(null),
     ];
   }
 
@@ -96,12 +120,19 @@ export function buildCaptureArgs(
     opts.drawMouse ? "1" : "0",
     "-i",
     "desktop",
-    ...encode,
+    ...encode("yuv420p"),
   ];
 }
 
-/** Does this machine actually have a usable Desktop Duplication output? */
-export async function probeBackend(adapterIndex: number): Promise<CaptureBackend> {
+export type CaptureTarget = DuplicationPair & { backend: CaptureBackend };
+
+export type DiagLog = (where: string, detail: unknown) => void;
+
+/** One ddagrab open, classified. Never throws; the stderr is the answer. */
+async function probeDuplication(
+  adapterIndex: number,
+  outputIndex: number,
+): Promise<ReturnType<typeof classifyProbe>> {
   try {
     await run(
       resolveFfmpeg(),
@@ -112,7 +143,7 @@ export async function probeBackend(adapterIndex: number): Promise<CaptureBackend
         "-init_hw_device",
         `d3d11va=dx:${adapterIndex}`,
         "-filter_complex",
-        "ddagrab=output_idx=0:framerate=30",
+        `ddagrab=output_idx=${outputIndex}:framerate=30`,
         "-t",
         "0.3",
         "-f",
@@ -121,10 +152,70 @@ export async function probeBackend(adapterIndex: number): Promise<CaptureBackend
       ],
       { timeout: 15_000 },
     );
-    return "ddagrab";
-  } catch {
-    return "gdigrab";
+    return classifyProbe(0, "");
+  } catch (err) {
+    const e = err as { code?: number; stderr?: string };
+    return classifyProbe(e.code ?? 1, e.stderr ?? "");
   }
+}
+
+/**
+ * Find a usable Desktop Duplication target, or settle for GDI.
+ *
+ * Three things here are deliberate, and all three are the 2026-09-08 bug:
+ *
+ * 1. It sweeps. The old probe took one hardcoded adapter and `output_idx=0`,
+ *    which is only ever right by luck.
+ * 2. It logs. The old probe was `catch { return "gdigrab" }`, so a machine
+ *    silently capturing at half rate looked exactly like a machine without
+ *    Desktop Duplication, and the reason had to be rediscovered by hand.
+ * 3. If nothing duplicates, it pins ffmpeg to the integrated GPU and sweeps
+ *    once more. On a hybrid laptop that is the whole difference — see
+ *    gpuPreference.ts. Machines whose first sweep succeeds are never touched.
+ */
+export async function probeCapture(log: DiagLog): Promise<CaptureTarget> {
+  const first = await sweepDuplication(probeDuplication);
+  if (first.pair !== null) {
+    log("capture:probe", `ddagrab on dx:${first.pair.adapterIndex} output ${first.pair.outputIndex}`);
+    return { backend: "ddagrab", ...first.pair };
+  }
+
+  log("capture:probe", `no output duplicated: ${first.refusals.join("; ") || "none offered"}`);
+
+  let exePath: string;
+  try {
+    exePath = await resolveFfmpegExePath();
+  } catch (err) {
+    log("capture:probe", err);
+    return { backend: "gdigrab", adapterIndex: 0, outputIndex: 0 };
+  }
+
+  let pinned: boolean;
+  try {
+    pinned = await pinToIntegratedGpu(exePath);
+  } catch (err) {
+    log("capture:probe", err);
+    return { backend: "gdigrab", adapterIndex: 0, outputIndex: 0 };
+  }
+
+  if (!pinned) {
+    log("capture:probe", `${exePath} was already on the integrated GPU; falling back to gdigrab`);
+    return { backend: "gdigrab", adapterIndex: 0, outputIndex: 0 };
+  }
+
+  log("capture:probe", `pinned ${exePath} to the integrated GPU; re-sweeping`);
+
+  const second = await sweepDuplication(probeDuplication);
+  if (second.pair !== null) {
+    log(
+      "capture:probe",
+      `ddagrab on dx:${second.pair.adapterIndex} output ${second.pair.outputIndex} after GPU pin`,
+    );
+    return { backend: "ddagrab", ...second.pair };
+  }
+
+  log("capture:probe", `still nothing after GPU pin: ${second.refusals.join("; ") || "none offered"}`);
+  return { backend: "gdigrab", adapterIndex: 0, outputIndex: 0 };
 }
 
 /** Read back what was actually recorded, rather than trusting what was asked for. */

@@ -7,7 +7,8 @@ import { logDiag } from "../log";
 import { AudioRecorder, type AudioRole, type AudioTrackResult } from "./AudioRecorder";
 import {
   type CaptureBackend,
-  probeBackend,
+  type CaptureTarget,
+  probeCapture,
   probeRecording,
   ScreenSource,
 } from "./ScreenSource";
@@ -53,7 +54,7 @@ type Active = {
 };
 
 let active: Active | null = null;
-let cachedBackend: CaptureBackend | null = null;
+let cachedTarget: CaptureTarget | null = null;
 let cachedEncoder: string | null = null;
 
 export function isRecording(): boolean {
@@ -83,9 +84,10 @@ export async function startRecording(): Promise<void> {
   const display = screen.getPrimaryDisplay();
 
   cachedEncoder ??= await pickEncoder();
-  cachedBackend ??= await probeBackend(1);
+  cachedTarget ??= await probeCapture(logDiag);
 
-  const backend = cachedBackend;
+  const target = cachedTarget;
+  const backend = target.backend;
   const requestedFps = backend === "ddagrab" ? DDAGRAB_FPS : loadSettings().captureFps;
 
   // Audio first: device warm-up costs a few hundred milliseconds, and starting
@@ -110,7 +112,8 @@ export async function startRecording(): Promise<void> {
     gop: Math.round(requestedFps * GOP_SECONDS),
     encoder: cachedEncoder,
     drawMouse: false,
-    adapterIndex: 1,
+    adapterIndex: target.adapterIndex,
+    outputIndex: target.outputIndex,
   });
 
   const clockBaseMs = screenSource.startedAtUnixMs;

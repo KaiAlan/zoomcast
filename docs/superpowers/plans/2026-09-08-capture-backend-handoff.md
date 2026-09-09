@@ -1,5 +1,86 @@
 # Handoff — capture is on the gdigrab fallback, and it caps everything
 
+> **RESOLVED 2026-09-08, later the same day.** Capture runs on ddagrab at
+> 55.42fps against the 32.59fps baseline below. The hypothesis in "The single
+> hypothesis worth testing first" was correct; the adapter sweep that framed it
+> was not. **Read the correction before trusting any table on this page.**
+>
+> ## The correction
+>
+> The adapter table below has the two GPUs **swapped**. `dx:0` is not the AMD.
+> Running the same probe with `-loglevel verbose` says so in one line:
+>
+> ```
+> [D3D11VA] Selecting d3d11va adapter 0
+> [D3D11VA] Using device 10de:25a2 (NVIDIA GeForce RTX 3050 Laptop GPU).
+> ```
+>
+> That single line is what the sweep was missing, and it inverts the reading.
+> It is not that "there is exactly one output and Desktop Duplication refuses
+> it". It is that the NVIDIA driver had rewritten DXGI enumeration for the
+> process: with no GPU preference set Windows hands ffmpeg the discrete GPU,
+> Optimus presents the panel's output on it, and the AMD that actually
+> composites the desktop reports **no outputs at all**. Duplication then fails
+> because the desktop is not on the adapter holding the output.
+>
+> Measured three ways, deterministically:
+>
+> | pin on ffmpeg.exe | `dx:0` resolves to | ddagrab |
+> | --- | --- | --- |
+> | absent | NVIDIA `10de:25a2` | FAIL |
+> | `GpuPreference=2` | NVIDIA `10de:25a2` | FAIL |
+> | `GpuPreference=1` | AMD `1002:1636` | **OK** |
+>
+> `GpuPreference=2` behaving identically to no pin is the useful half of that:
+> "high performance" is not the opposite of the fix, it is the same as doing
+> nothing. Only power saving moves the process.
+>
+> Corroboration was already on the machine — Loom's recorder ships
+> `GpuPreference=1` in the same registry key.
+>
+> ## Two more bugs were behind it
+>
+> Neither was reachable while the probe returned gdigrab, so the ddagrab path
+> had in fact never run:
+>
+> 1. `-pix_fmt yuv420p` was in `buildCaptureArgs`'s shared encode block, so it
+>    applied to ddagrab too and inserted an `auto_scale` that D3D11 frames
+>    cannot pass through.
+> 2. **`scale_d3d11` does not work on this AMD iGPU** — `Could not create the
+>    texture (80070057)`, E_INVALIDARG, allocating its NV12 texture array. Nor
+>    will `h264_amf` take BGRA D3D11 surfaces directly; it errors on the first
+>    frame. The chain is now `ddagrab,hwdownload,format=bgra,format=nv12`,
+>    measured at 58.3fps against the 58fps ddagrab reaches with no encoder at
+>    all — the download is free because the capturing GPU is the integrated one.
+>
+> `format=nv12` is load-bearing beyond speed: without it ffmpeg picks
+> `yuvj420p` and writes full range, which would disagree with the gdigrab
+> path's limited-range `yuv420p`.
+>
+> ## What shipped
+>
+> - `duplicationSweep.ts` — sweeps adapters and outputs, stops on the "no such
+>   adapter"/"no such output" wordings rather than probing a fixed grid, and
+>   keeps every refusal for the log.
+> - `gpuPreference.ts` — writes `GpuPreference=1` for the resolved ffmpeg path,
+>   **only after a sweep has already failed**, then sweeps once more. A machine
+>   where Desktop Duplication works never has its registry touched.
+> - `probeCapture(log)` replaces `probeBackend(adapterIndex)`. It returns the
+>   adapter AND output that worked, and it logs — the `catch { return
+>   "gdigrab" }` that hid all of the above is gone.
+> - `npm run verify:capture` — drives the real probe and the real
+>   `ScreenSource`, and fails on a fallback or on a rate below 50fps.
+>
+> One consequence worth noting: `scale_d3d11` was the documented reason not to
+> bundle ffmpeg-static, because the essentials builds lack it. Every filter in
+> the new chain is core. That does not mean bundling should be retried — it
+> means the filter list is no longer the thing standing in the way.
+>
+> Everything below is the original handoff, kept because the measurements are
+> real and the reasoning is worth seeing next to its correction.
+
+---
+
 **Written 2026-09-08.** Branch `main`, clean, all gates green.
 **State:** 383 tests / 43 files, typecheck silent, `verify:decode` 6/6 k=0,
 `verify:parity` 30/30, `tune -- all` unchanged from the session baseline.
@@ -120,6 +201,16 @@ capture:rate: backend=gdigrab requested=60 achieved=32.59 size=1920x1080
 ```
 
 ## Two smaller items, unrelated and independent
+
+> **Both resolved 2026-09-08.** The judder item's diagnosis was wrong in the
+> same way the adapter table was: measured as per-frame acceleration, the
+> camera was 30x rougher than the path it follows (rms 18.2 vs 0.59, max
+> 321.6px in one frame) — a teleport, not a 10Hz kink. Two keyframe-timing
+> bugs, both fixed; `FOLLOW_SAMPLE_MS` stays at 100 and the trade-off table
+> lives in its comment. The zigzag item was right that it is a planning change:
+> `dropDoubleBacks` in segments.ts, gated on rest time and on the waypoint
+> being visible from both neighbours.
+
 
 - **Follow-camera judder.** `FOLLOW_SAMPLE_MS = 100` with `easing: "linear"`
   means the follow path updates at 10Hz with a velocity kink at every sample.
