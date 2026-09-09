@@ -32,13 +32,54 @@ between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
 a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
 
-**Start the next session at
-`docs/superpowers/plans/2026-09-08-capture-backend-handoff.md`.** Capture is
-running on the **gdigrab fallback**, so every take is ~32fps instead of 60, and
-that caps the export, the camera read and the preview at once. The adapter and
-output sweeps are already done and written up there, along with the one
-hypothesis worth testing first. It predates the 2026-09-08 session and was
-found while verifying something else.
+**Capture runs on ddagrab at last. 32.59fps -> 55.42fps.** The 2026-09-08
+handoff's leading hypothesis was right — ffmpeg was running on the wrong GPU —
+but its adapter table had the two GPUs **swapped**, and that is what made the
+evidence read as "there is one output and DDA refuses it". `dx:0` was never the
+AMD. With no GPU preference set, Windows hands ffmpeg the discrete NVIDIA, and
+the Optimus driver rewrites DXGI enumeration for that process: the panel's
+output moves onto the dGPU, the AMD reports no outputs at all, and Desktop
+Duplication refuses the dGPU's copy because the desktop is composited on the
+AMD. `GpuPreference=1` on ffmpeg.exe stops the rewrite. `GpuPreference=2`
+measured identical to no pin. See
+`docs/superpowers/plans/2026-09-08-capture-backend-handoff.md`, which now
+carries the resolution.
+
+**Two more bugs were behind that one**, both unreachable while the probe
+returned gdigrab, and neither guessable from the code:
+
+  - `-pix_fmt yuv420p` sat in the shared encode args, so it applied to the
+    ddagrab path too and inserted an `auto_scale` that D3D11 frames cannot pass.
+  - **`scale_d3d11` does not work on this AMD iGPU at all** — E_INVALIDARG
+    allocating its NV12 texture. Feeding BGRA D3D11 frames straight to
+    `h264_amf` fails too. The chain is now
+    `ddagrab,hwdownload,format=bgra,format=nv12`, which costs nothing measurable
+    because the capturing GPU is the integrated one and its memory is system
+    memory. `format=nv12` is not optional: without it ffmpeg picks `yuvj420p`
+    and the two backends would disagree on colour range.
+
+`npm run verify:capture` is the guard. It drives the real `probeCapture` and
+`ScreenSource` and fails if either the backend or the rate regresses.
+
+**The follow camera's judder was not what it looked like.** The handoff blamed
+10Hz linear sampling. Measured as per-frame acceleration over real takes with
+every shot forced to follow, the camera was 30x rougher than the path it
+follows — rms 18.2 against 0.59, max 321.6px in a single frame. That is a
+teleport, not a kink, and it was two bugs of the same kind: the follow grid was
+laid out from the waypoint's nominal `tMs` while its in-keyframe is emitted
+`zoomInOverlapMs` later, so samples ran underneath the zoom-in and one landed on
+exactly its timestamp; and the in-keyframe's centre was read from the path at
+the waypoint's time rather than at the time the camera actually arrives. Fixed,
+measured rms 1.20 / max 12.4. The 10Hz interpolation IS the remaining term and
+it is small — the trade-off table is in the `FOLLOW_SAMPLE_MS` comment, and the
+constant stays at 100.
+
+**Waypoints that double back are dropped when the trip costs more than it
+shows.** Over the 13 takes on disk, 12 of 17 interior triples reverse direction,
+median detour 728px. Most are fine — the camera rests three to five seconds. The
+guard fires only when what is left of the gap after paying `panMs` is under
+`minDwellMs` AND the waypoint is on screen from both neighbours, so nothing that
+happened stops being shown; only the trip goes. It removed 2 of the 12.
 
 `docs/superpowers/plans/2026-09-07-camera-feel-handoff.md` is now largely
 history — its three preview routes were overtaken by a fourth (the `<video>`
@@ -89,12 +130,13 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 383 passing, 43 files
+npm test              # 418 passing, 46 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
 npm run verify:parity # 30/30 at 43-47dB, over six configurations (builds first)
 npm run tune -- all   # zoom plan over every take on disk
+npm run verify:capture # ddagrab at ~55fps; fails on a fallback to gdigrab
 ```
 
 Everything runs **natively on Windows in PowerShell**. Not WSL — Electron,
