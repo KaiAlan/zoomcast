@@ -6,10 +6,32 @@ import type { PlanContext, ZoomConfig, ZoomKeyframe, ZoomSegment } from "./types
  * How often a follow segment emits a keyframe.
  *
  * The path it samples is already damped at a several-hundred-millisecond
- * half-life, so 100ms with a linear ramp between samples reproduces it to well
- * under a pixel; the alternative — one keyframe per frame — would put the
- * output frame rate into the keyframe list, which is exactly what precomputing
- * the path exists to avoid.
+ * half-life, so 100ms with a linear ramp between samples reproduces its
+ * POSITION to well under a pixel. That claim used to stand here alone, and it
+ * is the reason the real problem went unnoticed for so long: position was never
+ * what judder was about. Piecewise-linear interpolation is C0 but not C1, so
+ * the velocity steps at every knot however close the positions are.
+ *
+ * Measured 2026-09-08 as per-frame acceleration in source pixels, over the
+ * holds of two real takes with every shot forced to follow. The path itself is
+ * the floor no sampling rate can beat:
+ *
+ *   step    rms     max     keyframes (33s take)
+ *   100ms   1.200   12.4    366
+ *    50ms   1.017   10.0    712
+ *    33ms   0.744    5.4   1070
+ *   path    0.593    3.8      —
+ *
+ * 100ms stays. Halving the step buys 15% of the rms for double the keyframe
+ * list, and the list grows linearly with take length; one keyframe per frame
+ * would put the output frame rate into it, which is what precomputing the path
+ * exists to avoid.
+ *
+ * This was NOT the judder. Before the two fixes below — sampling the grid from
+ * where the camera arrives, and reading the path at that same instant — the
+ * same measurement read rms 18.249 and max 321.565, a camera that jumped 296px
+ * in one frame. Compared with that, the interpolation order is a rounding
+ * error.
  */
 export const FOLLOW_SAMPLE_MS = 100;
 
@@ -48,12 +70,12 @@ export function segmentsToKeyframes(
     const waypoints = openAtRest(s, cfg);
     if (waypoints.length === 0) continue;
 
-    for (const [i, w] of waypoints.entries()) {
-      const centre =
-        s.position === "follow" && follow !== null
-          ? followCentre(follow, w.tMs, depthToScale(w.depth, ceiling), ctx, w)
-          : { cx: w.cx, cy: w.cy };
+    // Where each waypoint's in-keyframe actually landed. The first one is
+    // moved by zoomInOverlapMs, so it is not `w.tMs`, and a follow segment
+    // that assumed otherwise sampled straight through its own zoom-in.
+    const settles: number[] = [];
 
+    for (const [i, w] of waypoints.entries()) {
       // The zoom-in settles `zoomInOverlapMs` into its own region, so the
       // camera is still arriving as activity begins.
       //
@@ -81,6 +103,20 @@ export function segmentsToKeyframes(
           ? Math.max(w.tMs, Math.min(Math.max(w.tMs, s.startMs + cfg.zoomInOverlapMs), latestSettleMs))
           : w.tMs;
 
+      settles.push(settleMs);
+
+      // Sampled at `settleMs`, not at `w.tMs`. The keyframe says "the camera is
+      // here at this time", and for a follow segment "here" is wherever the
+      // path is when the camera arrives. Reading the path at the waypoint's own
+      // time instead told the camera to arrive at a position the cursor left
+      // `zoomInOverlapMs` ago, and the first follow sample 100ms later then had
+      // to cover all of that travel at once — 41.75px in a frame against a path
+      // moving 6.07px, on the fixture in keyframes.test.ts.
+      const centre =
+        s.position === "follow" && follow !== null
+          ? followCentre(follow, settleMs, depthToScale(w.depth, ceiling), ctx, w)
+          : { cx: w.cx, cy: w.cy };
+
       kfs.push({
         id: `${w.id}i`,
         tSourceMs: settleMs,
@@ -103,9 +139,16 @@ export function segmentsToKeyframes(
     // fixed cadence and let zoomAt ramp linearly between the samples. The
     // samples come from one precomputed array, so preview and export see the
     // same camera.
+    // From where the camera ARRIVES, not from where the waypoint nominally is.
+    // Sampling from `last.tMs` put follow samples underneath the zoom-in's own
+    // transition and, on a segment whose waypoint sits at its start, landed one
+    // on exactly the in-keyframe's timestamp — a zero-width window for `zoomAt`
+    // and a 296px jump in a single frame on take 2026-09-08T14-53-54.
+    const lastSettleMs = settles[settles.length - 1] ?? last.tMs;
+
     const tail =
       s.position === "follow" && follow !== null
-        ? sampleFollow(follow, last, s, cfg, ctx, ceiling)
+        ? sampleFollow(follow, last, lastSettleMs, s, cfg, ctx, ceiling)
         : [];
     kfs.push(...tail);
 
@@ -162,10 +205,12 @@ function followCentre(
   );
 }
 
-/** The follow samples between a segment's last waypoint and its end. */
+/** The follow samples between the camera's arrival and the segment's end. */
 function sampleFollow(
   path: CursorPath,
   last: ZoomSegment["waypoints"][number],
+  /** When the last waypoint's in-keyframe lands — not the waypoint's own tMs. */
+  fromMs: number,
   s: ZoomSegment,
   cfg: ZoomConfig,
   ctx: PlanContext,
@@ -178,7 +223,7 @@ function sampleFollow(
   // endMs - transitionMs, and a follow sample inside it would fight it.
   const until = s.endMs - cfg.transitionOutMs;
 
-  for (let t = last.tMs + FOLLOW_SAMPLE_MS, n = 0; t < until; t += FOLLOW_SAMPLE_MS, n++) {
+  for (let t = fromMs + FOLLOW_SAMPLE_MS, n = 0; t < until; t += FOLLOW_SAMPLE_MS, n++) {
     out.push({
       id: `${last.id}f${n}`,
       tSourceMs: t,

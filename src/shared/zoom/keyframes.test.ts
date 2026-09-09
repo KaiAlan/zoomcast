@@ -3,6 +3,7 @@ import { DEFAULT_ZOOM_CONFIG } from "./config";
 import { pixelParityZoom, screenRect } from "./geometry";
 import type { TelemetryEvent } from "../bundle/types";
 import { followPath } from "./camera";
+import { cursorAt } from "../cursor/path";
 import { zoomAt } from "./interpolate";
 import { screenQuadFor } from "./viewport";
 import { depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
@@ -253,6 +254,76 @@ describe("a follow segment", () => {
     for (const k of samples) {
       expect(k.easing).toBe("linear");
       expect(k.transitionMs).toBe(100);
+    }
+  });
+
+  /**
+   * Regression for 2026-09-08.
+   *
+   * `seg5` above starts at 1000, so `openAtRest` moves its waypoint to
+   * `transitionMs` and the in-keyframe happens to land where the follow grid
+   * expects it. A shot that starts after the opening transition does not get
+   * that reprieve: `zoomInOverlapMs` moves its in-keyframe and the grid was
+   * still laid out from the waypoint's original `tMs`. That is the shape the
+   * planner emits on a real take.
+   *
+   * Measured on take 2026-09-08T14-53-54 with every shot forced to follow: a
+   * follow sample landed on exactly the in-keyframe's timestamp, and because
+   * `zoomAt` then had a zero-width window between them the camera snapped from
+   * x=1170.5 to x=870.7 — 296px in a single frame.
+   */
+  const segLate = seg({
+    startMs: 2000,
+    endMs: 5000,
+    position: "follow",
+    waypoints: [{ id: "k0", tMs: 2000, depth: 1, cx: 0.25, cy: 0.5 }],
+  });
+
+  it("starts sampling where the zoom-in arrives, not where the waypoint is", () => {
+    const kfs = segmentsToKeyframes([segLate], cfg, square, path);
+    const settle = kfs.find((k) => k.id === "k0i")?.tSourceMs ?? 0;
+    const samples = kfs.filter((k) => k.id.startsWith("k0f"));
+
+    // The waypoint is at 2000; the camera does not arrive until 2500.
+    expect(settle).toBe(2000 + cfg.zoomInOverlapMs);
+    expect(samples.length).toBeGreaterThan(0);
+    for (const k of samples) expect(k.tSourceMs).toBeGreaterThan(settle);
+  });
+
+  it("never puts two keyframes on the same timestamp", () => {
+    for (const s of [seg5, segLate]) {
+      const times = segmentsToKeyframes([s], cfg, square, path).map((k) => k.tSourceMs);
+      expect(new Set(times).size).toBe(times.length);
+    }
+  });
+
+  /**
+   * The collision was a discontinuity, not a kink: two keyframes sharing a
+   * timestamp give `zoomAt` a zero-width window, and it jumps.
+   *
+   * The bound is the path's own speed rather than a constant, because the path
+   * is legitimately fast — `seg5`'s cursor teleports 1500px at t=1500 and the
+   * 300ms lag chasing it covers 40px in a frame. What must not happen is the
+   * camera outrunning the thing it is following.
+   */
+  it("moves no faster than the path it follows, once it has arrived", () => {
+    const frameMs = 1000 / 60;
+
+    for (const s of [seg5, segLate]) {
+      const kfs = segmentsToKeyframes([s], cfg, square, path);
+      const settle = kfs.find((k) => k.id === "k0i")?.tSourceMs ?? 0;
+
+      const cameraAt = (t: number): number => zoomAt(kfs, t).cx * square.source.w;
+      const pathAt = (t: number): number => cursorAt(path, t)?.x ?? 0;
+
+      let camera = 0;
+      let cursor = 0;
+      for (let t = settle + frameMs; t <= s.endMs - cfg.transitionOutMs; t += frameMs) {
+        camera = Math.max(camera, Math.abs(cameraAt(t) - cameraAt(t - frameMs)));
+        cursor = Math.max(cursor, Math.abs(pathAt(t) - pathAt(t - frameMs)));
+      }
+
+      expect(camera).toBeLessThanOrEqual(cursor * 1.1);
     }
   });
 
