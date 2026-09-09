@@ -32,16 +32,12 @@ between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
 a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
 
-**Phase E is underway on the branch `phase-e-timeline-editing`, not on `main`.
-Start the next session at
-`docs/superpowers/plans/2026-09-09-phase-e-handoff.md`** (on that branch).
-Tasks 1–6 of 12 are committed and reviewed there — the pure modules behind
-draggable segments, real cuts and undo/redo. Task 7 was in flight when the
-session ended and **left uncommitted work in the tree**; the handoff says how to
-tell whether to keep it. The design is
-`docs/specs/2026-09-09-phase-e-timeline-editing-design.md` and the task record
-is `.superpowers/sdd/2026-09-09-phase-e-timeline-editing/progress.md`, which
-carries every ruling made without the user in the room.
+**Phase E is complete — all 12 tasks — on the branch
+`phase-e-timeline-editing`, not on `main`.** See "What landed — phase E"
+below for what shipped and, just as important, what has never been run. The
+design is `docs/specs/2026-09-09-phase-e-timeline-editing-design.md` and the
+task record is `.superpowers/sdd/2026-09-09-phase-e-timeline-editing/progress.md`,
+which carries every ruling made without the user in the room.
 
 **Capture runs on ddagrab at last. 32.59fps -> 55.42fps.** The 2026-09-08
 handoff's leading hypothesis was right — ffmpeg was running on the wrong GPU —
@@ -202,6 +198,45 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 13.7/min including one held 0.89s against 1.2s of transition and one starting
 0.14s after the previous ended.
 
+## What landed — phase E (2026-09-09)
+
+Phase E is done, 12 tasks, on `phase-e-timeline-editing` (not merged to
+`main`). It delivered: the `applyPlan` split into `replanFrom` /
+`deriveKeyframes`; cut ids; an undo/redo history with drag-gesture coalescing
+and a 100-entry cap; pure segment and cut edit operations (`edits.ts`) with
+their invariants; one mutation seam for the editor
+(`useProjectHistory`/`edit.apply`) with history behind it; a timeline split
+into ruler, zoom and cut lanes; draggable and resizable zoom segments; real
+drag-to-create cut regions, replacing the old "cut 0.5s here" button; a
+per-shot popover for depth and camera, replacing the inspector's "selected
+shot" section; and Ctrl+Z / Ctrl+Shift+Z / Delete / Escape.
+
+**Phase E's entire pointer/UI layer has never been run.** This is not a
+footnote. No `.tsx` file in this repo is reached by any test — the vitest
+suite has no React harness — and the brief's "verify by hand" step was
+skipped in tasks 10, 11 and 12 because no agent in that run could launch
+Electron. Every gate that *can* run mechanically (tests, typecheck, build,
+decode parity, preview/export parity, capture rate, tune) is green and
+unchanged, and none of them exercises a pointer event, a drag, or a
+keystroke. Before phase E is trusted, a human needs to sit down and drive
+it:
+
+- **Cut lane** — drag on empty space to create a cut (output duration should
+  shorten); drag a cut; drag one cut into another (they merge, and the merged
+  cut keeps following the pointer); drag a cut's END edge a long way — it
+  cannot grow past half the remaining lane, a known consequence of drawing a
+  source-width region on an output scale (see `cutResizeToSource` in
+  `src/shared/project/edits.ts`), and it needs a human's judgment on whether
+  that limit is tolerable.
+- **Zoom lane** — drag and resize a segment, including across a cut.
+- **Popover** — select a shot, press a depth preset (the preview should
+  change immediately and the badge should track it), and confirm "reset to
+  auto" returns a dragged shot to planner control.
+- **Shortcuts** — Ctrl+Z undoes a whole drag in ONE press, not one
+  pointermove at a time; Ctrl+Shift+Z redoes; Delete removes the selection
+  and undoing the delete restores it **selected**; Escape clears the
+  selection and closes the popover.
+
 ## What landed 2026-09-08
 
 Every item below was found by measuring, and several first attempts were
@@ -257,7 +292,7 @@ answered.
 | C+ | Camera geometry (fixed frame, sampled region), configurable ceiling, depth grading — **done**, spec `2026-09-07-camera-geometry-and-depth-design.md` | C |
 | C+ shots | Per-segment camera switch: segment blocks in the timeline, `fixed`/`follow` in the inspector — **done**, plan `2026-09-07-follow-camera-handoff.md` | C+ |
 | D | Directional motion blur — **done** 2026-09-08, off by default (`style.motionBlurAmount`) | C |
-| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
+| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo, keyboard shortcuts — **done** on branch `phase-e-timeline-editing`, unverified by hand | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
 

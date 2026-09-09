@@ -10,6 +10,7 @@ import {
   createCutFromDrag,
   cutDragToSource,
   cutResizeToSource,
+  deleteCut,
   deleteSegment,
   resetSegment,
   segmentDragToSource,
@@ -471,11 +472,51 @@ export function Editor({
     // reads its context from inside the hook.
   }, [bundle, manifest, resetProject]);
 
-  // Space toggles playback. preventDefault matters twice over: it stops the
-  // page scrolling, and it stops Space from re-activating whichever button was
-  // last clicked, which would otherwise fight this handler.
+  // Latest `edit` for the keydown effect below. `edit` changes identity on
+  // every history change (undo, redo, select, any apply), so closing over it
+  // directly would force the effect to re-attach its listener on every one of
+  // those -- a dependency list that is technically correct but re-runs
+  // constantly. Reading through a ref updated every render keeps the
+  // listener attached once, the same idiom `useProjectHistory` itself uses
+  // for `ctx` and `onProject`.
+  const editRef = useRef(edit);
+  editRef.current = edit;
+
+  // Space toggles playback; Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes;
+  // Delete/Backspace removes the selection; Escape clears it. preventDefault
+  // on Space matters twice over: it stops the page scrolling, and it stops
+  // Space from re-activating whichever button was last clicked, which would
+  // otherwise fight this handler.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) editRef.current.redo();
+        else editRef.current.undo();
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        const s = editRef.current.selection;
+        if (s === null) return;
+        event.preventDefault();
+        editRef.current.apply((p) =>
+          s.kind === "segment" ? deleteSegment(p, s.id) : deleteCut(p, s.id),
+        );
+        editRef.current.select(null);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        // Also clears whatever `SegmentPopover` is showing: it unmounts once
+        // `edit.selection` resolves to null, on the next render. That
+        // component's own Escape listener calls the same `select(null)` --
+        // redundant on a keystroke that already had a popover open, but not
+        // a race, since both converge on the same call rather than disagreeing.
+        editRef.current.select(null);
+        return;
+      }
+
       if (event.code !== "Space" || event.repeat) return;
 
       const target = event.target as HTMLElement | null;
