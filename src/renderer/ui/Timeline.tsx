@@ -31,6 +31,11 @@ type Props = {
   /** The configured cap. Since 2026-09-07 these are different numbers. */
   maxZoom: number;
   onSeek: (tOutputMs: number) => void;
+  /** Absolute output-ms target for the segment's start edge. See useRegionDrag. */
+  onSegmentMove: (id: string, targetStartOutputMs: number) => void;
+  /** Absolute output-ms target for the dragged edge. See useRegionDrag. */
+  onSegmentResize: (id: string, edge: "start" | "end", tOutputMs: number) => void;
+  onSegmentDragCommit: () => void;
 };
 
 function fmt(ms: number): string {
@@ -53,6 +58,9 @@ export function Timeline({
   pixelParityZoom,
   maxZoom,
   onSeek,
+  onSegmentMove,
+  onSegmentResize,
+  onSegmentDragCommit,
 }: Props) {
   return (
     <div>
@@ -67,6 +75,9 @@ export function Timeline({
           selection={selection}
           onSelect={onSelect}
           pixelParityZoom={pixelParityZoom}
+          onSegmentMove={onSegmentMove}
+          onSegmentResize={onSegmentResize}
+          onSegmentDragCommit={onSegmentDragCommit}
         />
         <CutLane
           durationMs={durationMs}

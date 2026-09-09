@@ -6,7 +6,7 @@ import { outputDurationMs, outputToSource } from "../../shared/project/timeline"
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
 import type { Project } from "../../shared/project/types";
-import { addCut, setSegmentCamera } from "../../shared/project/edits";
+import { addCut, moveSegment, resizeSegment, setSegmentCamera } from "../../shared/project/edits";
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
@@ -530,6 +530,47 @@ export function Editor({
     edit.apply((p) => setSegmentCamera(p, id, position), { replan: true });
   };
 
+  /**
+   * Drag a segment to an absolute output-ms target for its start edge.
+   *
+   * `targetStartOutputMs` is absolute, not a delta: `applyTransient` extends
+   * an open gesture by replacing `present` wholesale on every intermediate
+   * step (see `useProjectHistory.step` / `history.beginOrExtend`), so a
+   * delta-from-drag-start would be re-applied on top of an already-moved
+   * project and compound. An absolute target makes this idempotent --
+   * re-applying it to an unchanged project is a no-op, and a segment
+   * clamped against a neighbour has its next step measured fresh from the
+   * clamped position toward the same target rather than banking the
+   * rejected movement.
+   */
+  const onSegmentMove = (id: string, targetStartOutputMs: number): void => {
+    edit.applyTransient((p) => {
+      const s = p.zoom.segments.find((x) => x.id === id);
+      if (s === undefined) return p;
+      const targetSource = outputToSource(targetStartOutputMs, manifest.durationMs, p.cuts);
+      return moveSegment(p, id, targetSource - s.startMs, manifest.durationMs);
+    });
+  };
+
+  /**
+   * Resize one edge to an absolute output-ms target. Idempotent for the same
+   * reason as `onSegmentMove` above: `tOutputMs` is absolute, and each edge
+   * maps through `outputToSource` independently (spec §7), so a segment
+   * dragged across a cut changes its source duration while its output
+   * duration -- what the viewer sees -- stays fixed.
+   */
+  const onSegmentResize = (id: string, edge: "start" | "end", tOutputMs: number): void => {
+    edit.applyTransient((p) =>
+      resizeSegment(
+        p,
+        id,
+        edge,
+        outputToSource(tOutputMs, manifest.durationMs, p.cuts),
+        manifest.durationMs,
+      ),
+    );
+  };
+
   /** Interim: Task 10 replaces this with a real cut tool on the timeline. */
   const onAddCut = (): void => {
     const start = playheadMs;
@@ -671,6 +712,9 @@ export function Editor({
           pixelParityZoom={ceiling}
           maxZoom={project.zoom.config.maxZoom}
           onSeek={(t) => playerRef.current?.seek(t)}
+          onSegmentMove={onSegmentMove}
+          onSegmentResize={onSegmentResize}
+          onSegmentDragCommit={edit.commitGesture}
         />
       </div>
 

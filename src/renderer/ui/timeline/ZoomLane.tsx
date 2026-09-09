@@ -1,8 +1,10 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { sourceSpanToOutput, sourceToOutput } from "../../../shared/project/timeline";
 import type { Cut } from "../../../shared/project/types";
 import type { Selection } from "../../../shared/project/history";
 import type { ZoomKeyframe, ZoomSegment } from "../../../shared/zoom/types";
-import { msToPct } from "./geometry";
+import { EDGE_HIT_PX, MIN_RESIZABLE_PX, msToPct } from "./geometry";
+import { useRegionDrag } from "./useRegionDrag";
 
 type Props = {
   durationMs: number;
@@ -18,9 +20,107 @@ type Props = {
   onSelect: (s: Selection) => void;
   /** Where upscaling begins. Keyframes past it are marked. */
   pixelParityZoom: number;
+  /** Absolute output-ms target for the segment's start edge. See useRegionDrag. */
+  onSegmentMove: (id: string, targetStartOutputMs: number) => void;
+  /** Absolute output-ms target for the dragged edge. See useRegionDrag. */
+  onSegmentResize: (id: string, edge: "start" | "end", tOutputMs: number) => void;
+  onSegmentDragCommit: () => void;
 };
 
 const HEIGHT = 56;
+
+function SegmentRegion({
+  s,
+  span,
+  outputDurationMs,
+  selected,
+  follow,
+  onSelect,
+  drag,
+}: {
+  s: ZoomSegment;
+  span: { startMs: number; endMs: number };
+  outputDurationMs: number;
+  selected: boolean;
+  follow: boolean;
+  onSelect: () => void;
+  drag: ReturnType<typeof useRegionDrag>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [widthPx, setWidthPx] = useState(0);
+
+  // Whether the region is wide enough to grab an edge (MIN_RESIZABLE_PX)
+  // depends on its rendered pixel width, but the region is laid out with a
+  // percentage `width` -- there is no pixel figure available at render time
+  // without measuring the live DOM node.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w !== undefined) setWidthPx(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const resizable = widthPx >= MIN_RESIZABLE_PX;
+
+  return (
+    <div
+      ref={ref}
+      title={`${s.id} · ${s.position}${s.waypoints.length > 1 ? ` · ${s.waypoints.length} waypoints` : ""}`}
+      onPointerDown={(e) => {
+        // Select the segment (never toggle it off -- a drag that starts on
+        // an already-selected segment must not deselect it mid-gesture) and
+        // start the drag from the same gesture. JSX allows only one
+        // onPointerDown per element, so these two used-to-be-separate
+        // handlers merge here.
+        onSelect();
+        drag.onPointerDown(e, s.id);
+      }}
+      style={{
+        position: "absolute",
+        left: `${msToPct(span.startMs, outputDurationMs)}%`,
+        width: `${Math.max(0, msToPct(span.endMs, outputDurationMs) - msToPct(span.startMs, outputDurationMs))}%`,
+        top: 4,
+        bottom: 4,
+        borderRadius: 4,
+        boxSizing: "border-box",
+        background: follow ? "rgba(122, 200, 160, 0.16)" : "rgba(106, 166, 232, 0.13)",
+        border: `1px solid ${
+          selected ? "#e8ecf2" : follow ? "rgba(122,200,160,0.45)" : "rgba(106,166,232,0.3)"
+        }`,
+        cursor: "grab",
+      }}
+    >
+      {resizable && (
+        <>
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: EDGE_HIT_PX,
+              cursor: "ew-resize",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: EDGE_HIT_PX,
+              cursor: "ew-resize",
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
 
 export function ZoomLane({
   durationMs,
@@ -31,7 +131,17 @@ export function ZoomLane({
   selection,
   onSelect,
   pixelParityZoom,
+  onSegmentMove,
+  onSegmentResize,
+  onSegmentDragCommit,
 }: Props) {
+  const drag = useRegionDrag({
+    outputDurationMs,
+    onMove: onSegmentMove,
+    onResize: onSegmentResize,
+    onCommit: onSegmentDragCommit,
+  });
+
   return (
     <div
       style={{
@@ -59,28 +169,15 @@ export function ZoomLane({
         const follow = s.position === "follow";
 
         return (
-          <div
+          <SegmentRegion
             key={s.id}
-            title={`${s.id} · ${s.position}${s.waypoints.length > 1 ? ` · ${s.waypoints.length} waypoints` : ""}`}
-            onPointerDown={() => {
-              onSelect(selected ? null : { kind: "segment", id: s.id });
-            }}
-            style={{
-              position: "absolute",
-              left: `${msToPct(span.startMs, outputDurationMs)}%`,
-              width: `${Math.max(0, msToPct(span.endMs, outputDurationMs) - msToPct(span.startMs, outputDurationMs))}%`,
-              top: 4,
-              bottom: 4,
-              borderRadius: 4,
-              boxSizing: "border-box",
-              background: follow
-                ? "rgba(122, 200, 160, 0.16)"
-                : "rgba(106, 166, 232, 0.13)",
-              border: `1px solid ${
-                selected ? "#e8ecf2" : follow ? "rgba(122,200,160,0.45)" : "rgba(106,166,232,0.3)"
-              }`,
-              cursor: "pointer",
-            }}
+            s={s}
+            span={span}
+            outputDurationMs={outputDurationMs}
+            selected={selected}
+            follow={follow}
+            onSelect={() => onSelect({ kind: "segment", id: s.id })}
+            drag={drag}
           />
         );
       })}
