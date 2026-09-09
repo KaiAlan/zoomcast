@@ -56,6 +56,22 @@ const button: React.CSSProperties = {
   fontSize: 13,
 };
 
+/**
+ * True when a keydown's target is a text/number input, a textarea, or
+ * anything contenteditable -- the one definition every guarded branch of the
+ * keydown effect below shares, so a destructive or overriding shortcut
+ * (Delete/Backspace, Ctrl/Cmd+Z) can never fire while the user is typing in
+ * one of the Inspector's or the style panel's fields, and so that guard can
+ * never quietly drift out of sync with the Space handler's own.
+ */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return (
+    el !== null &&
+    (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
+  );
+}
+
 export function Editor({
   bundle,
   onBack,
@@ -489,7 +505,14 @@ export function Editor({
   // otherwise fight this handler.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      // Shared with the Space branch below -- Delete/Backspace is
+      // destructive and Ctrl/Cmd+Z overrides whatever native undo a text
+      // field has, so both must yield to typing exactly as Space already
+      // does. One shared check keeps the two definitions from drifting apart.
+      const typing = isTypingTarget(event.target);
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        if (typing) return;
         event.preventDefault();
         if (event.shiftKey) editRef.current.redo();
         else editRef.current.undo();
@@ -497,6 +520,7 @@ export function Editor({
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
+        if (typing) return;
         const s = editRef.current.selection;
         if (s === null) return;
         event.preventDefault();
@@ -508,7 +532,10 @@ export function Editor({
       }
 
       if (event.key === "Escape") {
-        // Also clears whatever `SegmentPopover` is showing: it unmounts once
+        // Deliberately NOT guarded on `typing`: clearing `edit.selection`
+        // has no effect on a field's contents or focus, unlike Delete and
+        // Ctrl+Z it is not destructive and overrides nothing, and it also
+        // clears whatever `SegmentPopover` is showing -- it unmounts once
         // `edit.selection` resolves to null, on the next render. That
         // component's own Escape listener calls the same `select(null)` --
         // redundant on a keystroke that already had a popover open, but not
@@ -518,13 +545,6 @@ export function Editor({
       }
 
       if (event.code !== "Space" || event.repeat) return;
-
-      const target = event.target as HTMLElement | null;
-      const typing =
-        target !== null &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable);
       if (typing) return;
 
       event.preventDefault();
