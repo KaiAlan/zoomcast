@@ -93,7 +93,7 @@ export function Editor({
   });
   const project = edit.project;
 
-  /** The timeline still speaks in segment ids; `Selection` is the wider type. */
+  /** The Inspector still keys its lookup off a bare segment id; `Selection` is the wider type. */
   const selectedSegmentId = edit.selection?.kind === "segment" ? edit.selection.id : null;
 
   const [playheadMs, setPlayheadMs] = useState(0);
@@ -664,10 +664,8 @@ export function Editor({
           cuts={project.cuts}
           keyframes={project.zoom.keyframes}
           segments={project.zoom.segments}
-          selectedSegmentId={selectedSegmentId}
-          onSelectSegment={(id) =>
-            edit.select(id === null ? null : { kind: "segment", id })
-          }
+          selection={edit.selection}
+          onSelect={edit.select}
           playheadMs={playheadMs}
           playheadRef={playheadElRef}
           pixelParityZoom={ceiling}
