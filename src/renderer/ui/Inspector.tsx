@@ -4,7 +4,7 @@ import type {
   StyleConfig,
 } from "../../shared/project/types";
 import { DEFAULT_ZOOM_CONFIG } from "../../shared/zoom/config";
-import type { EasingName, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
+import type { EasingName, ZoomConfig } from "../../shared/zoom/types";
 import { buttonInput, fieldLabel, numberInput, row, sectionHeader, selectInput } from "./controls";
 import { StylePanel } from "./StylePanel";
 
@@ -18,9 +18,6 @@ type Props = {
   dir: string;
   onStyleChange: (next: StyleConfig) => void;
   onOutputChange: (next: OutputConfig) => void;
-  /** The shot selected in the timeline, or null when nothing is selected. */
-  selectedSegment: ZoomSegment | null;
-  onSegmentCameraChange: (id: string, position: ZoomSegment["position"]) => void;
 };
 
 /**
@@ -85,58 +82,12 @@ export function Inspector({
   dir,
   onStyleChange,
   onOutputChange,
-  selectedSegment,
-  onSegmentCameraChange,
 }: Props) {
   const isTuned = FIELDS.every((f) => config[f.key] === DEFAULT_ZOOM_CONFIG[f.key]) &&
     config.easing === DEFAULT_ZOOM_CONFIG.easing;
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <div style={sectionHeader}>selected shot</div>
-
-        {selectedSegment === null ? (
-          <div style={{ ...fieldLabel, opacity: 0.45, padding: "5px 0" }}>
-            click a shot in the timeline
-          </div>
-        ) : (
-          <>
-            <label style={row}>
-              <span style={fieldLabel}>camera</span>
-              <select
-                value={selectedSegment.position}
-                onChange={(e) =>
-                  onSegmentCameraChange(
-                    selectedSegment.id,
-                    e.target.value as ZoomSegment["position"],
-                  )
-                }
-                style={selectInput}
-              >
-                <option value="fixed">fixed — holds the crop</option>
-                <option value="follow">follow — tracks the cursor</option>
-              </select>
-            </label>
-
-            <div
-              style={{
-                ...fieldLabel,
-                opacity: 0.45,
-                fontVariantNumeric: "tabular-nums",
-                padding: "2px 0",
-              }}
-            >
-              {(selectedSegment.startMs / 1000).toFixed(2)}s –{" "}
-              {(selectedSegment.endMs / 1000).toFixed(2)}s ·{" "}
-              {selectedSegment.waypoints.length === 1
-                ? "1 waypoint"
-                : `${selectedSegment.waypoints.length} waypoints`}
-            </div>
-          </>
-        )}
-      </div>
-
       <div
         style={{
           ...sectionHeader,

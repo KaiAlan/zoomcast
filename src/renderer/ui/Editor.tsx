@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt, smoothingToHalfLife } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
-import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
+import { outputDurationMs, outputToSource, sourceSpanToOutput } from "../../shared/project/timeline";
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
 import type { Project } from "../../shared/project/types";
@@ -10,9 +10,12 @@ import {
   createCutFromDrag,
   cutDragToSource,
   cutResizeToSource,
+  deleteSegment,
+  resetSegment,
   segmentDragToSource,
   segmentResizeToSource,
   setSegmentCamera,
+  setSegmentDepth,
 } from "../../shared/project/edits";
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
@@ -27,7 +30,9 @@ import { DecodedFrameSource } from "../media/VideoSource";
 import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
 import { type PreviewClock } from "../media/PreviewPlayer";
 import { Inspector } from "./Inspector";
+import { SegmentPopover } from "./SegmentPopover";
 import { Timeline } from "./Timeline";
+import { msToPct } from "./timeline/geometry";
 import { useProjectHistory } from "./useProjectHistory";
 
 /** How often the numeric readout catches up with the playhead. */
@@ -61,6 +66,8 @@ export function Editor({
   const rendererRef = useRef<Renderer | null>(null);
   const sourceRef = useRef<VideoElementSource | null>(null);
   const playerRef = useRef<PreviewPlayer | null>(null);
+  /** Wraps `<Timeline>` so `SegmentPopover` can tell "inside the timeline" from "outside" for its dismiss-on-outside-pointerdown. */
+  const timelineWrapRef = useRef<HTMLDivElement | null>(null);
 
   const { manifest } = bundle;
 
@@ -117,6 +124,18 @@ export function Editor({
   // empty state.
   const selectedSegment =
     project.zoom.segments.find((s) => s.id === selectedSegmentId) ?? null;
+
+  /**
+   * Where the selected segment's region sits, in the same output timebase
+   * `ZoomLane` draws it in. Null when there is no selection, or when the
+   * segment's span does not survive the cuts (`sourceSpanToOutput` returns
+   * null for a span a cut has swallowed entirely) -- in both cases the
+   * popover has nothing to anchor to and stays closed.
+   */
+  const selectedSegmentSpan =
+    selectedSegment === null
+      ? null
+      : sourceSpanToOutput(selectedSegment.startMs, selectedSegment.endMs, manifest.durationMs, project.cuts);
 
   const ctx: PlanContext = useMemo(
     () => ({
@@ -537,6 +556,25 @@ export function Editor({
     edit.apply((p) => setSegmentCamera(p, id, position), { replan: true });
   };
 
+  /** Set one shot's depth from the popover. Pins the segment (see `setSegmentDepth`). */
+  const onSegmentDepthChange = (id: string, depth: number): void => {
+    edit.apply((p) => setSegmentDepth(p, id, depth));
+  };
+
+  /** Delete the shot from the popover and drop the now-stale selection. */
+  const onSegmentDelete = (id: string): void => {
+    edit.apply((p) => deleteSegment(p, id));
+    edit.select(null);
+  };
+
+  /**
+   * Unpin, then re-plan: the shot rejoins the planner. This is what makes
+   * pinning recoverable, and pinning is a one-way door without it.
+   */
+  const onSegmentReset = (id: string): void => {
+    edit.apply((p) => resetSegment(p, id), { replan: true });
+  };
+
   /**
    * Drag a segment to an absolute output-ms target for its start edge.
    *
@@ -714,27 +752,43 @@ export function Editor({
           </button>
         </div>
 
-        <Timeline
-          durationMs={manifest.durationMs}
-          outputDurationMs={outDuration}
-          cuts={project.cuts}
-          keyframes={project.zoom.keyframes}
-          segments={project.zoom.segments}
-          selection={edit.selection}
-          onSelect={edit.select}
-          playheadMs={playheadMs}
-          playheadRef={playheadElRef}
-          pixelParityZoom={ceiling}
-          maxZoom={project.zoom.config.maxZoom}
-          onSeek={(t) => playerRef.current?.seek(t)}
-          onSegmentMove={onSegmentMove}
-          onSegmentResize={onSegmentResize}
-          onSegmentDragCommit={edit.commitGesture}
-          onCreateCut={onCreateCut}
-          onCutMove={onCutMove}
-          onCutResize={onCutResize}
-          onCutDragCommit={edit.commitGesture}
-        />
+        <div ref={timelineWrapRef} style={{ position: "relative" }}>
+          <Timeline
+            durationMs={manifest.durationMs}
+            outputDurationMs={outDuration}
+            cuts={project.cuts}
+            keyframes={project.zoom.keyframes}
+            segments={project.zoom.segments}
+            selection={edit.selection}
+            onSelect={edit.select}
+            playheadMs={playheadMs}
+            playheadRef={playheadElRef}
+            pixelParityZoom={ceiling}
+            maxZoom={project.zoom.config.maxZoom}
+            onSeek={(t) => playerRef.current?.seek(t)}
+            onSegmentMove={onSegmentMove}
+            onSegmentResize={onSegmentResize}
+            onSegmentDragCommit={edit.commitGesture}
+            onCreateCut={onCreateCut}
+            onCutMove={onCutMove}
+            onCutResize={onCutResize}
+            onCutDragCommit={edit.commitGesture}
+          />
+
+          {selectedSegment !== null && selectedSegmentSpan !== null && outDuration > 0 && (
+            <SegmentPopover
+              segment={selectedSegment}
+              maxZoom={project.zoom.config.maxZoom}
+              leftPct={msToPct(selectedSegmentSpan.startMs, outDuration)}
+              timelineRef={timelineWrapRef}
+              onDepthChange={onSegmentDepthChange}
+              onCameraChange={onSegmentCameraChange}
+              onDelete={onSegmentDelete}
+              onReset={onSegmentReset}
+              onDismiss={() => edit.select(null)}
+            />
+          )}
+        </div>
       </div>
 
       <div
@@ -757,8 +811,6 @@ export function Editor({
           dir={bundle.dir}
           onStyleChange={(style) => edit.apply((p) => ({ ...p, style }))}
           onOutputChange={onOutputChange}
-          selectedSegment={selectedSegment}
-          onSegmentCameraChange={onSegmentCameraChange}
         />
       </div>
     </div>
