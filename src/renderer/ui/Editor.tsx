@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt, smoothingToHalfLife } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
@@ -9,9 +9,7 @@ import type { Cut, Project } from "../../shared/project/types";
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
-import { segmentsToKeyframes } from "../../shared/zoom/keyframes";
-import { planZoom } from "../../shared/zoom/planner";
-import { replan, replanSegments } from "../../shared/zoom/replan";
+import { deriveKeyframes, replanFrom, type DeriveContext } from "../../shared/zoom/derive";
 import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
@@ -138,41 +136,15 @@ export function Editor({
    */
   const cameraPath = useMemo(() => followPath(bundle.telemetry), [bundle.telemetry]);
 
-  /** Plan on load, then merge so pinned edits survive a config change. */
-  const applyPlan = useCallback(
-    (config: ZoomConfig, existing: Project) => {
-      const planCtx = {
-        source: { w: manifest.video.width, h: manifest.video.height },
-        // The zoom ceiling derives from the output size, so a re-plan after an
-        // aspect change must see the new shape or it plans for the old one.
-        output: outputSizeFor(existing.output, {
-          w: manifest.video.width,
-          h: manifest.video.height,
-        }),
-        paddingFactor: existing.style.paddingFactor,
-        durationMs: manifest.durationMs,
-      };
-
-      const segments = replanSegments(
-        existing.zoom.segments,
-        planZoom(bundle.telemetry, config, planCtx),
-      );
-
-      return {
-        segments,
-        keyframes: replan(
-          existing.zoom.keyframes,
-          segmentsToKeyframes(segments, config, planCtx, cameraPath),
-        ),
-      };
-    },
-    [
-      bundle.telemetry,
+  /** Everything replanFrom/deriveKeyframes need that does not live on the project. */
+  const deriveCtx = useMemo<DeriveContext>(
+    () => ({
+      telemetry: bundle.telemetry,
       cameraPath,
-      manifest.video.width,
-      manifest.video.height,
-      manifest.durationMs,
-    ],
+      source: { w: manifest.video.width, h: manifest.video.height },
+      durationMs: manifest.durationMs,
+    }),
+    [bundle.telemetry, cameraPath, manifest.video.width, manifest.video.height, manifest.durationMs],
   );
 
   useEffect(() => {
@@ -310,7 +282,7 @@ export function Editor({
         setProject((prev) => {
           const next = {
             ...prev,
-            zoom: { ...prev.zoom, ...applyPlan(prev.zoom.config, prev) },
+            zoom: { ...prev.zoom, ...replanFrom(prev.zoom.config, prev, deriveCtx) },
           };
           live.current = { ...live.current, project: next };
           return next;
@@ -447,7 +419,7 @@ export function Editor({
       renderer.dispose();
       rendererRef.current = null;
     };
-  }, [bundle, manifest, applyPlan]);
+  }, [bundle, manifest, deriveCtx]);
 
   // Space toggles playback. preventDefault matters twice over: it stops the
   // page scrolling, and it stops Space from re-activating whichever button was
@@ -503,7 +475,7 @@ export function Editor({
       const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
       const next = {
         ...withConfig,
-        zoom: { ...withConfig.zoom, config, ...applyPlan(config, withConfig) },
+        zoom: { ...withConfig.zoom, config, ...replanFrom(config, withConfig, deriveCtx) },
       };
       live.current = { ...live.current, project: next };
       return next;
@@ -531,7 +503,7 @@ export function Editor({
         ...withOutput,
         zoom: {
           ...withOutput.zoom,
-          ...applyPlan(withOutput.zoom.config, withOutput),
+          ...replanFrom(withOutput.zoom.config, withOutput, deriveCtx),
         },
       };
       live.current = { ...live.current, project: next };
@@ -562,7 +534,7 @@ export function Editor({
         ...withSegment,
         zoom: {
           ...withSegment.zoom,
-          ...applyPlan(withSegment.zoom.config, withSegment),
+          ...replanFrom(withSegment.zoom.config, withSegment, deriveCtx),
         },
       };
       live.current = { ...live.current, project: next };
