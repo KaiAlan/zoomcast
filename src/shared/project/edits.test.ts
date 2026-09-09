@@ -10,10 +10,13 @@ import {
   resetSegment,
   resizeCut,
   resizeSegment,
+  segmentDragToSource,
+  segmentResizeToSource,
   setSegmentCamera,
   setSegmentDepth,
 } from "./edits";
 import { defaultProject } from "./defaults";
+import { sourceSpanToOutput, sourceToOutput } from "./timeline";
 import type { Cut, Project } from "./types";
 import type { ZoomSegment } from "../zoom/types";
 
@@ -218,6 +221,92 @@ describe("resizeSegment", () => {
     expect(a.endMs).toBe(10_000);
     expect(a.waypoints.map((w) => w.tMs)).toEqual(before);
     expect(a.waypoints).toHaveLength(2);
+  });
+});
+
+function withSegmentsAndCuts(segments: ZoomSegment[], cuts: Cut[]): Project {
+  const base = defaultProject("test-bundle");
+  return { ...base, cuts, zoom: { ...base.zoom, segments, keyframes: [] } };
+}
+
+/**
+ * Spec §7: a drag is measured in OUTPUT ms; each edge maps back through
+ * `outputToSource` independently. A segment dragged across a cut therefore
+ * changes its SOURCE duration -- the mapped edge's source position jumps by
+ * the cut's full length the instant the drag's output target crosses the
+ * cut -- while the OUTPUT position of the edge being dragged tracks the
+ * pointer exactly. Asserted in both directions: crossing left-to-right and
+ * right-to-left across the same cut.
+ */
+describe("segmentDragToSource", () => {
+  const cut: Cut = { id: "cut1", startMs: 8000, endMs: 10_000 };
+
+  it("moves a segment across a cut to the exact output target, preserving its output duration", () => {
+    const p = segmentDragToSource(
+      withSegmentsAndCuts([seg("a", 2000, 5000)], [cut]),
+      "a",
+      9000,
+      DURATION,
+    );
+    const a = find(p, "a");
+    // The source position jumps by the cut's full 2000ms the instant the
+    // drag's output target (9000) crosses the cut's output threshold (8000)
+    // -- spec §7's "off-by-one trap".
+    expect(a.startMs).toBe(11_000);
+    expect(a.endMs).toBe(14_000);
+    // Mapping the result back through the forward direction recovers
+    // exactly the output target dragged to, at the pre-drag output length.
+    expect(sourceSpanToOutput(a.startMs, a.endMs, DURATION, [cut])).toEqual({
+      startMs: 9000,
+      endMs: 12_000,
+    });
+  });
+
+  it("moves a segment back across the same cut, recovering the exact output target", () => {
+    const p = segmentDragToSource(
+      withSegmentsAndCuts([seg("a", 11_000, 14_000)], [cut]),
+      "a",
+      2000,
+      DURATION,
+    );
+    const a = find(p, "a");
+    // Below the cut's output threshold, outputToSource is the identity --
+    // no jump -- which is the other side of the same boundary above.
+    expect(a.startMs).toBe(2000);
+    expect(a.endMs).toBe(5000);
+    expect(sourceSpanToOutput(a.startMs, a.endMs, DURATION, [cut])).toEqual({
+      startMs: 2000,
+      endMs: 5000,
+    });
+  });
+
+  it("returns the project unchanged for an unknown id", () => {
+    const p0 = withSegmentsAndCuts([seg("a", 2000, 5000)], [cut]);
+    expect(segmentDragToSource(p0, "nope", 9000, DURATION)).toBe(p0);
+  });
+});
+
+describe("segmentResizeToSource", () => {
+  const cut: Cut = { id: "cut1", startMs: 8000, endMs: 10_000 };
+
+  it("resizes the start edge across a cut without touching the end edge's source position", () => {
+    const before = withSegmentsAndCuts([seg("b", 11_000, 16_000)], [cut]);
+    const p = segmentResizeToSource(before, "b", "start", 7000, DURATION);
+    const b = find(p, "b");
+    expect(b.startMs).toBe(7000);
+    // Independence: an end resize is a separate call, so the end edge's
+    // source position is exactly what it was before this resize.
+    expect(b.endMs).toBe(find(before, "b").endMs);
+    expect(sourceToOutput(b.startMs, DURATION, [cut])).toBe(7000);
+  });
+
+  it("resizes the end edge across a cut without touching the start edge's source position", () => {
+    const before = withSegmentsAndCuts([seg("c", 2000, 7000)], [cut]);
+    const p = segmentResizeToSource(before, "c", "end", 12_000, DURATION);
+    const c = find(p, "c");
+    expect(c.startMs).toBe(find(before, "c").startMs);
+    expect(c.endMs).toBe(14_000);
+    expect(sourceToOutput(c.endMs, DURATION, [cut])).toBe(12_000);
   });
 });
 

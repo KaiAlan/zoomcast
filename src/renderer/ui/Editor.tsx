@@ -6,7 +6,12 @@ import { outputDurationMs, outputToSource } from "../../shared/project/timeline"
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
 import type { Project } from "../../shared/project/types";
-import { addCut, moveSegment, resizeSegment, setSegmentCamera } from "../../shared/project/edits";
+import {
+  addCut,
+  segmentDragToSource,
+  segmentResizeToSource,
+  setSegmentCamera,
+} from "../../shared/project/edits";
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
@@ -542,33 +547,21 @@ export function Editor({
    * clamped against a neighbour has its next step measured fresh from the
    * clamped position toward the same target rather than banking the
    * rejected movement.
+   *
+   * The output-ms-to-source-delta glue lives in `segmentDragToSource`
+   * (edits.ts), pure and unit-tested there, rather than as a closure here.
    */
   const onSegmentMove = (id: string, targetStartOutputMs: number): void => {
-    edit.applyTransient((p) => {
-      const s = p.zoom.segments.find((x) => x.id === id);
-      if (s === undefined) return p;
-      const targetSource = outputToSource(targetStartOutputMs, manifest.durationMs, p.cuts);
-      return moveSegment(p, id, targetSource - s.startMs, manifest.durationMs);
-    });
+    edit.applyTransient((p) => segmentDragToSource(p, id, targetStartOutputMs, manifest.durationMs));
   };
 
   /**
    * Resize one edge to an absolute output-ms target. Idempotent for the same
-   * reason as `onSegmentMove` above: `tOutputMs` is absolute, and each edge
-   * maps through `outputToSource` independently (spec §7), so a segment
-   * dragged across a cut changes its source duration while its output
-   * duration -- what the viewer sees -- stays fixed.
+   * reason as `onSegmentMove` above. The glue lives in `segmentResizeToSource`
+   * (edits.ts) -- see its doc comment for the §7 cut-crossing behaviour.
    */
   const onSegmentResize = (id: string, edge: "start" | "end", tOutputMs: number): void => {
-    edit.applyTransient((p) =>
-      resizeSegment(
-        p,
-        id,
-        edge,
-        outputToSource(tOutputMs, manifest.durationMs, p.cuts),
-        manifest.durationMs,
-      ),
-    );
+    edit.applyTransient((p) => segmentResizeToSource(p, id, edge, tOutputMs, manifest.durationMs));
   };
 
   /** Interim: Task 10 replaces this with a real cut tool on the timeline. */

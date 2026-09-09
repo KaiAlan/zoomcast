@@ -33,6 +33,7 @@ function SegmentRegion({
   s,
   span,
   outputDurationMs,
+  trackWidthPx,
   selected,
   follow,
   onSelect,
@@ -41,34 +42,25 @@ function SegmentRegion({
   s: ZoomSegment;
   span: { startMs: number; endMs: number };
   outputDurationMs: number;
+  /** The lane track's own measured width. See `ZoomLane`'s single observer. */
+  trackWidthPx: number;
   selected: boolean;
   follow: boolean;
   onSelect: () => void;
   drag: ReturnType<typeof useRegionDrag>;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [widthPx, setWidthPx] = useState(0);
-
   // Whether the region is wide enough to grab an edge (MIN_RESIZABLE_PX)
   // depends on its rendered pixel width, but the region is laid out with a
-  // percentage `width` -- there is no pixel figure available at render time
-  // without measuring the live DOM node.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el === null) return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w !== undefined) setWidthPx(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
+  // percentage `width`. Rather than measure each region's own DOM node,
+  // derive it from the lane's one measured `trackWidthPx` and the same
+  // percentages the region is positioned with -- one observer for the whole
+  // lane instead of one per segment.
+  const widthPct = msToPct(span.endMs, outputDurationMs) - msToPct(span.startMs, outputDurationMs);
+  const widthPx = (widthPct / 100) * trackWidthPx;
   const resizable = widthPx >= MIN_RESIZABLE_PX;
 
   return (
     <div
-      ref={ref}
       title={`${s.id} · ${s.position}${s.waypoints.length > 1 ? ` · ${s.waypoints.length} waypoints` : ""}`}
       onPointerDown={(e) => {
         // Select the segment (never toggle it off -- a drag that starts on
@@ -82,7 +74,7 @@ function SegmentRegion({
       style={{
         position: "absolute",
         left: `${msToPct(span.startMs, outputDurationMs)}%`,
-        width: `${Math.max(0, msToPct(span.endMs, outputDurationMs) - msToPct(span.startMs, outputDurationMs))}%`,
+        width: `${Math.max(0, widthPct)}%`,
         top: 4,
         bottom: 4,
         borderRadius: 4,
@@ -142,8 +134,25 @@ export function ZoomLane({
     onCommit: onSegmentDragCommit,
   });
 
+  // One observer for the whole lane, not one per segment: every region's
+  // pixel width is derivable from this single measurement plus the same
+  // percentages it is already positioned with (see `SegmentRegion`).
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [trackWidthPx, setTrackWidthPx] = useState(0);
+  useLayoutEffect(() => {
+    const el = trackRef.current;
+    if (el === null) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w !== undefined) setTrackWidthPx(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div
+      ref={trackRef}
       style={{
         position: "relative",
         height: HEIGHT,
@@ -174,6 +183,7 @@ export function ZoomLane({
             s={s}
             span={span}
             outputDurationMs={outputDurationMs}
+            trackWidthPx={trackWidthPx}
             selected={selected}
             follow={follow}
             onSelect={() => onSelect({ kind: "segment", id: s.id })}

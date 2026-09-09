@@ -1,5 +1,6 @@
 import type { ZoomConfig, ZoomSegment, ZoomWaypoint } from "../zoom/types";
 import { normalizeCuts } from "./cuts";
+import { outputToSource } from "./timeline";
 import type { Cut, Project } from "./types";
 
 /**
@@ -158,6 +159,51 @@ export function resizeSegment(
     },
     durationMs,
   );
+}
+
+/**
+ * Map a segment drag's absolute OUTPUT-ms target for the start edge to the
+ * SOURCE delta `moveSegment` expects (spec §7).
+ *
+ * Segments store source time; the timeline draws -- and drags measure --
+ * output time. `targetStartOutputMs` is the region's own new start edge,
+ * absolute rather than a delta-from-drag-start: see `useRegionDrag`'s doc
+ * comment for why the caller reports it that way, and why that is what
+ * makes this safe to call repeatedly with the same target as a gesture
+ * progresses. Returns `p` unchanged if the segment does not exist.
+ */
+export function segmentDragToSource(
+  p: Project,
+  id: string,
+  targetStartOutputMs: number,
+  durationMs: number,
+): Project {
+  const s = p.zoom.segments.find((x) => x.id === id);
+  if (s === undefined) return p;
+  const targetSourceMs = outputToSource(targetStartOutputMs, durationMs, p.cuts);
+  return moveSegment(p, id, targetSourceMs - s.startMs, durationMs);
+}
+
+/**
+ * Map a segment resize's absolute OUTPUT-ms edge target to the SOURCE `tMs`
+ * `resizeSegment` expects (spec §7).
+ *
+ * Each edge maps through `outputToSource` independently: resizing the start
+ * edge never touches the end edge's source position, and vice versa. A
+ * segment resized across a cut therefore changes its source duration --
+ * the dragged edge's source position jumps by the cut's length the instant
+ * the pointer's output position crosses it -- while the edge's OUTPUT
+ * position tracks the pointer exactly, because output time is what a
+ * viewer sees and what a drag is measured in.
+ */
+export function segmentResizeToSource(
+  p: Project,
+  id: string,
+  edge: "start" | "end",
+  tOutputMs: number,
+  durationMs: number,
+): Project {
+  return resizeSegment(p, id, edge, outputToSource(tOutputMs, durationMs, p.cuts), durationMs);
 }
 
 /**
