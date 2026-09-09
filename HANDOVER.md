@@ -32,6 +32,17 @@ between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
 a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
 
+**Phase E is underway on the branch `phase-e-timeline-editing`, not on `main`.
+Start the next session at
+`docs/superpowers/plans/2026-09-09-phase-e-handoff.md`** (on that branch).
+Tasks 1–6 of 12 are committed and reviewed there — the pure modules behind
+draggable segments, real cuts and undo/redo. Task 7 was in flight when the
+session ended and **left uncommitted work in the tree**; the handoff says how to
+tell whether to keep it. The design is
+`docs/specs/2026-09-09-phase-e-timeline-editing-design.md` and the task record
+is `.superpowers/sdd/2026-09-09-phase-e-timeline-editing/progress.md`, which
+carries every ruling made without the user in the room.
+
 **Capture runs on ddagrab at last. 32.59fps -> 55.42fps.** The 2026-09-08
 handoff's leading hypothesis was right — ffmpeg was running on the wrong GPU —
 but its adapter table had the two GPUs **swapped**, and that is what made the
