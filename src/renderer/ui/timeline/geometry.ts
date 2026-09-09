@@ -11,9 +11,19 @@ export const MIN_RESIZABLE_PX = 24;
 
 export type DragKind = "move" | "resize-start" | "resize-end";
 
-export function pxToMs(dx: number, trackWidthPx: number, outputDurationMs: number): number {
+/**
+ * A pixel offset within a track, as a fraction of that track's width.
+ *
+ * Deliberately not "pixels to output ms". A drag is measured in the lane's own
+ * pixels; turning those into a time needs a scale, and on the cut lane the
+ * scale is a function of the very edit the drag is making — growing a cut
+ * shortens the output the lane is drawn against. Reporting a fraction and
+ * letting each lane choose the timebase it resolves against keeps that scale
+ * out of the shared drag machinery entirely. See `useRegionDrag`.
+ */
+export function pxToFrac(dx: number, trackWidthPx: number): number {
   if (trackWidthPx <= 0) return 0;
-  return (dx / trackWidthPx) * outputDurationMs;
+  return dx / trackWidthPx;
 }
 
 export function msToPct(tMs: number, outputDurationMs: number): number {

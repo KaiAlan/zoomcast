@@ -1,6 +1,6 @@
 import type { ZoomConfig, ZoomSegment, ZoomWaypoint } from "../zoom/types";
 import { normalizeCuts } from "./cuts";
-import { outputToSource } from "./timeline";
+import { outputDurationMs, outputToSource, sourceSpanToOutput } from "./timeline";
 import type { Cut, Project } from "./types";
 
 /**
@@ -340,4 +340,200 @@ export function deleteCut(p: Project, id: string): Project {
   const cuts = p.cuts.filter((c) => c.id !== id);
   if (cuts.length === p.cuts.length) return p;
   return { ...p, cuts };
+}
+
+/**
+ * Where the cut lane draws one cut, in the one timebase a cut edit cannot move.
+ *
+ * `CutLane` anchors a cut's region at its SEAM — the single output instant
+ * where the removed material used to be — and gives the region the width of
+ * the material removed there, drawn at the lane's current output scale. The
+ * seam is a genuine output position; the region's right edge is not. See
+ * `CutLane`: a region means "the material removed at this seam", not "this
+ * output range is cut".
+ *
+ * `seamMs` and `endMs` are in the OTHERS timebase — output time as it would
+ * be if this cut alone did not exist, running to `othersDurationMs`. That is
+ * the timebase to solve a cut drag against, because only the other cuts feed
+ * it: resizing this cut cannot change it, while the lane's own scale
+ * (`othersDurationMs - length`) changes on every pointermove. `seamMs` is the
+ * same number in both, since nothing this cut removes lies before it.
+ */
+function cutLaneGeometry(
+  p: Project,
+  id: string,
+  durationMs: number,
+): {
+  target: Cut;
+  others: Cut[];
+  seamMs: number;
+  endMs: number;
+  othersDurationMs: number;
+} | null {
+  const target = p.cuts.find((c) => c.id === id);
+  if (target === undefined) return null;
+
+  // Excluding the cut's own id matches what `CutLane` passes when it lays the
+  // region out; including it would swallow the span whole and return null.
+  const others = p.cuts.filter((c) => c.id !== id);
+  const span = sourceSpanToOutput(target.startMs, target.endMs, durationMs, others);
+  if (span === null) return null;
+
+  return {
+    target,
+    others,
+    seamMs: span.startMs,
+    endMs: span.endMs,
+    othersDurationMs: outputDurationMs(durationMs, others),
+  };
+}
+
+/**
+ * Slide a cut so its seam lands under the pointer.
+ *
+ * `targetStartFrac` is the pointer's absolute position across the lane, 0..1,
+ * not a delta — see `useRegionDrag` for why every drag callback reports an
+ * absolute target.
+ *
+ * A move is the easy half of task 10's problem: it preserves the cut's
+ * length, so it removes exactly as much output as before and the lane's scale
+ * holds still for the whole gesture. Resolving the fraction against that scale
+ * is therefore exact, and task 9's absolute-target reasoning carries over
+ * unmodified. `cutResizeToSource` is where it does not.
+ */
+export function cutDragToSource(
+  p: Project,
+  id: string,
+  targetStartFrac: number,
+  durationMs: number,
+): Project {
+  const g = cutLaneGeometry(p, id, durationMs);
+  if (g === null) return p;
+
+  const lengthMs = g.endMs - g.seamMs;
+  // The lane's own scale: total output with every cut, this one included.
+  const laneDurationMs = g.othersDurationMs - lengthMs;
+  const targetSeamMs = targetStartFrac * laneDurationMs;
+
+  // Inverse of the `sourceSpanToOutput` above: a seam position in the others
+  // timebase back to the source time that sits there.
+  const targetSourceMs = outputToSource(targetSeamMs, durationMs, g.others);
+  return moveCut(p, id, targetSourceMs - g.target.startMs, durationMs);
+}
+
+/**
+ * Move one of a cut's edges to sit under the pointer, at `tFrac` across the
+ * lane.
+ *
+ * This is the case task 9's design does not survive as written, and the
+ * reason drag callbacks now report a fraction rather than output ms. Growing
+ * a cut removes more material, which shortens `outputDurationMs`, which
+ * rescales the lane the drag is being measured in — the scale is a function
+ * of the edit being made with it. Converting the pointer to output ms against
+ * the live duration and mapping that through `outputToSource` does not just
+ * lag: it converges on the wrong length. `outputToSource` adds this cut's own
+ * length back when the target is past the seam, so the region's drawn right
+ * edge is not the output image of the cut's end at all, and the iteration
+ * settles at `othersDurationMs - seam/f` — an edge nowhere near the cursor.
+ * Reading the duration live from a ref (the smaller fix) changes none of that.
+ *
+ * So the fraction is resolved by solving, in closed form, for the geometry
+ * that puts the dragged edge under the pointer AFTER the rescale it causes.
+ * With `D` = `othersDurationMs`, `s` = seam, `e` = the end in that same
+ * timebase and `f` = `tFrac`, the lane draws the region over
+ * `[s, e] / (D - (e - s))`, so:
+ *
+ *   end edge:    (s + len) / (D - len) = f   =>  len = (f·D - s) / (1 + f)
+ *   start edge:  s' / (D - (e - s')) = f     =>  s'  = f·(D - e) / (1 - f)
+ *
+ * Both are functions of the pointer alone — `D`, `s` and `e` are fixed by the
+ * other cuts and the edge that is not moving — so they keep every property
+ * task 9 wanted: idempotent under `applyTransient`'s re-application, monotone
+ * in the pointer, and unable to bank a clamped movement, since the next step
+ * is solved afresh from the same fraction rather than accumulated.
+ *
+ * A merge is the one discontinuity. When a resize runs one cut into another,
+ * `normalizeCuts` absorbs the neighbour during this very call, so this step
+ * was solved against a world that no longer exists and the edge overshoots the
+ * pointer by the absorbed cut's length. The next pointermove solves against
+ * the merged world and lands exactly, so the overshoot is one frame and self
+ * correcting — not a drift, and not something that accumulates.
+ *
+ * One consequence worth knowing: dragging the END edge cannot grow a cut past
+ * `(D - s) / 2`, because at that length the region's right edge has reached
+ * the right end of the lane. That is the honest limit of drawing a region at
+ * source width over an output scale, not a clamp — the seam races rightward
+ * under the pointer as the timeline shrinks beneath it. Drag the start edge,
+ * or make a second cut, to remove more.
+ */
+export function cutResizeToSource(
+  p: Project,
+  id: string,
+  edge: "start" | "end",
+  tFrac: number,
+  durationMs: number,
+): Project {
+  const g = cutLaneGeometry(p, id, durationMs);
+  if (g === null) return p;
+
+  // Off-lane pointer positions have no solution (`1 - f` flips sign past the
+  // right end); the clamps in `resizeCut` handle the rest.
+  const f = Math.max(0, Math.min(1, tFrac));
+  const d = g.othersDurationMs;
+
+  if (edge === "end") {
+    const lengthMs = (f * d - g.seamMs) / (1 + f);
+    return resizeCut(p, id, "end", g.target.startMs + lengthMs, durationMs);
+  }
+
+  // f === 1 is "as far right as the lane goes", which is the end of the take.
+  const seamMs = f >= 1 ? d : Math.min(d, (f * (d - g.endMs)) / (1 - f));
+  return resizeCut(
+    p,
+    id,
+    "start",
+    outputToSource(Math.max(0, seamMs), durationMs, g.others),
+    durationMs,
+  );
+}
+
+/**
+ * Author a cut from a drag across empty lane space, between two absolute
+ * pointer fractions in either order.
+ *
+ * The `MIN_CUT_MS` floor lives here rather than in the lane, because it is an
+ * invariant and not UI polish: `addCut` does not enforce one, so only
+ * `normalizeCuts`' zero-length filter stands between a stray gesture and a
+ * 1ms cut that is invisible and unclickable on the timeline. Nothing else
+ * creates cuts.
+ *
+ * The floor is checked in OUTPUT time while cuts store SOURCE time, which is
+ * safe in that direction only: `outputToSource` has slope >= 1, so the source
+ * span is never shorter than the output span it came from.
+ *
+ * One discrete edit, so the caller pushes it with `apply`, not the transient
+ * drag path — nothing is committed until the pointer comes up.
+ */
+export function createCutFromDrag(
+  p: Project,
+  id: string,
+  aFrac: number,
+  bFrac: number,
+  durationMs: number,
+): Project {
+  const laneDurationMs = outputDurationMs(durationMs, p.cuts);
+  const clamp = (frac: number): number => Math.max(0, Math.min(1, frac)) * laneDurationMs;
+
+  const startOutputMs = clamp(Math.min(aFrac, bFrac));
+  const endOutputMs = clamp(Math.max(aFrac, bFrac));
+  // Shorter than the floor is a click, not a drag. A click creates nothing.
+  if (endOutputMs - startOutputMs < MIN_CUT_MS) return p;
+
+  return addCut(
+    p,
+    id,
+    outputToSource(startOutputMs, durationMs, p.cuts),
+    outputToSource(endOutputMs, durationMs, p.cuts),
+    durationMs,
+  );
 }

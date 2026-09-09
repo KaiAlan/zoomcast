@@ -246,3 +246,45 @@ describe("motion blur amount", () => {
     expect(normalizeProject(old, "b1").style.motionBlurAmount).toBe(0);
   });
 });
+
+/**
+ * Ruling 2(ii): the `cut-<index>` fallback used to be minted without checking
+ * the ids already in the file. Nothing looked a cut up by id, so a collision
+ * was unreachable — until phase E's timeline, where `moveCut` and `resizeCut`
+ * both `find` by id and a duplicate would edit the wrong cut.
+ */
+describe("cut ids", () => {
+  const COLLIDING = {
+    cuts: [
+      { startMs: 0, endMs: 100 },
+      { startMs: 200, endMs: 300 },
+      { id: "cut-1", startMs: 400, endMs: 500 },
+    ],
+  };
+
+  it("never mints a fallback id that an explicit id already claims", () => {
+    const p = normalizeProject(COLLIDING, "b");
+    expect(p.cuts.map((c) => c.id)).toEqual(["cut-0", "cut-1-1", "cut-1"]);
+    expect(new Set(p.cuts.map((c) => c.id)).size).toBe(p.cuts.length);
+  });
+
+  it("keeps the explicit id the file carried rather than renaming it", () => {
+    const p = normalizeProject(COLLIDING, "b");
+    expect(p.cuts.find((c) => c.startMs === 400)?.id).toBe("cut-1");
+  });
+
+  it("is stable: migrating the result again produces the same ids", () => {
+    const once = normalizeProject(COLLIDING, "b");
+    expect(normalizeProject(once, "b").cuts).toEqual(once.cuts);
+  });
+
+  it("indexes fallbacks by array position, not by surviving position", () => {
+    // The dropped zero-length cut still consumes index 1, which is what keeps
+    // the ids the same across loads.
+    const p = normalizeProject(
+      { cuts: [{ startMs: 0, endMs: 100 }, { startMs: 5, endMs: 5 }, { startMs: 200, endMs: 300 }] },
+      "b",
+    );
+    expect(p.cuts.map((c) => c.id)).toEqual(["cut-0", "cut-2"]);
+  });
+});

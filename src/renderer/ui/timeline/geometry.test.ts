@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { dragKindAt, EDGE_HIT_PX, MIN_RESIZABLE_PX, msToPct, pxToMs } from "./geometry";
+import { dragKindAt, EDGE_HIT_PX, MIN_RESIZABLE_PX, msToPct, pxToFrac } from "./geometry";
 
-describe("pxToMs", () => {
-  it("scales a pixel delta into a time delta", () => {
-    expect(pxToMs(100, 1000, 60_000)).toBe(6000);
+describe("pxToFrac", () => {
+  it("scales a pixel offset into a fraction of the track", () => {
+    expect(pxToFrac(100, 1000)).toBe(0.1);
   });
 
   it("is signed", () => {
-    expect(pxToMs(-100, 1000, 60_000)).toBe(-6000);
+    expect(pxToFrac(-100, 1000)).toBe(-0.1);
   });
 
   it("is zero for a zero-width track rather than NaN or Infinity", () => {
-    expect(pxToMs(100, 0, 60_000)).toBe(0);
+    expect(pxToFrac(100, 0)).toBe(0);
   });
 });
 

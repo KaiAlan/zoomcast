@@ -128,9 +128,13 @@ export function ZoomLane({
   onSegmentDragCommit,
 }: Props) {
   const drag = useRegionDrag({
-    outputDurationMs,
-    onMove: onSegmentMove,
-    onResize: onSegmentResize,
+    // The hook reports lane fractions; segments are edited in output ms.
+    // Multiplying here is exact, because neither moving nor resizing a segment
+    // removes anything -- `outputDurationMs` is the same number at the end of
+    // the gesture as at pointerdown, so the fraction and the ms are two names
+    // for one position. `CutLane` is precisely the lane that cannot say that.
+    onMove: (id, targetStartFrac) => onSegmentMove(id, targetStartFrac * outputDurationMs),
+    onResize: (id, edge, tFrac) => onSegmentResize(id, edge, tFrac * outputDurationMs),
     onCommit: onSegmentDragCommit,
   });
 
@@ -153,6 +157,17 @@ export function ZoomLane({
   return (
     <div
       ref={trackRef}
+      // Empty lane space clears the selection. Task 9 took toggle-off away
+      // from the region itself -- a drag starting on an already-selected
+      // segment must not deselect it mid-gesture -- and handed deselection to
+      // a click on empty space. That has to exist in THIS lane too: with it
+      // only on the cut lane, dropping a segment selection would mean clicking
+      // empty space in a different lane, which nobody would find. A region's
+      // pointerdown stops propagation, and the guard keeps a press on a
+      // keyframe marker from counting as background.
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onSelect(null);
+      }}
       style={{
         position: "relative",
         height: HEIGHT,

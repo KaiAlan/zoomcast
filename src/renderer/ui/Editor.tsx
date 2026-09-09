@@ -7,7 +7,9 @@ import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
 import type { Project } from "../../shared/project/types";
 import {
-  addCut,
+  createCutFromDrag,
+  cutDragToSource,
+  cutResizeToSource,
   segmentDragToSource,
   segmentResizeToSource,
   setSegmentCamera,
@@ -564,16 +566,39 @@ export function Editor({
     edit.applyTransient((p) => segmentResizeToSource(p, id, edge, tOutputMs, manifest.durationMs));
   };
 
-  /** Interim: Task 10 replaces this with a real cut tool on the timeline. */
-  const onAddCut = (): void => {
-    const start = playheadMs;
-    const end = Math.min(start + 500, outDuration);
-    if (end <= start) return;
+  /**
+   * Author a cut by dragging across empty space on the cut lane.
+   *
+   * One discrete edit, so it goes through `apply` and not the transient drag
+   * path: nothing is recorded until the pointer comes up, and the result is a
+   * single undo step. `createCutFromDrag` holds the `MIN_CUT_MS` floor, which
+   * `addCut` does not enforce and nothing else now guards.
+   */
+  const onCreateCut = (aFrac: number, bFrac: number): void => {
+    edit.apply((p) =>
+      createCutFromDrag(p, crypto.randomUUID(), aFrac, bFrac, manifest.durationMs),
+    );
+  };
 
-    const srcStart = outputToSource(start, manifest.durationMs, project.cuts);
-    const srcEnd = outputToSource(end, manifest.durationMs, project.cuts);
+  /**
+   * Drag a cut's seam to an absolute lane fraction.
+   *
+   * A fraction, where the segment callbacks take output ms, because a cut edit
+   * moves the output timebase: growing a cut shortens `outDuration`, so the
+   * same pointer pixel is a different output ms from one pointermove to the
+   * next and output ms stops being an absolute coordinate mid-gesture. The
+   * pointer's position across the lane does not stop being one. The mapping
+   * lives in `cutDragToSource` / `cutResizeToSource` (edits.ts), pure and
+   * unit-tested there; read `cutResizeToSource` for why a resize has to solve
+   * for the post-rescale geometry rather than convert through it.
+   */
+  const onCutMove = (id: string, targetStartFrac: number): void => {
+    edit.applyTransient((p) => cutDragToSource(p, id, targetStartFrac, manifest.durationMs));
+  };
 
-    edit.apply((p) => addCut(p, crypto.randomUUID(), srcStart, srcEnd, manifest.durationMs));
+  /** Resize one edge to an absolute lane fraction. See `onCutMove`. */
+  const onCutResize = (id: string, edge: "start" | "end", tFrac: number): void => {
+    edit.applyTransient((p) => cutResizeToSource(p, id, edge, tFrac, manifest.durationMs));
   };
 
   const runExport = (): void => {
@@ -672,9 +697,6 @@ export function Editor({
           <button type="button" style={button} onClick={() => playerRef.current?.seek(0)}>
             start
           </button>
-          <button type="button" style={button} onClick={onAddCut}>
-            cut 0.5s here
-          </button>
           <button
             type="button"
             style={button}
@@ -708,6 +730,10 @@ export function Editor({
           onSegmentMove={onSegmentMove}
           onSegmentResize={onSegmentResize}
           onSegmentDragCommit={edit.commitGesture}
+          onCreateCut={onCreateCut}
+          onCutMove={onCutMove}
+          onCutResize={onCutResize}
+          onCutDragCommit={edit.commitGesture}
         />
       </div>
 

@@ -1,14 +1,22 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { dragKindAt, pxToMs, type DragKind } from "./geometry";
+import { dragKindAt, pxToFrac, type DragKind } from "./geometry";
 
 type Active = {
   id: string;
   kind: DragKind;
   startClientX: number;
-  /** The region's own left edge at pointerdown, in output ms. */
-  startOutputMs: number;
+  /** The region's own left edge at pointerdown, as a fraction of the track. */
+  startFrac: number;
   trackWidthPx: number;
   trackLeftPx: number;
+};
+
+type Opts = {
+  /** Absolute target for the region's start edge, as a track fraction. */
+  onMove: (id: string, targetStartFrac: number) => void;
+  /** Absolute target for the dragged edge, as a track fraction. */
+  onResize: (id: string, edge: "start" | "end", tFrac: number) => void;
+  onCommit: () => void;
 };
 
 /**
@@ -18,7 +26,7 @@ type Active = {
  * drag dies the moment the cursor leaves the track, which is exactly when a
  * user is trying to push a region against an end.
  *
- * `onMove` and `onResize` both report ABSOLUTE output times, never a delta.
+ * `onMove` and `onResize` both report an ABSOLUTE target, never a delta.
  * The reason is `applyTransient` (see `useProjectHistory.step`): every
  * intermediate call re-applies `fn` to the CURRENT present, not to a
  * preserved pre-drag base, because `history.beginOrExtend` replaces
@@ -32,19 +40,35 @@ type Active = {
  * against a neighbour has its next step measured fresh from the clamped
  * position toward the same absolute target, so it does not leap when dragged
  * back the other way.
+ *
+ * Since task 10 that target is a TRACK FRACTION rather than output ms, which
+ * is why this hook no longer takes `outputDurationMs` at all. Output ms is
+ * only an absolute coordinate while the output timebase holds still. It does
+ * for a zoom segment — moving or resizing one removes nothing — and it does
+ * NOT for a cut: growing a cut shortens the very output duration the lane is
+ * drawn against, so the same pointer pixel is a different output ms on each
+ * successive pointermove. Reporting where the pointer IS, in the lane's own
+ * coordinates, stays absolute under any rescale. Each lane then resolves the
+ * fraction against a timebase its own edit cannot move: `ZoomLane` multiplies
+ * by `outputDurationMs`, which is exact there; `CutLane` hands the fraction to
+ * `cutDragToSource` / `cutResizeToSource`, which solve for the cut geometry
+ * that puts the dragged edge back under that fraction after the rescale.
+ *
+ * `opts` is read through a ref instead of being captured into the pointermove
+ * closure, so a callback always sees the latest render's props. The captured
+ * version silently used pointerdown-era values for a whole gesture.
  */
-export function useRegionDrag(opts: {
-  outputDurationMs: number;
-  onMove: (id: string, targetStartOutputMs: number) => void;
-  onResize: (id: string, edge: "start" | "end", tOutputMs: number) => void;
-  onCommit: () => void;
-}) {
+export function useRegionDrag(opts: Opts) {
   const active = useRef<Active | null>(null);
 
+  // Read at call time, never capture time -- see the note above.
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+
   const onPointerDown = (e: ReactPointerEvent, id: string): void => {
-    // Harmless today: after task 8 the Ruler is a sibling lane, not an
-    // ancestor, so there is no bubbling path from a region to the scrub
-    // handler for this to guard against. Kept for whatever nests next.
+    // Keeps the lane background's own pointerdown -- which clears the
+    // selection, and on the cut lane starts a drag-to-create -- from firing
+    // for a press that landed on a region.
     e.stopPropagation();
 
     const region = e.currentTarget as HTMLElement;
@@ -58,7 +82,7 @@ export function useRegionDrag(opts: {
       id,
       kind: dragKindAt(e.clientX - regionBox.left, regionBox.width),
       startClientX: e.clientX,
-      startOutputMs: pxToMs(regionBox.left - trackBox.left, trackBox.width, opts.outputDurationMs),
+      startFrac: pxToFrac(regionBox.left - trackBox.left, trackBox.width),
       trackWidthPx: trackBox.width,
       trackLeftPx: trackBox.left,
     };
@@ -68,20 +92,20 @@ export function useRegionDrag(opts: {
       if (a === null) return;
 
       if (a.kind === "move") {
-        opts.onMove(
+        optsRef.current.onMove(
           a.id,
-          a.startOutputMs + pxToMs(ev.clientX - a.startClientX, a.trackWidthPx, opts.outputDurationMs),
+          a.startFrac + pxToFrac(ev.clientX - a.startClientX, a.trackWidthPx),
         );
         return;
       }
 
-      const tOutputMs = pxToMs(ev.clientX - a.trackLeftPx, a.trackWidthPx, opts.outputDurationMs);
-      opts.onResize(a.id, a.kind === "resize-start" ? "start" : "end", tOutputMs);
+      const tFrac = pxToFrac(ev.clientX - a.trackLeftPx, a.trackWidthPx);
+      optsRef.current.onResize(a.id, a.kind === "resize-start" ? "start" : "end", tFrac);
     };
 
     const onPointerUp = (): void => {
       active.current = null;
-      opts.onCommit();
+      optsRef.current.onCommit();
       region.removeEventListener("pointermove", onPointerMove);
       region.removeEventListener("pointerup", onPointerUp);
       region.removeEventListener("pointercancel", onPointerUp);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   addCut,
+  createCutFromDrag,
+  cutDragToSource,
+  cutResizeToSource,
   deleteCut,
   deleteSegment,
   minSegmentMs,
@@ -16,7 +19,7 @@ import {
   setSegmentDepth,
 } from "./edits";
 import { defaultProject } from "./defaults";
-import { sourceSpanToOutput, sourceToOutput } from "./timeline";
+import { outputDurationMs, sourceSpanToOutput, sourceToOutput } from "./timeline";
 import type { Cut, Project } from "./types";
 import type { ZoomSegment } from "../zoom/types";
 
@@ -423,5 +426,196 @@ describe("deleteCut", () => {
   it("returns the project unchanged for an unknown id", () => {
     const p = withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]);
     expect(deleteCut(p, "nope")).toBe(p);
+  });
+});
+
+/**
+ * Where the cut lane draws a cut, as fractions across the lane.
+ *
+ * This is the geometry task 10's acceptance property is about: the region's
+ * left edge is the cut's seam and its right edge is the seam plus the removed
+ * material, both drawn at the lane's CURRENT output scale -- a scale that
+ * every resize changes. Mirrors `CutLane`'s layout exactly, including passing
+ * only the *other* cuts to `sourceSpanToOutput`.
+ */
+function drawnFracs(p: Project, id: string): { left: number; right: number } {
+  const c = p.cuts.find((x) => x.id === id) as Cut;
+  const others = p.cuts.filter((x) => x.id !== id);
+  const span = sourceSpanToOutput(c.startMs, c.endMs, DURATION, others) as {
+    startMs: number;
+    endMs: number;
+  };
+  const laneMs = outputDurationMs(DURATION, p.cuts);
+  return { left: span.startMs / laneMs, right: span.endMs / laneMs };
+}
+
+describe("cutDragToSource", () => {
+  it("puts the seam under the pointer", () => {
+    // A move keeps the cut's length, so the lane's scale holds still: 30s of
+    // take less a 2s cut is a 28s lane, and half of it is 14s.
+    const p = cutDragToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", 0.5, DURATION);
+    expect(p.cuts).toEqual([{ id: "a", startMs: 14_000, endMs: 16_000 }]);
+    expect(drawnFracs(p, "a").left).toBeCloseTo(0.5, 10);
+  });
+
+  it("maps the target through the OTHER cuts' ripple", () => {
+    const p = cutDragToSource(
+      withCuts([
+        { id: "b", startMs: 1000, endMs: 3000 },
+        { id: "a", startMs: 10_000, endMs: 12_000 },
+      ]),
+      "a",
+      0.5,
+      DURATION,
+    );
+    // Lane is 26s; half of it is output 13s, which is source 15s once b's 2s
+    // is added back.
+    expect(p.cuts).toEqual([
+      { id: "b", startMs: 1000, endMs: 3000 },
+      { id: "a", startMs: 15_000, endMs: 17_000 },
+    ]);
+    expect(drawnFracs(p, "a").left).toBeCloseTo(0.5, 10);
+  });
+
+  it("is idempotent: re-applying the same target changes nothing", () => {
+    const once = cutDragToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", 0.5, DURATION);
+    expect(cutDragToSource(once, "a", 0.5, DURATION).cuts).toEqual(once.cuts);
+  });
+
+  it("does not bank a clamped step", () => {
+    // Held against zero, then dragged back: the second step is measured fresh
+    // from the clamped position toward the same absolute target, so it lands
+    // exactly where an unclamped drag to 0.5 would have.
+    const held = cutDragToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", -0.4, DURATION);
+    expect(held.cuts).toEqual([{ id: "a", startMs: 0, endMs: 2000 }]);
+    expect(cutDragToSource(held, "a", 0.5, DURATION).cuts).toEqual([
+      { id: "a", startMs: 14_000, endMs: 16_000 },
+    ]);
+  });
+
+  it("returns the project unchanged for an unknown id", () => {
+    const p = withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]);
+    expect(cutDragToSource(p, "nope", 0.5, DURATION)).toBe(p);
+  });
+});
+
+/**
+ * The property ruling 1 asks for: the dragged edge lands under the cursor,
+ * for the whole gesture, at any cut length.
+ *
+ * Growing a cut shortens the output the lane is drawn against, so a resize
+ * rescales the lane it is being measured in. `cutResizeToSource` therefore
+ * solves for the geometry that holds AFTER that rescale rather than
+ * converting the pointer through the pre-edit scale, which is why every
+ * assertion below reads the edge back out of `drawnFracs` -- the post-edit
+ * drawing -- and expects the fraction that was dragged to.
+ */
+describe("cutResizeToSource", () => {
+  it("keeps the end edge under the cursor", () => {
+    const p = cutResizeToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 0.8, DURATION);
+    expect(drawnFracs(p, "a").right).toBeCloseTo(0.8, 10);
+    // The start edge did not move in source, so the cut still begins at 2s --
+    // its drawn seam slides right only because the lane got shorter.
+    expect(p.cuts[0]?.startMs).toBe(2000);
+  });
+
+  it("keeps the end edge under the cursor when the cut is a large fraction of the take", () => {
+    // The far right of the lane. The cut ends up 14s of a 30s take, and the
+    // lane is 16s, so this is the case where the pre-edit scale would be most
+    // wrong.
+    const p = cutResizeToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 1, DURATION);
+    expect(drawnFracs(p, "a").right).toBeCloseTo(1, 10);
+    expect(p.cuts[0]).toEqual({ id: "a", startMs: 2000, endMs: 16_000 });
+  });
+
+  it("keeps the start edge under the cursor", () => {
+    const p = cutResizeToSource(withCuts([{ id: "a", startMs: 10_000, endMs: 12_000 }]), "a", "start", 0.2, DURATION);
+    expect(drawnFracs(p, "a").left).toBeCloseTo(0.2, 10);
+    expect(p.cuts[0]).toEqual({ id: "a", startMs: 4500, endMs: 12_000 });
+  });
+
+  it("keeps the start edge under the cursor across another cut's ripple", () => {
+    const p = cutResizeToSource(
+      withCuts([
+        { id: "b", startMs: 1000, endMs: 3000 },
+        { id: "a", startMs: 10_000, endMs: 12_000 },
+      ]),
+      "a",
+      "start",
+      0.1,
+      DURATION,
+    );
+    expect(drawnFracs(p, "a").left).toBeCloseTo(0.1, 10);
+    expect(p.cuts).toEqual([
+      { id: "b", startMs: 1000, endMs: 3000 },
+      { id: "a", startMs: 4000, endMs: 12_000 },
+    ]);
+  });
+
+  it("is idempotent: re-applying the same target changes nothing", () => {
+    const once = cutResizeToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 0.8, DURATION);
+    expect(cutResizeToSource(once, "a", "end", 0.8, DURATION).cuts).toEqual(once.cuts);
+  });
+
+  it("does not bank a step clamped at the minimum cut length", () => {
+    const held = cutResizeToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 0.05, DURATION);
+    expect(held.cuts[0]?.endMs).toBe(2000 + MIN_CUT_MS);
+    // Dragging back out lands exactly where a fresh drag to 0.8 lands: the
+    // rejected movement was not accumulated anywhere.
+    const back = cutResizeToSource(held, "a", "end", 0.8, DURATION);
+    const fresh = cutResizeToSource(withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]), "a", "end", 0.8, DURATION);
+    expect(back.cuts).toEqual(fresh.cuts);
+  });
+
+  it("clamps a start edge dragged off the right end to the minimum cut length", () => {
+    // f = 1 has no finite solution (the lane would have to be zero-length);
+    // it means "as far right as this goes", and resizeCut's floor takes over.
+    const p = cutResizeToSource(withCuts([{ id: "a", startMs: 10_000, endMs: 12_000 }]), "a", "start", 1, DURATION);
+    expect(p.cuts[0]?.startMs).toBe(12_000 - MIN_CUT_MS);
+  });
+
+  it("returns the project unchanged for an unknown id", () => {
+    const p = withCuts([{ id: "a", startMs: 2000, endMs: 4000 }]);
+    expect(cutResizeToSource(p, "nope", "end", 0.5, DURATION)).toBe(p);
+  });
+});
+
+describe("createCutFromDrag", () => {
+  it("cuts the output range the drag covered", () => {
+    const p = createCutFromDrag(withCuts([]), "c1", 0.1, 0.3, DURATION);
+    expect(p.cuts).toEqual([{ id: "c1", startMs: 3000, endMs: 9000 }]);
+  });
+
+  it("takes the two edges in either order", () => {
+    expect(createCutFromDrag(withCuts([]), "c1", 0.3, 0.1, DURATION).cuts).toEqual(
+      createCutFromDrag(withCuts([]), "c1", 0.1, 0.3, DURATION).cuts,
+    );
+  });
+
+  it("maps both edges through the existing cuts' ripple", () => {
+    // A 28s lane after b's 2s cut: output 7s and 14s are source 9s and 16s.
+    const p = createCutFromDrag(withCuts([{ id: "b", startMs: 1000, endMs: 3000 }]), "c1", 0.25, 0.5, DURATION);
+    expect(p.cuts).toEqual([
+      { id: "b", startMs: 1000, endMs: 3000 },
+      { id: "c1", startMs: 9000, endMs: 16_000 },
+    ]);
+  });
+
+  it("creates nothing below MIN_CUT_MS -- the floor addCut does not enforce", () => {
+    // 0.003 of a 30s lane is 90ms. `addCut` would happily author it: only
+    // normalizeCuts' zero-length filter stands behind this check.
+    const p = withCuts([]);
+    expect(createCutFromDrag(p, "c1", 0.2, 0.203, DURATION)).toBe(p);
+    expect(addCut(p, "c1", 6000, 6090, DURATION).cuts).toHaveLength(1);
+  });
+
+  it("creates nothing for a click, where both edges are the same", () => {
+    const p = withCuts([]);
+    expect(createCutFromDrag(p, "c1", 0.4, 0.4, DURATION)).toBe(p);
+  });
+
+  it("clamps a drag that left the lane to the lane's ends", () => {
+    const p = createCutFromDrag(withCuts([]), "c1", -0.5, 1.5, DURATION);
+    expect(p.cuts).toEqual([{ id: "c1", startMs: 0, endMs: DURATION }]);
   });
 });

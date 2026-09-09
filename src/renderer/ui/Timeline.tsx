@@ -36,6 +36,19 @@ type Props = {
   /** Absolute output-ms target for the dragged edge. See useRegionDrag. */
   onSegmentResize: (id: string, edge: "start" | "end", tOutputMs: number) => void;
   onSegmentDragCommit: () => void;
+  /**
+   * Both edges of a drag-to-create, as absolute lane fractions in either
+   * order. Cut callbacks are fractions where the segment ones are output ms:
+   * a cut edit moves the output timebase the drag is measured in, so output ms
+   * is not an absolute coordinate for the length of the gesture. See
+   * `useRegionDrag`.
+   */
+  onCreateCut: (aFrac: number, bFrac: number) => void;
+  /** Absolute lane fraction for the cut's seam. */
+  onCutMove: (id: string, targetStartFrac: number) => void;
+  /** Absolute lane fraction for the dragged edge. */
+  onCutResize: (id: string, edge: "start" | "end", tFrac: number) => void;
+  onCutDragCommit: () => void;
 };
 
 function fmt(ms: number): string {
@@ -61,6 +74,10 @@ export function Timeline({
   onSegmentMove,
   onSegmentResize,
   onSegmentDragCommit,
+  onCreateCut,
+  onCutMove,
+  onCutResize,
+  onCutDragCommit,
 }: Props) {
   return (
     <div>
@@ -85,6 +102,10 @@ export function Timeline({
           cuts={cuts}
           selection={selection}
           onSelect={onSelect}
+          onCreateCut={onCreateCut}
+          onCutMove={onCutMove}
+          onCutResize={onCutResize}
+          onCutDragCommit={onCutDragCommit}
         />
 
         <div
