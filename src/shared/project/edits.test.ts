@@ -34,6 +34,25 @@ function withSegments(segments: ZoomSegment[]): Project {
   return { ...base, zoom: { ...base.zoom, segments, keyframes: [] } };
 }
 
+/** Like `seg`, but with waypoints at explicit times instead of the fixed offsets. */
+function segWithWaypoints(id: string, startMs: number, endMs: number, waypointMs: number[]): ZoomSegment {
+  return {
+    id,
+    startMs,
+    endMs,
+    position: "fixed",
+    waypoints: waypointMs.map((tMs, i) => ({
+      id: `${id}-w${i}`,
+      tMs,
+      depth: 0.5,
+      cx: 0.5,
+      cy: 0.5,
+    })),
+    origin: "auto",
+    pinned: false,
+  };
+}
+
 const find = (p: Project, id: string): ZoomSegment =>
   p.zoom.segments.find((s) => s.id === id) as ZoomSegment;
 
@@ -149,6 +168,51 @@ describe("resizeSegment", () => {
   it("clamps the end edge at the take length", () => {
     const p = resizeSegment(withSegments([seg("a", 2000, 9000)]), "a", "end", 40_000, DURATION);
     expect(find(p, "a").endMs).toBe(DURATION);
+  });
+
+  it("drops a waypoint the start edge is dragged past, keeping the rest in bounds", () => {
+    const p0 = withSegments([segWithWaypoints("a", 5000, 12_000, [5300, 8000])]);
+    const p = resizeSegment(p0, "a", "start", 6000, DURATION);
+    const a = find(p, "a");
+    expect(a.startMs).toBe(6000);
+    expect(a.waypoints.map((w) => w.tMs)).toEqual([8000]);
+    for (const w of a.waypoints) {
+      expect(w.tMs).toBeGreaterThanOrEqual(a.startMs);
+      expect(w.tMs).toBeLessThanOrEqual(a.endMs);
+    }
+  });
+
+  it("drops a waypoint the end edge is dragged past, keeping the rest in bounds", () => {
+    const p0 = withSegments([segWithWaypoints("a", 2000, 12_000, [4000, 10_000])]);
+    const p = resizeSegment(p0, "a", "end", 5000, DURATION);
+    const a = find(p, "a");
+    expect(a.endMs).toBe(5000);
+    expect(a.waypoints.map((w) => w.tMs)).toEqual([4000]);
+    for (const w of a.waypoints) {
+      expect(w.tMs).toBeGreaterThanOrEqual(a.startMs);
+      expect(w.tMs).toBeLessThanOrEqual(a.endMs);
+    }
+  });
+
+  it("keeps the single nearest waypoint, clamped into bounds, when a resize would strand all of them", () => {
+    const p0 = withSegments([segWithWaypoints("a", 2000, 12_000, [3000, 4000])]);
+    const p = resizeSegment(p0, "a", "start", 9000, DURATION);
+    const a = find(p, "a");
+    expect(a.startMs).toBe(9000);
+    expect(a.waypoints).toHaveLength(1);
+    expect(a.waypoints[0]?.tMs).toBe(9000);
+    expect(a.waypoints[0]?.tMs).toBeGreaterThanOrEqual(a.startMs);
+    expect(a.waypoints[0]?.tMs).toBeLessThanOrEqual(a.endMs);
+  });
+
+  it("leaves the waypoints untouched when the resize crosses none of them", () => {
+    const p0 = withSegments([seg("a", 5000, 12_000)]);
+    const before = find(p0, "a").waypoints.map((w) => w.tMs);
+    const p = resizeSegment(p0, "a", "end", 10_000, DURATION);
+    const a = find(p, "a");
+    expect(a.endMs).toBe(10_000);
+    expect(a.waypoints.map((w) => w.tMs)).toEqual(before);
+    expect(a.waypoints).toHaveLength(2);
   });
 });
 

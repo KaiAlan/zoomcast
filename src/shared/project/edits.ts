@@ -1,4 +1,4 @@
-import type { ZoomConfig, ZoomSegment } from "../zoom/types";
+import type { ZoomConfig, ZoomSegment, ZoomWaypoint } from "../zoom/types";
 import type { Project } from "./types";
 
 /**
@@ -76,7 +76,54 @@ export function moveSegment(
   );
 }
 
-/** Move one edge. The other stays put; the shot changes length. */
+/**
+ * How far a waypoint's `tMs` falls outside `[startMs, endMs]`. Zero when it
+ * is already inside.
+ */
+function distanceOutside(tMs: number, startMs: number, endMs: number): number {
+  if (tMs < startMs) return startMs - tMs;
+  if (tMs > endMs) return tMs - endMs;
+  return 0;
+}
+
+/**
+ * Drop waypoints a resize has pushed outside the segment's new bounds,
+ * rather than clamping them into range.
+ *
+ * Clamping several waypoints into the same edge collapses them onto one
+ * timestamp — two keyframes competing for the same instant, the exact
+ * failure the no-overlap invariant exists to prevent, produced from inside a
+ * single segment. It also recreates the jump `minWaypointGapMs` was added to
+ * stop: waypoints squeezed close together produce a huge camera move in a
+ * single frame.
+ *
+ * A segment with no waypoints has no camera target at all, so if dropping
+ * would empty the array, the single waypoint nearest the surviving range is
+ * kept instead and clamped into bounds.
+ */
+function clipWaypoints(
+  waypoints: ZoomWaypoint[],
+  startMs: number,
+  endMs: number,
+): ZoomWaypoint[] {
+  const inRange = waypoints.filter((w) => w.tMs >= startMs && w.tMs <= endMs);
+  if (inRange.length > 0 || waypoints.length === 0) return inRange;
+
+  const nearest = waypoints.reduce((closest, w) =>
+    distanceOutside(w.tMs, startMs, endMs) < distanceOutside(closest.tMs, startMs, endMs)
+      ? w
+      : closest,
+  );
+
+  return [{ ...nearest, tMs: Math.max(startMs, Math.min(endMs, nearest.tMs)) }];
+}
+
+/**
+ * Move one edge. The other stays put; the shot changes length.
+ *
+ * A waypoint the new bounds leave outside `[startMs, endMs]` is dropped, not
+ * clamped — see `clipWaypoints`.
+ */
 export function resizeSegment(
   p: Project,
   id: string,
@@ -92,11 +139,21 @@ export function resizeSegment(
     (s, { prevEnd, nextStart }) => {
       if (edge === "start") {
         const startMs = Math.max(prevEnd, Math.min(s.endMs - min, tMs));
-        return { ...s, startMs, pinned: true };
+        return {
+          ...s,
+          startMs,
+          waypoints: clipWaypoints(s.waypoints, startMs, s.endMs),
+          pinned: true,
+        };
       }
 
       const endMs = Math.min(nextStart, Math.max(s.startMs + min, tMs));
-      return { ...s, endMs, pinned: true };
+      return {
+        ...s,
+        endMs,
+        waypoints: clipWaypoints(s.waypoints, s.startMs, endMs),
+        pinned: true,
+      };
     },
     durationMs,
   );
