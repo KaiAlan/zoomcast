@@ -20,6 +20,13 @@ export function createHistory(present: Entry): History {
   return { past: [], present, future: [], gestureOpen: false };
 }
 
+/**
+ * Deep equality by `JSON.stringify`. Sound for `Entry` because of how
+ * `Project` is shaped today — no `Date`/`Map`/`Set` in it, `pinned` required
+ * rather than optional (so no present-but-undefined vs absent), and key order
+ * fixed by every writer spreading `defaultProject` — which is a property of
+ * the type, not something this module enforces.
+ */
 function same(a: Entry, b: Entry): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -48,23 +55,35 @@ export function push(h: History, next: Entry): History {
 /**
  * One step of a drag.
  *
- * The FIRST call of a gesture pushes, so the pre-drag state reaches `past`;
- * later calls only replace `present`. Without that first push the pre-drag
- * project is overwritten by the first pointermove and nothing holds it any
- * more.
+ * The FIRST call of a gesture banks the pre-drag entry in `past`; later calls
+ * only replace `present`. Without that first bank the pre-drag project is
+ * overwritten by the first pointermove and nothing holds it any more.
+ *
+ * Deliberately NOT routed through `push`. `push` declines a no-op and returns
+ * `h` untouched, which is right for a discrete edit and wrong here: a first
+ * pointermove that changes nothing — a segment already held against zero
+ * dragged further left, a cut already on the `MIN_CUT_MS` floor — would leave
+ * `gestureOpen` true with nothing banked, and every later step would then
+ * overwrite `present` with the pre-drag state lost. `commit`'s unwind is the
+ * single place a no-op gesture is decided (spec §5); this one only opens.
  */
 export function beginOrExtend(h: History, next: Entry): History {
   if (h.gestureOpen) {
     return { ...h, present: next, future: [] };
   }
 
-  return { ...push(h, next), gestureOpen: true };
+  return {
+    past: capped([...h.past, h.present]),
+    present: next,
+    future: [],
+    gestureOpen: true,
+  };
 }
 
 /**
  * End a drag.
  *
- * Unwinds the entry `beginOrExtend` pushed if the gesture turned out to be a
+ * Unwinds the entry `beginOrExtend` banked if the gesture turned out to be a
  * no-op — dragging a segment and putting it back must not cost an undo step.
  */
 export function commit(h: History): History {

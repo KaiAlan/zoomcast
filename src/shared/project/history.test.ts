@@ -102,4 +102,55 @@ describe("gestures", () => {
     expect(h.past).toHaveLength(0);
     expect(h.present.project.audio.micGainDb).toBe(0);
   });
+
+  /*
+   * A drag whose FIRST step changes nothing is ordinary, not exotic: a segment
+   * already held against zero dragged further left, or a cut already sitting on
+   * its length floor. `beginOrExtend` must still bank the pre-drag entry, or the
+   * gesture runs with `gestureOpen` true and nothing holding the state it
+   * started from -- and the undo after it jumps back past the edit BEFORE the
+   * drag as well.
+   */
+  it("banks the pre-gesture entry even when the first step changes nothing", () => {
+    let h = push(createHistory(entry(0)), entry(1));
+    h = beginOrExtend(h, entry(1));
+    h = beginOrExtend(h, entry(2));
+    h = commit(h);
+
+    expect(h.past).toHaveLength(2);
+    expect(h.past[1]!.project.audio.micGainDb).toBe(1);
+    expect(h.present.project.audio.micGainDb).toBe(2);
+    // One Ctrl+Z lands on the pre-drag state, NOT on the edit before it.
+    expect(undo(h).present.project.audio.micGainDb).toBe(1);
+  });
+
+  it("consumes no entry for a drag that ends where it started, no-op first step and all", () => {
+    let h = push(createHistory(entry(0)), entry(1));
+    const before = h.past.length;
+    h = beginOrExtend(h, entry(1));
+    h = beginOrExtend(h, entry(2));
+    h = beginOrExtend(h, entry(1));
+    h = commit(h);
+
+    expect(h.past).toHaveLength(before);
+    expect(h.present.project.audio.micGainDb).toBe(1);
+    expect(h.gestureOpen).toBe(false);
+  });
+
+  it("consumes exactly one entry for a drag that moves", () => {
+    let h = push(createHistory(entry(0)), entry(1));
+    const before = h.past.length;
+    h = beginOrExtend(h, entry(1));
+    h = beginOrExtend(h, entry(5));
+    h = commit(h);
+
+    expect(h.past).toHaveLength(before + 1);
+  });
+
+  it("clears the future the moment a gesture opens, even on a no-op first step", () => {
+    let h = undo(push(createHistory(entry(0)), entry(1)));
+    expect(canRedo(h)).toBe(true);
+    h = beginOrExtend(h, entry(0));
+    expect(canRedo(h)).toBe(false);
+  });
 });
