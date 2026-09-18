@@ -1,3 +1,9 @@
+> SUPERSEDED — historical record only. Phase E is code-complete on
+> `phase-e-timeline-editing` (tasks 1–12). The recovery steps below would now
+> DESTROY tasks 7–12; do not follow them. Current state: `docs/DEVELOPER-GUIDE.md`
+> and `HANDOVER.md`. The ledger it cites is archived at
+> `docs/superpowers/plans/2026-09-09-phase-e-ledger.md`.
+
 # Handoff — phase E, tasks 1–6 landed, task 7 in flight
 
 **Written 2026-09-09.** Branch **`phase-e-timeline-editing`**, cut from `main`

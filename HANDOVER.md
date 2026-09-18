@@ -1,5 +1,9 @@
 # zoomcast — handover
 
+> New to the project? Start with `docs/DEVELOPER-GUIDE.md` (2026-09-18): the
+> overview, feature list, open work and next steps. This file is the deep
+> reference behind it.
+
 Updated 2026-09-08. **Phases 0–7, A, B, C and D complete, plus the camera
 geometry and depth rework, the per-segment camera switch, the preview
 frame-source split, and a day of camera-feel work driven entirely by
@@ -36,7 +40,7 @@ arriving and freezing.
 `phase-e-timeline-editing`, not on `main`.** See "What landed — phase E"
 below for what shipped and, just as important, what has never been run. The
 design is `docs/specs/2026-09-09-phase-e-timeline-editing-design.md` and the
-task record is `.superpowers/sdd/2026-09-09-phase-e-timeline-editing/progress.md`,
+task record is `docs/superpowers/plans/2026-09-09-phase-e-ledger.md`,
 which carries every ruling made without the user in the room.
 
 **Capture runs on ddagrab at last. 32.59fps -> 55.42fps.** The 2026-09-08

@@ -181,6 +181,8 @@ wired into only one of them is this project's most repeated bug — hence
 
 ## Where to read next
 
+- `docs/DEVELOPER-GUIDE.md` — the developer handoff: features, architecture,
+  open work and what to do next. New developers start here.
 - `HANDOVER.md` — current state, session checklist, and the mistakes that have
   already cost time. Start here.
 - `docs/specs/2026-09-03-screen-recorder-design.md` — the original design and
