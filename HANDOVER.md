@@ -1,5 +1,9 @@
 # zoomcast — handover
 
+> New to the project? Start with `docs/DEVELOPER-GUIDE.md` (2026-09-18). The
+> newest work, phase E, is on the branch `phase-e-timeline-editing`, and so is
+> the newest version of this file.
+
 Updated 2026-09-08. **Phases 0–7, A, B, C and D complete, plus the camera
 geometry and depth rework, the per-segment camera switch, the preview
 frame-source split, and a day of camera-feel work driven entirely by

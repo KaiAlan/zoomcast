@@ -42,10 +42,17 @@ You need:
 
 - **ffmpeg 6.0+, a FULL build**, on PATH — gyan.dev's "full" or BtbN's.
 
-**The "essentials" builds are not enough.** Screen capture runs
-`ddagrab,scale_d3d11` and the essentials builds ship `ddagrab` but not
-`scale_d3d11`, so they pass a naive check and then produce no frames. zoomcast
-checks for both at startup and says so in the log if either is missing.
+Screen capture runs `ddagrab,hwdownload,format=bgra,format=nv12`. zoomcast
+checks for the `ddagrab`, `hwdownload` and `format` filters at startup and says
+so in the log if any is missing. A full build is recommended because it is the
+configuration everything was measured on; the `ffmpeg-static` essentials build
+broke capture once and is not supported.
+
+On hybrid-GPU laptops (integrated + discrete), Desktop Duplication only works
+when ffmpeg runs on the GPU that composites the desktop. If the capture probe
+fails, zoomcast pins ffmpeg.exe to "power saving" under
+`HKCU\Software\Microsoft\DirectX\UserGpuPreferences` automatically. Without
+Desktop Duplication it falls back to `gdigrab` at roughly 28fps.
 
 Point `ZOOMCAST_FFMPEG` at a specific binary to override PATH.
 
@@ -126,10 +133,11 @@ natively on Windows.
 
 | Command | What it checks |
 | --- | --- |
-| `npm test` | Unit suite — 373 tests across 42 files |
+| `npm test` | Unit suite — 418 tests across 46 files on `main` (521 / 51 on `phase-e-timeline-editing`) |
 | `npm run typecheck` | `tsc --noEmit`, must be silent |
 | `npm run verify:decode` | That a frame rendered at time *t* really is the frame at *t* |
 | `npm run verify:parity` | That the preview and the export compose identically, across 6 configurations × 5 times |
+| `npm run verify:capture` | That capture runs on `ddagrab` at ~55fps rather than falling back to `gdigrab` |
 | `npm run bench:preview -- <take> [ms] [runs]` | What the preview actually achieves while playing |
 | `npm run bench:encoders` | Encoder throughput, to justify the export's choice |
 
@@ -181,6 +189,8 @@ wired into only one of them is this project's most repeated bug — hence
 
 ## Where to read next
 
+- `docs/DEVELOPER-GUIDE.md` — the developer handoff: features, architecture,
+  open work and what to do next. New developers start here.
 - `HANDOVER.md` — current state, session checklist, and the mistakes that have
   already cost time. Start here.
 - `docs/specs/2026-09-03-screen-recorder-design.md` — the original design and
@@ -192,8 +202,11 @@ wired into only one of them is this project's most repeated bug — hence
 
 ## Status
 
-Recording → editing → export works end to end on real footage. Remaining work
-is tracked as phases E–G in
-`docs/specs/2026-09-04-composition-and-camera-design.md` §13: draggable zoom
-segments and undo/redo, clip speed, and a UI revamp. Webcam picture-in-picture
-is specified but not built.
+Recording → editing → export works end to end on real footage. Phases 0–7
+and A–D (cursor, compositor, camera, motion blur) are on `main`.
+
+Phase E — timeline editing: draggable zoom segments, real cut regions, a
+per-shot popover, undo/redo and shortcuts — is code-complete on the branch
+`phase-e-timeline-editing`, with a few review fixes and a hand test still to do
+before it merges. Still to build: clip speed (phase F), a UI revamp (phase G)
+and webcam picture-in-picture. See `docs/DEVELOPER-GUIDE.md` §9.
