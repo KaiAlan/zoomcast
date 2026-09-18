@@ -124,8 +124,9 @@ tracked as phases C–F in
 `docs/specs/2026-09-04-composition-and-camera-design.md` §13, plus webcam PiP
 (the old phase 8), which is untouched and independent of all of them.
 
-**Phase D (motion blur) is next; E is the one to reach for if the editing
-surface matters more than the look.**
+**Next (2026-09-18): finish phase E's open review fixes, drive it by hand,
+merge it, then webcam PiP or phase G.** The ordered list is in
+`docs/DEVELOPER-GUIDE.md` §9.
 
 ## What this is
 
@@ -141,7 +142,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 418 passing, 46 files
+npm test              # 521 passing, 51 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -275,8 +276,9 @@ whole motion-blur pass was rendering unguarded.
 
 ## What is NOT built
 
-Phases D–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
-§13. None has a written plan yet.
+Phases D and E are built (E on its branch). F and G are specified in
+`docs/specs/2026-09-04-composition-and-camera-design.md` §13 and have no
+written plan yet.
 
 Four plans are done and merged:
 `2026-09-06-phase-c-export-diagnostics.md` (tasks 1–6; task 7 is open but its
@@ -355,14 +357,15 @@ second `VideoSource` in the editor, the webcam pass in `Renderer`
 
 Also worth doing early:
 
-- **Undo/redo.** Spec §6 specifies immutable project snapshots. Nothing yet.
-- **Draggable cut regions.** Currently a placeholder "cut 0.5s here" button;
-  there is no way to adjust or delete a cut once made.
 - **Surface the `unclean` state.** A recording that ended abnormally is marked
   in the manifest and logged, but the Welcome list does not show it.
 - **Delete recordings from the UI.** The list shows sizes; there is no delete.
 
-## Known limitation: no working ddagrab on this machine
+## Resolved 2026-09-08: ddagrab did not work on this machine
+
+> Historical. ddagrab works now — the cause was the GPU preference, see the
+> top of this file and `src/main/capture/gpuPreference.ts`. Kept for the
+> diagnosis record.
 
 The spec was built around DXGI Desktop Duplication (`ddagrab`) for zero-copy GPU
 capture. **It does not work here** — but the diagnosis is more specific than
