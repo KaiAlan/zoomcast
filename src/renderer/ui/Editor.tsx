@@ -29,7 +29,7 @@ import { PreviewPlayer } from "../media/PreviewPlayer";
 import { VideoElementSource } from "../media/VideoElementSource";
 import { DecodedFrameSource } from "../media/VideoSource";
 import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
-import { type PreviewClock } from "../media/PreviewPlayer";
+import { createMediaClock } from "../media/mediaClock";
 import { Inspector } from "./Inspector";
 import { SegmentPopover } from "./SegmentPopover";
 import { Timeline } from "./Timeline";
@@ -272,39 +272,12 @@ export function Editor({
       el.style.left = `${total === 0 ? 0 : (t / total) * 100}%`;
     };
 
-    /**
-     * The playhead during playback, taken from the video element itself.
-     *
-     * rVFC reports the presentation time of the frame about to be composited,
-     * so the composition is aligned to the frame actually on screen rather
-     * than to a time derived from the wall clock. That alignment is what
-     * removes the feedback loop the old loop had: a slow draw used to advance
-     * the playhead by ~60 frames and put it past the next keyframe.
-     *
-     * It reads through sourceRef because the player is constructed before the
-     * source is opened.
-     */
-    const clock: PreviewClock = {
-      start(fromMs) {
-        const source = sourceRef.current;
-        if (source === null) return;
-        source.el.currentTime = fromMs / 1000;
-        void source.el.play();
-      },
-      stop() {
-        sourceRef.current?.el.pause();
-      },
-      onFrame(cb) {
-        const tick = (_now: number, meta: VideoFrameCallbackMetadata): void => {
-          const source = sourceRef.current;
-          if (source === null) return;
-          source.lastMediaTimeMs = meta.mediaTime * 1000;
-          cb(meta.mediaTime * 1000);
-          source.el.requestVideoFrameCallback(tick);
-        };
-        sourceRef.current?.el.requestVideoFrameCallback(tick);
-      },
-    };
+    // The playhead during playback, taken from the video element itself and
+    // converted to output time. See createMediaClock.
+    const clock = createMediaClock(
+      () => sourceRef.current?.el ?? null,
+      () => ({ durationMs: manifest.durationMs, cuts: live.current.project.cuts }),
+    );
 
     const player = new PreviewPlayer(
       renderAt,

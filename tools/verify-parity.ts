@@ -51,6 +51,9 @@ const CONFIGS: Array<{
   style?: Partial<Project["style"]>;
   output?: Partial<Project["output"]>;
   zoom?: Partial<Project["zoom"]>;
+  cuts?: Project["cuts"];
+  /** Output times to compare when the default SHOTS would overrun a cut config's shorter output. */
+  shots?: number[];
 }> = [
   { name: "default" },
   {
@@ -141,6 +144,17 @@ const CONFIGS: Array<{
       },
     },
   },
+  {
+    /**
+     * A cut, which nothing else here exercises: the editor and the export
+     * each map output time to source time on their own, and a divergence in
+     * that mapping is invisible to every config above. 900 and 1100 sit on
+     * either side of the seam; the output is 4000ms long, so 4600 is dropped.
+     */
+    name: "cut",
+    cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }],
+    shots: [0, 900, 1100, 2500, 3900],
+  },
 ];
 
 rmSync(OUT, { recursive: true, force: true });
@@ -195,6 +209,7 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
     style: { ...base.style, ...config.style },
     output: { ...base.output, ...config.output },
     zoom: { ...base.zoom, ...config.zoom },
+    cuts: config.cuts ?? base.cuts,
   };
 
   assertSurvivesMigration(project);
@@ -236,6 +251,7 @@ const rows: Array<Record<string, string | number>> = [];
 
 for (const config of CONFIGS) {
   const { dir, mp4 } = prepare(config);
+  const shots = config.shots ?? SHOTS;
 
   console.log(`exporting headlessly and capturing preview frames (${config.name})...`);
 
@@ -245,7 +261,7 @@ for (const config of CONFIGS) {
       ...process.env,
       ZOOMCAST_PARITY: dir,
       ZOOMCAST_PARITY_OUT: mp4,
-      ZOOMCAST_PARITY_SHOTS: SHOTS.join(","),
+      ZOOMCAST_PARITY_SHOTS: shots.join(","),
     },
     encoding: "utf8",
     shell: process.platform === "win32",
@@ -256,7 +272,7 @@ for (const config of CONFIGS) {
     throw new Error(`parity run failed for "${config.name}" with status ${run.status ?? "null"}`);
   }
 
-  for (const t of SHOTS) {
+  for (const t of shots) {
     const exported = join(dir, `exported-${t}.png`);
 
     execFileSync(
