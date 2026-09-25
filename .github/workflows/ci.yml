@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    # Windows only, by design: capture is DXGI, input is uiohook, cursor
+    # shapes come from user32. The pure suite would pass on Linux, but a
+    # green tick that never touched the platform the app runs on is worthless.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+
+      # A static build with libx264, so the e2e export runs rather than skips.
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - run: npm test
+
+      - run: npm run build
+
+      # The installer, unsigned. verify:* and bench:* need a GPU and Desktop
+      # Duplication and stay manual.
+      - run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zoomcast-installer
+          path: release/*.exe
+          if-no-files-found: error

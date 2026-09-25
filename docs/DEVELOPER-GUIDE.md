@@ -271,6 +271,7 @@ that touches rendering, planning or capture.
 | --- | --- |
 | `npm test` | Unit + property tests (vitest, fast-check). 521 tests. |
 | `npm run typecheck` | Must be silent. |
+| `npm run lint` | Biome. Must report no errors or warnings. |
 | `npm run build` | Three bundles (main, preload, renderer). |
 | `npm run verify:decode` | A frame drawn at time t really is the frame at t. |
 | `npm run verify:parity` | Preview and export composite identically — 6 configs × 5 times, 43–47dB PSNR. Builds first. |
@@ -281,6 +282,11 @@ that touches rendering, planning or capture.
 | `npm run camera:travel -- <take>` | Camera movement during holds, fixed vs follow. |
 | `npm run render:camera -- <take>` | Renders a take twice (all fixed / all follow) to compare. |
 | `npm run fixture [-- spread]` | Regenerates test fixtures (spread = 30s, six clicks, for pacing). |
+
+Every push runs typecheck, lint, the unit suite, the e2e export (libx264) and
+an installer build on `windows-latest` (`.github/workflows/ci.yml`); the
+installer is attached to the run as an artifact. The GPU-bound gates
+(`verify:*`, `bench:*`) stay manual.
 
 Headless modes (environment variables on `npx electron .`):
 
