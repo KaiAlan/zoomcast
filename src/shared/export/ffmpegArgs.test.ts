@@ -125,8 +125,13 @@ describe("buildExportArgs — colour", () => {
    */
   it("converts to BT.709 and tags the stream so HD players decode what the preview showed", () => {
     const s = joined(base);
-    expect(s).toContain("-vf scale=out_color_matrix=bt709:out_range=tv,format=yuv420p");
-    expect(s).toContain("-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv");
+    // setparams, not -colorspace/-color_primaries/-color_trc: on ffmpeg 9 the
+    // encoder takes colour from the frames, and those output options left
+    // primaries and transfer "unknown" for both libx264 and h264_amf.
+    expect(s).toContain(
+      "-vf scale=out_color_matrix=bt709:out_range=tv,format=yuv420p," +
+        "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv",
+    );
   });
 
   it("keeps the colour conversion on -vf; the video never enters the complex graph", () => {
