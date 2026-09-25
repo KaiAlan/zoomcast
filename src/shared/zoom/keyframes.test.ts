@@ -6,7 +6,7 @@ import { followPath } from "./camera";
 import { cursorAt } from "../cursor/path";
 import { zoomAt } from "./interpolate";
 import { screenQuadFor } from "./viewport";
-import { depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
+import { FOLLOW_SAMPLE_MS, depthToScale, scaleToDepth, segmentsToKeyframes } from "./keyframes";
 import type { PlanContext, ZoomSegment } from "./types";
 
 const ctx: PlanContext = {
@@ -333,6 +333,35 @@ describe("a follow segment", () => {
 
     expect(last?.tSourceMs).toBe(5000 + OUT_SHIFT);
     expect(last?.scale).toBe(1);
+  });
+
+  /**
+   * Sampling used to stop at endMs - transitionOutMs, but the out-keyframe
+   * sits at endMs + (transitionOutMs - trailMs), so the pull-out actually
+   * starts at endMs - trailMs. The camera sat frozen on its last sample for
+   * the 600ms in between, before every exit from a follow shot.
+   */
+  it("keeps following until the pull-out begins, not until the segment ends", () => {
+    const kfs = segmentsToKeyframes([seg5], cfg, square, path);
+    const samples = kfs.filter((k) => k.id.includes("f"));
+    const lastSample = samples[samples.length - 1];
+    const pullOutStartsMs = 5000 + OUT_SHIFT - cfg.transitionOutMs;
+
+    // Within one sample of the pull-out, on the near side of it.
+    expect(lastSample?.tSourceMs).toBeGreaterThanOrEqual(pullOutStartsMs - FOLLOW_SAMPLE_MS);
+    expect(lastSample?.tSourceMs).toBeLessThan(pullOutStartsMs);
+  });
+
+  it("never samples past the end of the take", () => {
+    const atEnd = seg({
+      startMs: square.durationMs - 4000,
+      endMs: square.durationMs,
+      position: "follow",
+      waypoints: [{ id: "k0", tMs: square.durationMs - 4000, depth: 1, cx: 0.25, cy: 0.5 }],
+    });
+    const kfs = segmentsToKeyframes([atEnd], cfg, square, path);
+
+    for (const k of kfs) expect(k.tSourceMs).toBeLessThanOrEqual(square.durationMs);
   });
 
   /**

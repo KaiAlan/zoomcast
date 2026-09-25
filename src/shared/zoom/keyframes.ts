@@ -146,14 +146,6 @@ export function segmentsToKeyframes(
     // and a 296px jump in a single frame on take 2026-09-08T14-53-54.
     const lastSettleMs = settles[settles.length - 1] ?? last.tMs;
 
-    const tail =
-      s.position === "follow" && follow !== null
-        ? sampleFollow(follow, last, lastSettleMs, s, cfg, ctx, ceiling)
-        : [];
-    kfs.push(...tail);
-
-    const end = tail[tail.length - 1] ?? { cx: last.cx, cy: last.cy };
-
     // The pull-out must not START before the activity ends.
     //
     // A segment ends at lastEvent + trailMs and the transition into this
@@ -170,6 +162,14 @@ export function segmentsToKeyframes(
       s.endMs + Math.max(0, cfg.transitionOutMs - cfg.trailMs),
       ctx.durationMs,
     );
+
+    const tail =
+      s.position === "follow" && follow !== null
+        ? sampleFollow(follow, last, lastSettleMs, outMs, s, cfg, ctx, ceiling)
+        : [];
+    kfs.push(...tail);
+
+    const end = tail[tail.length - 1] ?? { cx: last.cx, cy: last.cy };
 
     kfs.push({
       id: `${last.id}o`,
@@ -211,6 +211,8 @@ function sampleFollow(
   last: ZoomSegment["waypoints"][number],
   /** When the last waypoint's in-keyframe lands — not the waypoint's own tMs. */
   fromMs: number,
+  /** When the out-keyframe lands; sampling stops one transition before it. */
+  outMs: number,
   s: ZoomSegment,
   cfg: ZoomConfig,
   ctx: PlanContext,
@@ -219,9 +221,12 @@ function sampleFollow(
   const scale = depthToScale(last.depth, ceiling);
   const out: ZoomKeyframe[] = [];
 
-  // Stop short of the end: the pull-out transition starts at
-  // endMs - transitionMs, and a follow sample inside it would fight it.
-  const until = s.endMs - cfg.transitionOutMs;
+  // Stop short of the pull-out: its transition starts transitionOutMs before
+  // the out-keyframe, and a follow sample inside it would fight it. Measured
+  // from the out-keyframe, not from the segment's end — the two differ by
+  // transitionOutMs - trailMs, and measuring from the end froze the camera on
+  // its last sample for those 600ms before every exit.
+  const until = outMs - cfg.transitionOutMs;
 
   for (let t = fromMs + FOLLOW_SAMPLE_MS, n = 0; t < until; t += FOLLOW_SAMPLE_MS, n++) {
     out.push({
