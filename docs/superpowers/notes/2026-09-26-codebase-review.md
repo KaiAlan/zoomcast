@@ -37,6 +37,19 @@ UI layer.
 | V5 | Med | **Follow camera freezes 600 ms before every pull-out.** Sampling stops at `endMs − transitionOutMs` but the out-keyframe sits at `endMs + (transitionOutMs − trailMs)`, so the pull-out starts at `endMs − trailMs`. | `keyframes.ts:224` vs `:169-172` |
 | V6 | Med | **Curve picker omits the default.** `CURVES` lacks `cameraZoom`; `config.easing` defaults to it, so the `<select>` shows the first option and any change is one-way. | `Inspector.tsx:69-73`, `config.ts:81` |
 
+**Fixed 2026-09-26 on `review-round-1`** (plan
+`docs/superpowers/plans/2026-09-26-review-round-1-fixes.md`): V1 → `createMediaClock`
+(`src/renderer/media/mediaClock.ts`, Task 7); V2 → `app.quit()` (Task 2); V3 →
+`-stats_period 0.02` plus `progressReportsFrame` scanning every block (Task 3);
+V4 → `scale=out_color_matrix=bt709,…,setparams=…` (Task 6 — on ffmpeg 9 the
+`-color_primaries`/`-color_trc` output options left both fields "unknown" for
+libx264 and h264_amf, so the tags ride on the frames); V5 → sampling until the
+out-keyframe (Task 5); V6 → `src/shared/zoom/curves.ts` (Task 4). Also: the
+e2e export skips without ffmpeg, Biome lint gate, CI on `windows-latest`, a
+`cut` config in `verify:parity`. Gates on the finished branch: lint clean,
+typecheck silent, 540 / 540, e2e 2 / 2 (libx264 + h264_amf, all four colour
+tags bt709), decode 6 / 6, parity 35 / 35, capture ddagrab 58.9 fps.
+
 ## Reported, plausible, not verified by hand
 
 Main / capture: a take can vanish on stop if `ffprobe` throws (no manifest is
