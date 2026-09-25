@@ -40,20 +40,27 @@ const probe = (
  * tested — the same shape as phase A shipping five broken cursor shapes
  * because the fixture emitted no cursor events.
  *
- * Empty when ffmpeg is not on PATH: the suite below is then skipped rather
- * than failing at collection, so `npm test` still means something on a
- * machine (or CI runner) without ffmpeg.
+ * Probed with a one-frame encode, not read off `ffmpeg -encoders`: that lists
+ * what was compiled in, and the static builds CI installs carry h264_amf on
+ * runners with no AMD driver, where it fails at init. Empty when ffmpeg is
+ * not on PATH at all: the suite below is then skipped rather than failing at
+ * collection, so `npm test` still means something on a machine without it.
  */
 function availableEncoders(): string[] {
-  let listed: string;
-  try {
-    listed = execFileSync("ffmpeg", ["-v", "error", "-encoders"], {
-      encoding: "utf8",
-    });
-  } catch {
-    return [];
-  }
-  return ["libx264", "h264_amf"].filter((e) => listed.includes(e));
+  const works = (encoder: string): boolean => {
+    try {
+      execFileSync(
+        "ffmpeg",
+        ["-v", "error", "-f", "lavfi", "-i", "color=s=320x180:r=30", "-frames:v", "1",
+         "-c:v", encoder, "-f", "null", "-"],
+        { stdio: "ignore" },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  return ["libx264", "h264_amf"].filter(works);
 }
 
 const encoders = availableEncoders();
