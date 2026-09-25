@@ -73,6 +73,13 @@ export function buildCaptureArgs(
     "error",
     "-progress",
     "pipe:1",
+    // The first progress block is what timestamps t=0 for telemetry and
+    // audio (see start()). At the default 0.5s period that anchor landed up
+    // to 500ms late; 20ms keeps it within a frame or two of the real first
+    // frame. The match in start() stays `frame >= 1` because at 30fps the
+    // first block can still say frame=0.
+    "-stats_period",
+    "0.02",
     "-nostats",
   ];
 
@@ -291,6 +298,9 @@ export class ScreenSource {
       stderr += chunk;
     });
 
+    // Wall-clock time of the first captured frame, as near as ffmpeg lets us
+    // observe it: the first -progress block reporting frame >= 1. With
+    // -stats_period 0.02 that is within ~20ms plus one frame.
     const firstFrame = new Promise<number>((resolve, reject) => {
       let buffer = "";
 

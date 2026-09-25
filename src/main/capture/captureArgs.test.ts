@@ -85,3 +85,18 @@ describe("buildCaptureArgs — gdigrab", () => {
     }
   });
 });
+
+describe("buildCaptureArgs — clock anchor", () => {
+  /**
+   * start() stamps t=0 for telemetry and audio when the first -progress block
+   * arrives. At ffmpeg's default 0.5s report period that anchor landed up to
+   * 500ms after the real first frame, and every event inherited the bias.
+   */
+  it.each(["ddagrab", "gdigrab"] as const)(
+    "asks for progress every 20ms on %s, so the first frame is stamped within a frame or two",
+    (backend) => {
+      const args = buildCaptureArgs(backend, opts);
+      expect(args[args.indexOf("-stats_period") + 1]).toBe("0.02");
+    },
+  );
+});
