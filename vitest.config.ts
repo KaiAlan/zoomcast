@@ -6,5 +6,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+    // Transforms were 60-70% of every run. The cache lives in node_modules so
+    // a reinstall invalidates it.
+    fsModuleCache: true,
   },
 });

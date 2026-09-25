@@ -39,16 +39,27 @@ const probe = (
  * libx264, so the encoder users actually get was the one nothing had ever
  * tested — the same shape as phase A shipping five broken cursor shapes
  * because the fixture emitted no cursor events.
+ *
+ * Empty when ffmpeg is not on PATH: the suite below is then skipped rather
+ * than failing at collection, so `npm test` still means something on a
+ * machine (or CI runner) without ffmpeg.
  */
 function availableEncoders(): string[] {
-  const listed = execFileSync("ffmpeg", ["-v", "error", "-encoders"], {
-    encoding: "utf8",
-  });
+  let listed: string;
+  try {
+    listed = execFileSync("ffmpeg", ["-v", "error", "-encoders"], {
+      encoding: "utf8",
+    });
+  } catch {
+    return [];
+  }
   return ["libx264", "h264_amf"].filter((e) => listed.includes(e));
 }
 
-describe.each(availableEncoders())("export end to end (%s)", (encoder) => {
-  it("produces a playable mp4 with video and mixed, cut-aware audio", async () => {
+const encoders = availableEncoders();
+
+describe.skipIf(encoders.length === 0)("export end to end", () => {
+  it.each(encoders)("produces a playable mp4 with video and mixed, cut-aware audio (%s)", async (encoder) => {
     // Each encoder writes its own file: sharing one path would race, and the
     // second run would assert against the first one's output.
     const OUT = join(TMP, `e2e-export-${encoder}.mp4`);
