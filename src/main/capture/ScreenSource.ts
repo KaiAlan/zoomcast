@@ -264,6 +264,21 @@ export async function probeRecording(file: string): Promise<RecordedVideoInfo> {
  * That is what makes `video.startOffsetMs` zero by construction instead of
  * something to measure and correct later.
  */
+/**
+ * True once any `-progress` block in `text` reports a frame.
+ *
+ * Every match, not the first: at a 20ms report period the first block
+ * routinely says `frame=0`, and a first-match scan of the accumulated output
+ * found that block forever — the capture timed out with "no frame within 10s"
+ * while ffmpeg was recording happily.
+ */
+export function progressReportsFrame(text: string): boolean {
+  for (const m of text.matchAll(/frame=\s*(\d+)/g)) {
+    if (Number(m[1]) >= 1) return true;
+  }
+  return false;
+}
+
 export class ScreenSource {
   private stderr = "";
   private exited = false;
@@ -307,8 +322,12 @@ export class ScreenSource {
       child.stdout?.setEncoding("utf8");
       child.stdout?.on("data", (chunk: string) => {
         buffer += chunk;
-        const match = /frame=\s*(\d+)/.exec(buffer);
-        if (match !== null && Number(match[1]) >= 1) resolve(Date.now());
+        if (progressReportsFrame(buffer)) resolve(Date.now());
+        // Blocks arrive 50 times a second now: keep only the unfinished last
+        // line, not the whole take's worth of progress. The listener stays
+        // attached so the pipe keeps draining — an undrained stdout would
+        // eventually block ffmpeg on its own progress writes.
+        buffer = buffer.slice(buffer.lastIndexOf("\n") + 1);
       });
 
       child.on("close", (code) => {

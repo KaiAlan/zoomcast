@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCaptureArgs, type ScreenCaptureOptions } from "./ScreenSource";
+import { buildCaptureArgs, progressReportsFrame, type ScreenCaptureOptions } from "./ScreenSource";
 
 const opts: ScreenCaptureOptions = {
   outFile: "C:\\out\\screen.mp4",
@@ -99,4 +99,25 @@ describe("buildCaptureArgs — clock anchor", () => {
       expect(args[args.indexOf("-stats_period") + 1]).toBe("0.02");
     },
   );
+});
+
+describe("progressReportsFrame", () => {
+  it("is false while every block still says frame=0", () => {
+    expect(progressReportsFrame("frame=0\nfps=0.0\nprogress=continue\n")).toBe(false);
+  });
+
+  /**
+   * At a 20ms report period the first block routinely says frame=0, and a
+   * first-match scan of the accumulated output found that block forever:
+   * verify:capture timed out with "capture produced no frame within 10s".
+   */
+  it("is true once any later block reports a frame", () => {
+    const text = "frame=0\nfps=0.0\nprogress=continue\nframe=1\nfps=48.2\nprogress=continue\n";
+    expect(progressReportsFrame(text)).toBe(true);
+  });
+
+  it("copes with a block split across chunks", () => {
+    expect(progressReportsFrame("fra")).toBe(false);
+    expect(progressReportsFrame("frame=2")).toBe(true);
+  });
 });
