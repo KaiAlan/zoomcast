@@ -4,6 +4,7 @@ import type {
   StyleConfig,
 } from "../../shared/project/types";
 import { DEFAULT_ZOOM_CONFIG } from "../../shared/zoom/config";
+import { CURVES } from "../../shared/zoom/curves";
 import type { EasingName, ZoomConfig } from "../../shared/zoom/types";
 import { buttonInput, fieldLabel, numberInput, row, sectionHeader, selectInput } from "./controls";
 import { StylePanel } from "./StylePanel";
@@ -59,17 +60,6 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   { key: "depthType", label: "depth · typing", step: 0.05, min: 0 },
   { key: "depthScroll", label: "depth · scroll", step: 0.05, min: 0 },
   { key: "contextFraction", label: "context fraction", step: 0.05, min: 0.1 },
-];
-
-/**
- * The curves worth offering. `linear` is deliberately absent: it is what the
- * follow camera's own samples use so the precomputed path is what renders, not
- * a look anyone would choose for a zoom.
- */
-const CURVES: Array<{ value: EasingName; label: string }> = [
-  { value: "screenStudio", label: "studio — commits, then settles" },
-  { value: "zoomGlide", label: "glide — even, peaks mid-move" },
-  { value: "zoomEase", label: "ease — fast in, drifting tail" },
 ];
 
 export function Inspector({
