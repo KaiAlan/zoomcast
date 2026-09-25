@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ZOOM_CONFIG } from "./config";
-import { pixelParityZoom, screenRect } from "./geometry";
+import { pixelParityZoom } from "./geometry";
 import type { TelemetryEvent } from "../bundle/types";
 import { followPath } from "./camera";
 import { cursorAt } from "../cursor/path";
@@ -226,8 +226,6 @@ describe("a follow segment", () => {
 
   it("never leaves the source", () => {
     const kfs = segmentsToKeyframes([seg5], cfg, square, path);
-
-    const frame = screenRect(square.source, square.output, square.paddingFactor);
 
     for (const k of kfs.filter((x) => x.scale > 1)) {
       // The bound comes from the quad the renderer actually draws with, not a

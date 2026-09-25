@@ -10,6 +10,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "fixture": "tsx tools/make-fixture.ts",
@@ -33,6 +34,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

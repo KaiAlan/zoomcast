@@ -21,7 +21,7 @@ import {
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
-import { type DeriveContext } from "../../shared/zoom/derive";
+import type { DeriveContext } from "../../shared/zoom/derive";
 import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
@@ -550,6 +550,7 @@ export function Editor({
    * Redrawing one frame more often than strictly needed costs a decode that is
    * almost always a cache hit.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the effect must re-run on every project change; that is the one way an edit reaches a paused preview (see the comment above)
   useEffect(() => {
     playerRef.current?.seek(playerRef.current.playheadMs);
   }, [project]);

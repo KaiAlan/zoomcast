@@ -245,7 +245,7 @@ export class Renderer {
       );
     }
 
-    if (state.cursor !== undefined && state.cursor.style.visible) {
+    if (state.cursor?.style.visible) {
       const cursor = state.cursor;
       this.withFrameClip(quad, out, () =>
         this.drawCursor(cursor.sample, cursor.style, quad, region, out, src),

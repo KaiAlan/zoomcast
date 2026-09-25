@@ -75,7 +75,7 @@ export function buildCursorPath(
 
   // Half-life form, so the response is frame-rate independent by construction.
   const halfLife = opts.halfLifeMs;
-  const decay = halfLife <= 0 ? 0 : Math.pow(0.5, stepMs / halfLife);
+  const decay = halfLife <= 0 ? 0 : 0.5 ** (stepMs / halfLife);
 
   let x = first.x;
   let y = first.y;
