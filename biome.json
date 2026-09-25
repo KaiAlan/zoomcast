@@ -1,32 +1,32 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
-	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-	"files": { "includes": ["src/**", "tools/**", "tests/**", "*.config.ts"] },
-	"formatter": { "enabled": false },
-	"linter": {
-		"enabled": true,
-		"rules": { "preset": "none" }
-	},
-	"overrides": [
-		{
-			"includes": ["src/renderer/gl/**"],
-			"linter": {
-				"rules": {
-					"correctness": {
-						"useHookAtTopLevel": "off"
-					}
-				}
-			}
-		},
-		{
-			"includes": ["**/*.test.ts"],
-			"linter": {
-				"rules": {
-					"style": {
-						"noNonNullAssertion": "off"
-					}
-				}
-			}
-		}
-	]
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["src/**", "tools/**", "tests/**", "*.config.ts"] },
+  "formatter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": { "preset": "recommended" }
+  },
+  "overrides": [
+    {
+      "includes": ["src/renderer/gl/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useHookAtTopLevel": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    }
+  ]
 }
