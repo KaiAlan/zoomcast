@@ -109,5 +109,11 @@ describe.skipIf(encoders.length === 0)("export end to end", () => {
     expect(duration).toBeLessThan(4.3);
 
     expect(probe(OUT, "stream=codec_name", "a:0")).toBe("aac");
+
+    // The tags are what tells a player which matrix to decode with. Probed per
+    // encoder: libx264 writes VUI itself; h264_amf is the one users get.
+    expect(probe(OUT, "stream=color_space", "v:0")).toBe("bt709");
+    expect(probe(OUT, "stream=color_primaries", "v:0")).toBe("bt709");
+    expect(probe(OUT, "stream=color_transfer", "v:0")).toBe("bt709");
   }, 120_000);
 });

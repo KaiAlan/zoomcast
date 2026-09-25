@@ -126,6 +126,22 @@ export function buildExportArgs(o: ExportArgsOptions): string[] {
   }
 
   args.push(
+    // The canvas hands over sRGB RGBA. Left to itself swscale converts to YUV
+    // with BT.601 coefficients and writes no colour tags, so players — which
+    // assume BT.709 for HD — decoded the chroma slightly wrong and the export
+    // no longer matched the preview. Convert with 709 and tag it as such.
+    // A plain -vf is legal here: the video is mapped straight from input 0
+    // and is not a -filter_complex output.
+    "-vf",
+    "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
+    "-colorspace",
+    "bt709",
+    "-color_primaries",
+    "bt709",
+    "-color_trc",
+    "bt709",
+    "-color_range",
+    "tv",
     "-c:v",
     o.encoder,
     "-b:v",

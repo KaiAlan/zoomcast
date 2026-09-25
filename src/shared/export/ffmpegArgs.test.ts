@@ -116,3 +116,24 @@ describe("buildExportArgs", () => {
     }
   });
 });
+
+describe("buildExportArgs — colour", () => {
+  /**
+   * The canvas hands over sRGB RGBA. Left alone, swscale converts to YUV with
+   * BT.601 coefficients and writes no colour tags; players assume BT.709 for
+   * HD, so the exported chroma no longer matched the preview.
+   */
+  it("converts to BT.709 and tags the stream so HD players decode what the preview showed", () => {
+    const s = joined(base);
+    expect(s).toContain("-vf scale=out_color_matrix=bt709:out_range=tv,format=yuv420p");
+    expect(s).toContain("-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv");
+  });
+
+  it("keeps the colour conversion on -vf; the video never enters the complex graph", () => {
+    // -vf on a stream that -filter_complex does not produce is legal. Moving
+    // the video into the complex graph would change every audio label below.
+    const args = buildExportArgs(base);
+    expect(args[args.indexOf("-filter_complex") + 1]).not.toContain("scale=");
+    expect(args.indexOf("-vf")).toBeGreaterThan(args.indexOf("-filter_complex"));
+  });
+});
