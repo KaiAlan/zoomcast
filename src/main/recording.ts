@@ -1,9 +1,8 @@
-import { BrowserWindow, globalShortcut, Menu, nativeImage, Tray } from "electron";
+import { app, BrowserWindow, globalShortcut, Menu, nativeImage, Tray } from "electron";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { RecordingSummary } from "../shared/api";
 import {
-  abortRecording,
   isRecording,
   recordingsRoot,
   startRecording,
@@ -176,11 +175,10 @@ function updateTray(): void {
       { type: "separator" },
       {
         label: "Quit",
-        click: () => {
-          void abortRecording().finally(() => {
-            for (const win of BrowserWindow.getAllWindows()) win.destroy();
-          });
-        },
+        // One quit path. `before-quit` in index.ts finishes any take and then
+        // calls app.exit; destroying the windows here without quitting left
+        // the process, the tray and the hotkey alive after "Quit".
+        click: () => app.quit(),
       },
     ]),
   );
