@@ -73,6 +73,13 @@ export function buildCaptureArgs(
     "error",
     "-progress",
     "pipe:1",
+    // The first progress block is what timestamps t=0 for telemetry and
+    // audio (see start()). At the default 0.5s period that anchor landed up
+    // to 500ms late; 20ms keeps it within a frame or two of the real first
+    // frame. The match in start() stays `frame >= 1` because at 30fps the
+    // first block can still say frame=0.
+    "-stats_period",
+    "0.02",
     "-nostats",
   ];
 
@@ -257,6 +264,21 @@ export async function probeRecording(file: string): Promise<RecordedVideoInfo> {
  * That is what makes `video.startOffsetMs` zero by construction instead of
  * something to measure and correct later.
  */
+/**
+ * True once any `-progress` block in `text` reports a frame.
+ *
+ * Every match, not the first: at a 20ms report period the first block
+ * routinely says `frame=0`, and a first-match scan of the accumulated output
+ * found that block forever — the capture timed out with "no frame within 10s"
+ * while ffmpeg was recording happily.
+ */
+export function progressReportsFrame(text: string): boolean {
+  for (const m of text.matchAll(/frame=\s*(\d+)/g)) {
+    if (Number(m[1]) >= 1) return true;
+  }
+  return false;
+}
+
 export class ScreenSource {
   private stderr = "";
   private exited = false;
@@ -291,14 +313,21 @@ export class ScreenSource {
       stderr += chunk;
     });
 
+    // Wall-clock time of the first captured frame, as near as ffmpeg lets us
+    // observe it: the first -progress block reporting frame >= 1. With
+    // -stats_period 0.02 that is within ~20ms plus one frame.
     const firstFrame = new Promise<number>((resolve, reject) => {
       let buffer = "";
 
       child.stdout?.setEncoding("utf8");
       child.stdout?.on("data", (chunk: string) => {
         buffer += chunk;
-        const match = /frame=\s*(\d+)/.exec(buffer);
-        if (match !== null && Number(match[1]) >= 1) resolve(Date.now());
+        if (progressReportsFrame(buffer)) resolve(Date.now());
+        // Blocks arrive 50 times a second now: keep only the unfinished last
+        // line, not the whole take's worth of progress. The listener stays
+        // attached so the pipe keeps draining — an undrained stdout would
+        // eventually block ffmpeg on its own progress writes.
+        buffer = buffer.slice(buffer.lastIndexOf("\n") + 1);
       });
 
       child.on("close", (code) => {

@@ -133,8 +133,9 @@ natively on Windows.
 
 | Command | What it checks |
 | --- | --- |
-| `npm test` | Unit suite — 418 tests across 46 files on `main` (521 / 51 on `phase-e-timeline-editing`) |
+| `npm test` | Unit suite — 521 tests across 51 files |
 | `npm run typecheck` | `tsc --noEmit`, must be silent |
+| `npm run lint` | Biome, must be clean |
 | `npm run verify:decode` | That a frame rendered at time *t* really is the frame at *t* |
 | `npm run verify:parity` | That the preview and the export compose identically, across 6 configurations × 5 times |
 | `npm run verify:capture` | That capture runs on `ddagrab` at ~55fps rather than falling back to `gdigrab` |

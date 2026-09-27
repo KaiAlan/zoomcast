@@ -10,7 +10,7 @@ import {
 import type { Cut } from "./types";
 
 const DURATION = 10_000;
-const CUTS: Cut[] = [{ startMs: 4200, endMs: 7100 }];
+const CUTS: Cut[] = [{ id: "c1", startMs: 4200, endMs: 7100 }];
 
 describe("timeline — examples", () => {
   it("shortens the output by the total cut length", () => {
@@ -42,8 +42,8 @@ describe("timeline — examples", () => {
 
   it("handles two cuts", () => {
     const two: Cut[] = [
-      { startMs: 1000, endMs: 2000 },
-      { startMs: 5000, endMs: 5500 },
+      { id: "c1", startMs: 1000, endMs: 2000 },
+      { id: "c2", startMs: 5000, endMs: 5500 },
     ];
     expect(outputDurationMs(DURATION, two)).toBe(8500);
     expect(outputToSource(1000, DURATION, two)).toBe(2000);
@@ -59,7 +59,7 @@ const arbCuts = fc
     ),
     { maxLength: 6 },
   )
-  .map((pairs) => pairs.map(([a, b]) => ({ startMs: a, endMs: b })));
+  .map((pairs) => pairs.map(([a, b], i) => ({ id: `c${i}`, startMs: a, endMs: b })));
 
 describe("timeline — properties", () => {
   it("outputDuration equals duration minus the sum of normalised cuts", () => {
@@ -118,7 +118,7 @@ describe("timeline — properties", () => {
 
 describe("sourceSpanToOutput", () => {
   it("shifts a span that sits after a cut back by the cut's length", () => {
-    expect(sourceSpanToOutput(5000, 6000, 10_000, [{ startMs: 1000, endMs: 2000 }])).toEqual({
+    expect(sourceSpanToOutput(5000, 6000, 10_000, [{ id: "c1", startMs: 1000, endMs: 2000 }])).toEqual({
       startMs: 4000,
       endMs: 5000,
     });
@@ -126,7 +126,7 @@ describe("sourceSpanToOutput", () => {
 
   it("shortens a span that crosses a cut instead of dropping it", () => {
     // 1000..4000 with 2000..3000 removed occupies 1000..3000 in output.
-    expect(sourceSpanToOutput(1000, 4000, 10_000, [{ startMs: 2000, endMs: 3000 }])).toEqual({
+    expect(sourceSpanToOutput(1000, 4000, 10_000, [{ id: "c1", startMs: 2000, endMs: 3000 }])).toEqual({
       startMs: 1000,
       endMs: 3000,
     });
@@ -134,12 +134,12 @@ describe("sourceSpanToOutput", () => {
 
   it("collapses a span swallowed whole by a cut", () => {
     expect(
-      sourceSpanToOutput(2200, 2800, 10_000, [{ startMs: 2000, endMs: 3000 }]),
+      sourceSpanToOutput(2200, 2800, 10_000, [{ id: "c1", startMs: 2000, endMs: 3000 }]),
     ).toBeNull();
   });
 
   it("agrees with sourceToOutput on both endpoints when neither is cut", () => {
-    const cuts = [{ startMs: 2000, endMs: 3000 }];
+    const cuts = [{ id: "c1", startMs: 2000, endMs: 3000 }];
     const span = sourceSpanToOutput(4000, 7000, 10_000, cuts);
 
     expect(span).toEqual({

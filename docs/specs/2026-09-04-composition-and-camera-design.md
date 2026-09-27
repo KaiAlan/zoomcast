@@ -337,7 +337,7 @@ leave speed out. It is the one item here that is genuinely optional.
 | B | Compositor: background, blur, frame radius/shadow/border, aspect + resolution | — |
 | C | Camera: persisted segments, follow-cursor damping, retuned transitions, preview performance | A, B |
 | D | Motion blur | C |
-| E | Timeline: draggable zoom segments, segment/global popover, real cuts, undo/redo | C |
+| E | Timeline: draggable zoom segments, segment/global popover, real cuts, undo/redo, keyboard shortcuts — **done**, branch `phase-e-timeline-editing` | C |
 | F | Clip speed | E |
 | G | UI revamp: the whole editor surface | E |
 

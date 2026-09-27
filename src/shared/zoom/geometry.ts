@@ -1,4 +1,4 @@
-import type { Cluster, PlanContext, Size, ZoomConfig } from "./types";
+import type { Size } from "./types";
 
 export type Rect = { x: number; y: number; w: number; h: number };
 

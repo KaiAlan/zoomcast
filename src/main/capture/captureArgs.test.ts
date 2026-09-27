@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCaptureArgs, type ScreenCaptureOptions } from "./ScreenSource";
+import { buildCaptureArgs, progressReportsFrame, type ScreenCaptureOptions } from "./ScreenSource";
 
 const opts: ScreenCaptureOptions = {
   outFile: "C:\\out\\screen.mp4",
@@ -83,5 +83,41 @@ describe("buildCaptureArgs — gdigrab", () => {
     for (const backend of ["ddagrab", "gdigrab"] as const) {
       expect(buildCaptureArgs(backend, opts)).toContain("+frag_keyframe+empty_moov");
     }
+  });
+});
+
+describe("buildCaptureArgs — clock anchor", () => {
+  /**
+   * start() stamps t=0 for telemetry and audio when the first -progress block
+   * arrives. At ffmpeg's default 0.5s report period that anchor landed up to
+   * 500ms after the real first frame, and every event inherited the bias.
+   */
+  it.each(["ddagrab", "gdigrab"] as const)(
+    "asks for progress every 20ms on %s, so the first frame is stamped within a frame or two",
+    (backend) => {
+      const args = buildCaptureArgs(backend, opts);
+      expect(args[args.indexOf("-stats_period") + 1]).toBe("0.02");
+    },
+  );
+});
+
+describe("progressReportsFrame", () => {
+  it("is false while every block still says frame=0", () => {
+    expect(progressReportsFrame("frame=0\nfps=0.0\nprogress=continue\n")).toBe(false);
+  });
+
+  /**
+   * At a 20ms report period the first block routinely says frame=0, and a
+   * first-match scan of the accumulated output found that block forever:
+   * verify:capture timed out with "capture produced no frame within 10s".
+   */
+  it("is true once any later block reports a frame", () => {
+    const text = "frame=0\nfps=0.0\nprogress=continue\nframe=1\nfps=48.2\nprogress=continue\n";
+    expect(progressReportsFrame(text)).toBe(true);
+  });
+
+  it("copes with a block split across chunks", () => {
+    expect(progressReportsFrame("fra")).toBe(false);
+    expect(progressReportsFrame("frame=2")).toBe(true);
   });
 });

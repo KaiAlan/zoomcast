@@ -1,8 +1,8 @@
 # zoomcast — handover
 
-> New to the project? Start with `docs/DEVELOPER-GUIDE.md` (2026-09-18). The
-> newest work, phase E, is on the branch `phase-e-timeline-editing`, and so is
-> the newest version of this file.
+> New to the project? Start with `docs/DEVELOPER-GUIDE.md` (2026-09-18): the
+> overview, feature list, open work and next steps. This file is the deep
+> reference behind it.
 
 Updated 2026-09-08. **Phases 0–7, A, B, C and D complete, plus the camera
 geometry and depth rework, the per-segment camera switch, the preview
@@ -35,6 +35,13 @@ timeline and the inspector's "selected shot" section switches its camera
 between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
 a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
+
+**Phase E is complete — all 12 tasks — on the branch
+`phase-e-timeline-editing`, not on `main`.** See "What landed — phase E"
+below for what shipped and, just as important, what has never been run. The
+design is `docs/specs/2026-09-09-phase-e-timeline-editing-design.md` and the
+task record is `docs/superpowers/plans/2026-09-09-phase-e-ledger.md`,
+which carries every ruling made without the user in the room.
 
 **Capture runs on ddagrab at last. 32.59fps -> 55.42fps.** The 2026-09-08
 handoff's leading hypothesis was right — ffmpeg was running on the wrong GPU —
@@ -117,8 +124,9 @@ tracked as phases C–F in
 `docs/specs/2026-09-04-composition-and-camera-design.md` §13, plus webcam PiP
 (the old phase 8), which is untouched and independent of all of them.
 
-**Phase D (motion blur) is next; E is the one to reach for if the editing
-surface matters more than the look.**
+**Next (2026-09-18): finish phase E's open review fixes, drive it by hand,
+merge it, then webcam PiP or phase G.** The ordered list is in
+`docs/DEVELOPER-GUIDE.md` §9.
 
 ## What this is
 
@@ -134,7 +142,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 418 passing, 46 files
+npm test              # 521 passing, 51 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -195,6 +203,45 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 13.7/min including one held 0.89s against 1.2s of transition and one starting
 0.14s after the previous ended.
 
+## What landed — phase E (2026-09-09)
+
+Phase E is done, 12 tasks, on `phase-e-timeline-editing` (not merged to
+`main`). It delivered: the `applyPlan` split into `replanFrom` /
+`deriveKeyframes`; cut ids; an undo/redo history with drag-gesture coalescing
+and a 100-entry cap; pure segment and cut edit operations (`edits.ts`) with
+their invariants; one mutation seam for the editor
+(`useProjectHistory`/`edit.apply`) with history behind it; a timeline split
+into ruler, zoom and cut lanes; draggable and resizable zoom segments; real
+drag-to-create cut regions, replacing the old "cut 0.5s here" button; a
+per-shot popover for depth and camera, replacing the inspector's "selected
+shot" section; and Ctrl+Z / Ctrl+Shift+Z / Delete / Escape.
+
+**Phase E's entire pointer/UI layer has never been run.** This is not a
+footnote. No `.tsx` file in this repo is reached by any test — the vitest
+suite has no React harness — and the brief's "verify by hand" step was
+skipped in tasks 10, 11 and 12 because no agent in that run could launch
+Electron. Every gate that *can* run mechanically (tests, typecheck, build,
+decode parity, preview/export parity, capture rate, tune) is green and
+unchanged, and none of them exercises a pointer event, a drag, or a
+keystroke. Before phase E is trusted, a human needs to sit down and drive
+it:
+
+- **Cut lane** — drag on empty space to create a cut (output duration should
+  shorten); drag a cut; drag one cut into another (they merge, and the merged
+  cut keeps following the pointer); drag a cut's END edge a long way — it
+  cannot grow past half the remaining lane, a known consequence of drawing a
+  source-width region on an output scale (see `cutResizeToSource` in
+  `src/shared/project/edits.ts`), and it needs a human's judgment on whether
+  that limit is tolerable.
+- **Zoom lane** — drag and resize a segment, including across a cut.
+- **Popover** — select a shot, press a depth preset (the preview should
+  change immediately and the badge should track it), and confirm "reset to
+  auto" returns a dragged shot to planner control.
+- **Shortcuts** — Ctrl+Z undoes a whole drag in ONE press, not one
+  pointermove at a time; Ctrl+Shift+Z redoes; Delete removes the selection
+  and undoing the delete restores it **selected**; Escape clears the
+  selection and closes the popover.
+
 ## What landed 2026-09-08
 
 Every item below was found by measuring, and several first attempts were
@@ -229,8 +276,9 @@ whole motion-blur pass was rendering unguarded.
 
 ## What is NOT built
 
-Phases D–G are specified in `docs/specs/2026-09-04-composition-and-camera-design.md`
-§13. None has a written plan yet.
+Phases D and E are built (E on its branch). F and G are specified in
+`docs/specs/2026-09-04-composition-and-camera-design.md` §13 and have no
+written plan yet.
 
 Four plans are done and merged:
 `2026-09-06-phase-c-export-diagnostics.md` (tasks 1–6; task 7 is open but its
@@ -250,7 +298,7 @@ answered.
 | C+ | Camera geometry (fixed frame, sampled region), configurable ceiling, depth grading — **done**, spec `2026-09-07-camera-geometry-and-depth-design.md` | C |
 | C+ shots | Per-segment camera switch: segment blocks in the timeline, `fixed`/`follow` in the inspector — **done**, plan `2026-09-07-follow-camera-handoff.md` | C+ |
 | D | Directional motion blur — **done** 2026-09-08, off by default (`style.motionBlurAmount`) | C |
-| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo | C |
+| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo, keyboard shortcuts — **done** on branch `phase-e-timeline-editing`, unverified by hand | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
 
@@ -309,14 +357,15 @@ second `VideoSource` in the editor, the webcam pass in `Renderer`
 
 Also worth doing early:
 
-- **Undo/redo.** Spec §6 specifies immutable project snapshots. Nothing yet.
-- **Draggable cut regions.** Currently a placeholder "cut 0.5s here" button;
-  there is no way to adjust or delete a cut once made.
 - **Surface the `unclean` state.** A recording that ended abnormally is marked
   in the manifest and logged, but the Welcome list does not show it.
 - **Delete recordings from the UI.** The list shows sizes; there is no delete.
 
-## Known limitation: no working ddagrab on this machine
+## Resolved 2026-09-08: ddagrab did not work on this machine
+
+> Historical. ddagrab works now — the cause was the GPU preference, see the
+> top of this file and `src/main/capture/gpuPreference.ts`. Kept for the
+> diagnosis record.
 
 The spec was built around DXGI Desktop Duplication (`ddagrab`) for zero-copy GPU
 capture. **It does not work here** — but the diagnosis is more specific than

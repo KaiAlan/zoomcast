@@ -1,6 +1,6 @@
 import { buildCursorPath, type CursorPath } from "../cursor/path";
 import type { TelemetryEvent } from "../bundle/types";
-import { clamp, screenRect } from "./geometry";
+import { clamp } from "./geometry";
 import { focusBoundsFor } from "./viewport";
 import type { PlanContext } from "./types";
 

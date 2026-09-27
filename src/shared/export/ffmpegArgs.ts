@@ -126,6 +126,21 @@ export function buildExportArgs(o: ExportArgsOptions): string[] {
   }
 
   args.push(
+    // The canvas hands over sRGB RGBA. Left to itself swscale converts to YUV
+    // with BT.601 coefficients and writes no colour tags, so players — which
+    // assume BT.709 for HD — decoded the chroma slightly wrong and the export
+    // no longer matched the preview. Convert with 709 and tag it as such.
+    //
+    // The tags ride on the frames (setparams), not on -colorspace and
+    // friends: on ffmpeg 9 the encoder takes colour from the frames it is
+    // handed, and those output options left primaries and transfer "unknown"
+    // for both libx264 and h264_amf. Measured 2026-09-26.
+    //
+    // A plain -vf is legal here: the video is mapped straight from input 0
+    // and is not a -filter_complex output.
+    "-vf",
+    "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p," +
+      "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv",
     "-c:v",
     o.encoder,
     "-b:v",

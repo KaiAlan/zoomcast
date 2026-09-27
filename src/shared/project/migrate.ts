@@ -1,5 +1,5 @@
 import { defaultProject } from "./defaults";
-import type { Project } from "./types";
+import type { Cut, Project } from "./types";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -37,6 +37,47 @@ function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T)
   return typeof v === "string" && (allowed as readonly string[]).includes(v)
     ? (v as T)
     : fallback;
+}
+
+/**
+ * Cuts, with an id on every one of them and no two the same.
+ *
+ * Cuts written before ids existed get a deterministic `cut-<index>`, so the
+ * same project.json migrates to the same ids every load. That fallback used to
+ * be minted blind, and a project carrying an explicit id of literally `cut-1`
+ * collided with the fallback for index 1. Harmless while nothing looked a cut
+ * up by id; phase E's timeline does exactly that — `moveCut` and `resizeCut`
+ * both `find` by id — so a collision would move or resize the wrong cut.
+ *
+ * Explicit ids are reserved up front and never rewritten: they are what the
+ * file says, and only the invented ones step aside.
+ */
+function migrateCuts(raw: unknown[]): Cut[] {
+  const explicit = new Set(
+    raw
+      .filter(isRecord)
+      .map((c) => c.id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const taken = new Set<string>();
+
+  return raw.flatMap((c, i) => {
+    if (!isRecord(c)) return [];
+    const startMs = num(c.startMs, 0);
+    const endMs = num(c.endMs, 0);
+    if (endMs <= startMs) return [];
+
+    let id: string;
+    if (typeof c.id === "string") {
+      id = c.id;
+    } else {
+      id = `cut-${i}`;
+      for (let n = 1; explicit.has(id) || taken.has(id); n += 1) id = `cut-${i}-${n}`;
+    }
+
+    taken.add(id);
+    return [{ id, startMs, endMs }];
+  });
 }
 
 const BACKGROUND_KINDS = ["gradient", "color", "image", "hidden"] as const;
@@ -95,7 +136,7 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     // The caller's id wins: the directory a bundle was loaded from is the
     // truth, and a copied project directory would otherwise keep a stale id.
     bundleId,
-    cuts: Array.isArray(raw.cuts) ? (raw.cuts as Project["cuts"]) : base.cuts,
+    cuts: Array.isArray(raw.cuts) ? migrateCuts(raw.cuts as unknown[]) : base.cuts,
     zoom: {
       config: isRecord(zoom.config)
         ? { ...base.zoom.config, ...(zoom.config as Partial<Project["zoom"]["config"]>) }

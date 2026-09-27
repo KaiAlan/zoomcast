@@ -245,7 +245,7 @@ async function runUiShot(): Promise<void> {
 
   const seek = process.env.ZOOMCAST_UI_SHOT_SEEK;
   const query =
-    `?bundle=${encodeURIComponent(dir)}` + (seek === undefined ? "" : `&seek=${seek}`);
+    `?bundle=${encodeURIComponent(dir)}${seek === undefined ? "" : `&seek=${seek}`}`;
 
   const win = createWindow(false, query);
   await new Promise<void>((resolve) => win.webContents.once("did-finish-load", resolve));

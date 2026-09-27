@@ -1,6 +1,6 @@
 import type { ZoomConfig, ZoomKeyframe, ZoomSegment } from "../zoom/types";
 
-export type Cut = { startMs: number; endMs: number };
+export type Cut = { id: string; startMs: number; endMs: number };
 
 export type BackgroundKind = "gradient" | "color" | "image" | "hidden";
 export type BlurStrength = "none" | "moderate" | "strong";

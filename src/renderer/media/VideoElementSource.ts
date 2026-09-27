@@ -42,9 +42,6 @@ export class VideoElementSource implements FrameSource {
     readonly height: number,
   ) {}
 
-  /** Presentation time of the frame most recently reported by rVFC. */
-  lastMediaTimeMs = 0;
-
   static async open(url: string): Promise<VideoElementSource> {
     const el = document.createElement("video");
     el.preload = "auto";

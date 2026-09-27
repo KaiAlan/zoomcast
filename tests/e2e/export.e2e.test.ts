@@ -39,16 +39,34 @@ const probe = (
  * libx264, so the encoder users actually get was the one nothing had ever
  * tested — the same shape as phase A shipping five broken cursor shapes
  * because the fixture emitted no cursor events.
+ *
+ * Probed with a one-frame encode, not read off `ffmpeg -encoders`: that lists
+ * what was compiled in, and the static builds CI installs carry h264_amf on
+ * runners with no AMD driver, where it fails at init. Empty when ffmpeg is
+ * not on PATH at all: the suite below is then skipped rather than failing at
+ * collection, so `npm test` still means something on a machine without it.
  */
 function availableEncoders(): string[] {
-  const listed = execFileSync("ffmpeg", ["-v", "error", "-encoders"], {
-    encoding: "utf8",
-  });
-  return ["libx264", "h264_amf"].filter((e) => listed.includes(e));
+  const works = (encoder: string): boolean => {
+    try {
+      execFileSync(
+        "ffmpeg",
+        ["-v", "error", "-f", "lavfi", "-i", "color=s=320x180:r=30", "-frames:v", "1",
+         "-c:v", encoder, "-f", "null", "-"],
+        { stdio: "ignore" },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  return ["libx264", "h264_amf"].filter(works);
 }
 
-describe.each(availableEncoders())("export end to end (%s)", (encoder) => {
-  it("produces a playable mp4 with video and mixed, cut-aware audio", async () => {
+const encoders = availableEncoders();
+
+describe.skipIf(encoders.length === 0)("export end to end", () => {
+  it.each(encoders)("produces a playable mp4 with video and mixed, cut-aware audio (%s)", async (encoder) => {
     // Each encoder writes its own file: sharing one path would race, and the
     // second run would assert against the first one's output.
     const OUT = join(TMP, `e2e-export-${encoder}.mp4`);
@@ -57,7 +75,7 @@ describe.each(availableEncoders())("export end to end (%s)", (encoder) => {
     rmSync(OUT, { force: true });
 
     const durationMs = 5000;
-    const cuts = [{ startMs: 1000, endMs: 2000 }];
+    const cuts = [{ id: "c1", startMs: 1000, endMs: 2000 }];
     const fps = 30;
     const width = 320;
     const height = 180;
@@ -98,5 +116,11 @@ describe.each(availableEncoders())("export end to end (%s)", (encoder) => {
     expect(duration).toBeLessThan(4.3);
 
     expect(probe(OUT, "stream=codec_name", "a:0")).toBe("aac");
+
+    // The tags are what tells a player which matrix to decode with. Probed per
+    // encoder: libx264 writes VUI itself; h264_amf is the one users get.
+    expect(probe(OUT, "stream=color_space", "v:0")).toBe("bt709");
+    expect(probe(OUT, "stream=color_primaries", "v:0")).toBe("bt709");
+    expect(probe(OUT, "stream=color_transfer", "v:0")).toBe("bt709");
   }, 120_000);
 });

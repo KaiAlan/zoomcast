@@ -21,3 +21,6 @@ tmp/
 
 # generated on demand: npm run fixture -- spread
 tests/fixtures/spread/
+
+# git worktrees for isolated task branches
+.worktrees/

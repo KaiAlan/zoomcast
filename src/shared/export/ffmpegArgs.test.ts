@@ -50,7 +50,7 @@ describe("buildExportArgs", () => {
   });
 
   it("splits and concatenates one segment per kept span", () => {
-    const s = joined({ ...base, cuts: [{ startMs: 1000, endMs: 2000 }] });
+    const s = joined({ ...base, cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }] });
     expect(s).toContain("asplit=2");
     expect(s).toContain("concat=n=2:v=0:a=1");
     expect(s).toContain("atrim=start=0:end=1");
@@ -61,8 +61,8 @@ describe("buildExportArgs", () => {
     const s = joined({
       ...base,
       cuts: [
-        { startMs: 1000, endMs: 2000 },
-        { startMs: 3000, endMs: 3500 },
+        { id: "c1", startMs: 1000, endMs: 2000 },
+        { id: "c2", startMs: 3000, endMs: 3500 },
       ],
     });
     expect(s).toContain("asplit=3");
@@ -98,7 +98,7 @@ describe("buildExportArgs", () => {
   it("gives every filter label a single consumer", () => {
     const args = buildExportArgs({
       ...base,
-      cuts: [{ startMs: 1000, endMs: 2000 }],
+      cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }],
       audio: [
         { file: "mic.webm", gainDb: 0, startOffsetMs: 142 },
         { file: "system.webm", gainDb: -6, startOffsetMs: 138 },
@@ -114,5 +114,31 @@ describe("buildExportArgs", () => {
       const reads = [...graph.matchAll(new RegExp(`\\[${label}\\]`, "g"))].length;
       expect(reads).toBe(2); // one produce, one consume
     }
+  });
+});
+
+describe("buildExportArgs — colour", () => {
+  /**
+   * The canvas hands over sRGB RGBA. Left alone, swscale converts to YUV with
+   * BT.601 coefficients and writes no colour tags; players assume BT.709 for
+   * HD, so the exported chroma no longer matched the preview.
+   */
+  it("converts to BT.709 and tags the stream so HD players decode what the preview showed", () => {
+    const s = joined(base);
+    // setparams, not -colorspace/-color_primaries/-color_trc: on ffmpeg 9 the
+    // encoder takes colour from the frames, and those output options left
+    // primaries and transfer "unknown" for both libx264 and h264_amf.
+    expect(s).toContain(
+      "-vf scale=out_color_matrix=bt709:out_range=tv,format=yuv420p," +
+        "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv",
+    );
+  });
+
+  it("keeps the colour conversion on -vf; the video never enters the complex graph", () => {
+    // -vf on a stream that -filter_complex does not produce is legal. Moving
+    // the video into the complex graph would change every audio label below.
+    const args = buildExportArgs(base);
+    expect(args[args.indexOf("-filter_complex") + 1]).not.toContain("scale=");
+    expect(args.indexOf("-vf")).toBeGreaterThan(args.indexOf("-filter_complex"));
   });
 });

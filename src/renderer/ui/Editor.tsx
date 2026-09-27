@@ -1,17 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, cursorAt, smoothingToHalfLife } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
-import { outputDurationMs, outputToSource } from "../../shared/project/timeline";
+import { outputDurationMs, outputToSource, sourceSpanToOutput } from "../../shared/project/timeline";
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
-import type { Cut, Project } from "../../shared/project/types";
+import type { Project } from "../../shared/project/types";
+import {
+  createCutFromDrag,
+  cutDragToSource,
+  cutResizeToSource,
+  deleteCut,
+  deleteSegment,
+  resetSegment,
+  segmentDragToSource,
+  segmentResizeToSource,
+  setSegmentCamera,
+  setSegmentDepth,
+} from "../../shared/project/edits";
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
-import { segmentsToKeyframes } from "../../shared/zoom/keyframes";
-import { planZoom } from "../../shared/zoom/planner";
-import { replan, replanSegments } from "../../shared/zoom/replan";
+import type { DeriveContext } from "../../shared/zoom/derive";
 import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
@@ -19,9 +29,12 @@ import { PreviewPlayer } from "../media/PreviewPlayer";
 import { VideoElementSource } from "../media/VideoElementSource";
 import { DecodedFrameSource } from "../media/VideoSource";
 import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
-import { type PreviewClock } from "../media/PreviewPlayer";
+import { createMediaClock } from "../media/mediaClock";
 import { Inspector } from "./Inspector";
+import { SegmentPopover } from "./SegmentPopover";
 import { Timeline } from "./Timeline";
+import { msToPct } from "./timeline/geometry";
+import { useProjectHistory } from "./useProjectHistory";
 
 /** How often the numeric readout catches up with the playhead. */
 const READOUT_INTERVAL_MS = 100;
@@ -43,6 +56,22 @@ const button: React.CSSProperties = {
   fontSize: 13,
 };
 
+/**
+ * True when a keydown's target is a text/number input, a textarea, or
+ * anything contenteditable -- the one definition every guarded branch of the
+ * keydown effect below shares, so a destructive or overriding shortcut
+ * (Delete/Backspace, Ctrl/Cmd+Z) can never fire while the user is typing in
+ * one of the Inspector's or the style panel's fields, and so that guard can
+ * never quietly drift out of sync with the Space handler's own.
+ */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return (
+    el !== null &&
+    (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
+  );
+}
+
 export function Editor({
   bundle,
   onBack,
@@ -54,8 +83,50 @@ export function Editor({
   const rendererRef = useRef<Renderer | null>(null);
   const sourceRef = useRef<VideoElementSource | null>(null);
   const playerRef = useRef<PreviewPlayer | null>(null);
+  /** Wraps `<Timeline>` so `SegmentPopover` can tell "inside the timeline" from "outside" for its dismiss-on-outside-pointerdown. */
+  const timelineWrapRef = useRef<HTMLDivElement | null>(null);
 
-  const [project, setProject] = useState<Project>(bundle.project);
+  const { manifest } = bundle;
+
+  /**
+   * The camera's own path: the same function the cursor uses, at a
+   * camera-scale half-life. Built once per take — it is a pure function of
+   * telemetry, which is what keeps preview and export showing one camera.
+   */
+  const cameraPath = useMemo(() => followPath(bundle.telemetry), [bundle.telemetry]);
+
+  /** Everything replanFrom/deriveKeyframes need that does not live on the project. */
+  const deriveCtx = useMemo<DeriveContext>(
+    () => ({
+      telemetry: bundle.telemetry,
+      cameraPath,
+      source: { w: manifest.video.width, h: manifest.video.height },
+      durationMs: manifest.durationMs,
+    }),
+    [bundle.telemetry, cameraPath, manifest.video.width, manifest.video.height, manifest.durationMs],
+  );
+
+  /**
+   * The only thing in this file that changes the project.
+   *
+   * Every handler below goes through `edit`, and the callback here is the one
+   * place `live.current`'s project is patched. It used to be patched by hand at
+   * each `setProject`, which is how addCut ended up patching the ref and never
+   * redrawing at all.
+   *
+   * `live` is declared further down, because it also carries values derived
+   * from the project this hook owns. The forward reference is safe: this
+   * callback is only ever invoked from an event handler or an effect, long
+   * after the binding exists.
+   */
+  const edit = useProjectHistory(bundle.project, deriveCtx, (p) => {
+    live.current = { ...live.current, project: p };
+  });
+  const project = edit.project;
+
+  /** The Inspector still keys its lookup off a bare segment id; `Selection` is the wider type. */
+  const selectedSegmentId = edit.selection?.kind === "segment" ? edit.selection.id : null;
+
   const [playheadMs, setPlayheadMs] = useState(0);
   /** The marker element, moved directly during playback. */
   const playheadElRef = useRef<HTMLDivElement | null>(null);
@@ -63,7 +134,6 @@ export function Editor({
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("loading…");
   const [exporting, setExporting] = useState<string | null>(null);
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
 
   // Resolved by lookup rather than held as state. Every re-plan rebuilds the
   // segments, and a shot whose cluster the new plan no longer produces is
@@ -72,7 +142,17 @@ export function Editor({
   const selectedSegment =
     project.zoom.segments.find((s) => s.id === selectedSegmentId) ?? null;
 
-  const { manifest } = bundle;
+  /**
+   * Where the selected segment's region sits, in the same output timebase
+   * `ZoomLane` draws it in. Null when there is no selection, or when the
+   * segment's span does not survive the cuts (`sourceSpanToOutput` returns
+   * null for a span a cut has swallowed entirely) -- in both cases the
+   * popover has nothing to anchor to and stays closed.
+   */
+  const selectedSegmentSpan =
+    selectedSegment === null
+      ? null
+      : sourceSpanToOutput(selectedSegment.startMs, selectedSegment.endMs, manifest.durationMs, project.cuts);
 
   const ctx: PlanContext = useMemo(
     () => ({
@@ -131,49 +211,9 @@ export function Editor({
   const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl });
   live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl };
 
-  /**
-   * The camera's own path: the same function the cursor uses, at a
-   * camera-scale half-life. Built once per take — it is a pure function of
-   * telemetry, which is what keeps preview and export showing one camera.
-   */
-  const cameraPath = useMemo(() => followPath(bundle.telemetry), [bundle.telemetry]);
-
-  /** Plan on load, then merge so pinned edits survive a config change. */
-  const applyPlan = useCallback(
-    (config: ZoomConfig, existing: Project) => {
-      const planCtx = {
-        source: { w: manifest.video.width, h: manifest.video.height },
-        // The zoom ceiling derives from the output size, so a re-plan after an
-        // aspect change must see the new shape or it plans for the old one.
-        output: outputSizeFor(existing.output, {
-          w: manifest.video.width,
-          h: manifest.video.height,
-        }),
-        paddingFactor: existing.style.paddingFactor,
-        durationMs: manifest.durationMs,
-      };
-
-      const segments = replanSegments(
-        existing.zoom.segments,
-        planZoom(bundle.telemetry, config, planCtx),
-      );
-
-      return {
-        segments,
-        keyframes: replan(
-          existing.zoom.keyframes,
-          segmentsToKeyframes(segments, config, planCtx, cameraPath),
-        ),
-      };
-    },
-    [
-      bundle.telemetry,
-      cameraPath,
-      manifest.video.width,
-      manifest.video.height,
-      manifest.durationMs,
-    ],
-  );
+  // Stable across history changes, unlike `edit` itself, so the mount effect
+  // below can depend on it without being torn down on every edit.
+  const { reset: resetProject } = edit;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -232,39 +272,12 @@ export function Editor({
       el.style.left = `${total === 0 ? 0 : (t / total) * 100}%`;
     };
 
-    /**
-     * The playhead during playback, taken from the video element itself.
-     *
-     * rVFC reports the presentation time of the frame about to be composited,
-     * so the composition is aligned to the frame actually on screen rather
-     * than to a time derived from the wall clock. That alignment is what
-     * removes the feedback loop the old loop had: a slow draw used to advance
-     * the playhead by ~60 frames and put it past the next keyframe.
-     *
-     * It reads through sourceRef because the player is constructed before the
-     * source is opened.
-     */
-    const clock: PreviewClock = {
-      start(fromMs) {
-        const source = sourceRef.current;
-        if (source === null) return;
-        source.el.currentTime = fromMs / 1000;
-        void source.el.play();
-      },
-      stop() {
-        sourceRef.current?.el.pause();
-      },
-      onFrame(cb) {
-        const tick = (_now: number, meta: VideoFrameCallbackMetadata): void => {
-          const source = sourceRef.current;
-          if (source === null) return;
-          source.lastMediaTimeMs = meta.mediaTime * 1000;
-          cb(meta.mediaTime * 1000);
-          source.el.requestVideoFrameCallback(tick);
-        };
-        sourceRef.current?.el.requestVideoFrameCallback(tick);
-      },
-    };
+    // The playhead during playback, taken from the video element itself and
+    // converted to output time. See createMediaClock.
+    const clock = createMediaClock(
+      () => sourceRef.current?.el ?? null,
+      () => ({ durationMs: manifest.durationMs, cuts: live.current.project.cuts }),
+    );
 
     const player = new PreviewPlayer(
       renderAt,
@@ -307,14 +320,10 @@ export function Editor({
 
         sourceRef.current = source;
 
-        setProject((prev) => {
-          const next = {
-            ...prev,
-            zoom: { ...prev.zoom, ...applyPlan(prev.zoom.config, prev) },
-          };
-          live.current = { ...live.current, project: next };
-          return next;
-        });
+        // The plan the bundle opens with. `reset` and not `apply`: this is not
+        // an edit the user made, and pushing it would leave the editor with an
+        // undo step back to a project that has no segments in it.
+        resetProject((p) => p, { replan: true });
 
         // The capture rate, not the output rate, and labelled as such: it is
         // routinely well under what was requested (gdigrab reaches about 28fps
@@ -447,21 +456,68 @@ export function Editor({
       renderer.dispose();
       rendererRef.current = null;
     };
-  }, [bundle, manifest, applyPlan]);
+    // `resetProject` is stable, so this still tears down only when the bundle
+    // changes. `deriveCtx` has left the list because the load-time re-plan now
+    // reads its context from inside the hook.
+  }, [bundle, manifest, resetProject]);
 
-  // Space toggles playback. preventDefault matters twice over: it stops the
-  // page scrolling, and it stops Space from re-activating whichever button was
-  // last clicked, which would otherwise fight this handler.
+  // Latest `edit` for the keydown effect below. `edit` changes identity on
+  // every history change (undo, redo, select, any apply), so closing over it
+  // directly would force the effect to re-attach its listener on every one of
+  // those -- a dependency list that is technically correct but re-runs
+  // constantly. Reading through a ref updated every render keeps the
+  // listener attached once, the same idiom `useProjectHistory` itself uses
+  // for `ctx` and `onProject`.
+  const editRef = useRef(edit);
+  editRef.current = edit;
+
+  // Space toggles playback; Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes;
+  // Delete/Backspace removes the selection; Escape clears it. preventDefault
+  // on Space matters twice over: it stops the page scrolling, and it stops
+  // Space from re-activating whichever button was last clicked, which would
+  // otherwise fight this handler.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.code !== "Space" || event.repeat) return;
+      // Shared with the Space branch below -- Delete/Backspace is
+      // destructive and Ctrl/Cmd+Z overrides whatever native undo a text
+      // field has, so both must yield to typing exactly as Space already
+      // does. One shared check keeps the two definitions from drifting apart.
+      const typing = isTypingTarget(event.target);
 
-      const target = event.target as HTMLElement | null;
-      const typing =
-        target !== null &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        if (typing) return;
+        event.preventDefault();
+        if (event.shiftKey) editRef.current.redo();
+        else editRef.current.undo();
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (typing) return;
+        const s = editRef.current.selection;
+        if (s === null) return;
+        event.preventDefault();
+        editRef.current.apply((p) =>
+          s.kind === "segment" ? deleteSegment(p, s.id) : deleteCut(p, s.id),
+        );
+        editRef.current.select(null);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        // Deliberately NOT guarded on `typing`: clearing `edit.selection`
+        // has no effect on a field's contents or focus, unlike Delete and
+        // Ctrl+Z it is not destructive and overrides nothing, and it also
+        // clears whatever `SegmentPopover` is showing -- it unmounts once
+        // `edit.selection` resolves to null, on the next render. That
+        // component's own Escape listener calls the same `select(null)` --
+        // redundant on a keystroke that already had a popover open, but not
+        // a race, since both converge on the same call rather than disagreeing.
+        editRef.current.select(null);
+        return;
+      }
+
+      if (event.code !== "Space" || event.repeat) return;
       if (typing) return;
 
       event.preventDefault();
@@ -494,20 +550,14 @@ export function Editor({
    * Redrawing one frame more often than strictly needed costs a decode that is
    * almost always a cache hit.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the effect must re-run on every project change; that is the one way an edit reaches a paused preview (see the comment above)
   useEffect(() => {
     playerRef.current?.seek(playerRef.current.playheadMs);
   }, [project]);
 
+  /** A pacing dial is a global change: it must regenerate unclaimed shots. */
   const onConfigChange = (config: ZoomConfig): void => {
-    setProject((prev) => {
-      const withConfig = { ...prev, zoom: { ...prev.zoom, config } };
-      const next = {
-        ...withConfig,
-        zoom: { ...withConfig.zoom, config, ...applyPlan(config, withConfig) },
-      };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => ({ ...p, zoom: { ...p.zoom, config } }), { replan: true });
   };
 
   /**
@@ -525,18 +575,7 @@ export function Editor({
    * for it ever lands.
    */
   const onOutputChange = (output: Project["output"]): void => {
-    setProject((prev) => {
-      const withOutput = { ...prev, output };
-      const next = {
-        ...withOutput,
-        zoom: {
-          ...withOutput.zoom,
-          ...applyPlan(withOutput.zoom.config, withOutput),
-        },
-      };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => ({ ...p, output }), { replan: true });
   };
 
   /**
@@ -549,41 +588,90 @@ export function Editor({
    * by id, which is also what makes the choice survive every later re-plan.
    */
   const onSegmentCameraChange = (id: string, position: ZoomSegment["position"]): void => {
-    setProject((prev) => {
-      const withSegment = {
-        ...prev,
-        zoom: {
-          ...prev.zoom,
-          segments: prev.zoom.segments.map((s) => (s.id === id ? { ...s, position } : s)),
-        },
-      };
-
-      const next = {
-        ...withSegment,
-        zoom: {
-          ...withSegment.zoom,
-          ...applyPlan(withSegment.zoom.config, withSegment),
-        },
-      };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+    edit.apply((p) => setSegmentCamera(p, id, position), { replan: true });
   };
 
-  const addCut = (): void => {
-    const start = playheadMs;
-    const end = Math.min(start + 500, outDuration);
-    if (end <= start) return;
+  /** Set one shot's depth from the popover. Pins the segment (see `setSegmentDepth`). */
+  const onSegmentDepthChange = (id: string, depth: number): void => {
+    edit.apply((p) => setSegmentDepth(p, id, depth));
+  };
 
-    const srcStart = outputToSource(start, manifest.durationMs, project.cuts);
-    const srcEnd = outputToSource(end, manifest.durationMs, project.cuts);
-    const cut: Cut = { startMs: srcStart, endMs: srcEnd };
+  /** Delete the shot from the popover and drop the now-stale selection. */
+  const onSegmentDelete = (id: string): void => {
+    edit.apply((p) => deleteSegment(p, id));
+    edit.select(null);
+  };
 
-    setProject((prev) => {
-      const next = { ...prev, cuts: [...prev.cuts, cut] };
-      live.current = { ...live.current, project: next };
-      return next;
-    });
+  /**
+   * Unpin, then re-plan: the shot rejoins the planner. This is what makes
+   * pinning recoverable, and pinning is a one-way door without it.
+   */
+  const onSegmentReset = (id: string): void => {
+    edit.apply((p) => resetSegment(p, id), { replan: true });
+  };
+
+  /**
+   * Drag a segment to an absolute output-ms target for its start edge.
+   *
+   * `targetStartOutputMs` is absolute, not a delta: `applyTransient` extends
+   * an open gesture by replacing `present` wholesale on every intermediate
+   * step (see `useProjectHistory.step` / `history.beginOrExtend`), so a
+   * delta-from-drag-start would be re-applied on top of an already-moved
+   * project and compound. An absolute target makes this idempotent --
+   * re-applying it to an unchanged project is a no-op, and a segment
+   * clamped against a neighbour has its next step measured fresh from the
+   * clamped position toward the same target rather than banking the
+   * rejected movement.
+   *
+   * The output-ms-to-source-delta glue lives in `segmentDragToSource`
+   * (edits.ts), pure and unit-tested there, rather than as a closure here.
+   */
+  const onSegmentMove = (id: string, targetStartOutputMs: number): void => {
+    edit.applyTransient((p) => segmentDragToSource(p, id, targetStartOutputMs, manifest.durationMs));
+  };
+
+  /**
+   * Resize one edge to an absolute output-ms target. Idempotent for the same
+   * reason as `onSegmentMove` above. The glue lives in `segmentResizeToSource`
+   * (edits.ts) -- see its doc comment for the §7 cut-crossing behaviour.
+   */
+  const onSegmentResize = (id: string, edge: "start" | "end", tOutputMs: number): void => {
+    edit.applyTransient((p) => segmentResizeToSource(p, id, edge, tOutputMs, manifest.durationMs));
+  };
+
+  /**
+   * Author a cut by dragging across empty space on the cut lane.
+   *
+   * One discrete edit, so it goes through `apply` and not the transient drag
+   * path: nothing is recorded until the pointer comes up, and the result is a
+   * single undo step. `createCutFromDrag` holds the `MIN_CUT_MS` floor, which
+   * `addCut` does not enforce and nothing else now guards.
+   */
+  const onCreateCut = (aFrac: number, bFrac: number): void => {
+    edit.apply((p) =>
+      createCutFromDrag(p, crypto.randomUUID(), aFrac, bFrac, manifest.durationMs),
+    );
+  };
+
+  /**
+   * Drag a cut's seam to an absolute lane fraction.
+   *
+   * A fraction, where the segment callbacks take output ms, because a cut edit
+   * moves the output timebase: growing a cut shortens `outDuration`, so the
+   * same pointer pixel is a different output ms from one pointermove to the
+   * next and output ms stops being an absolute coordinate mid-gesture. The
+   * pointer's position across the lane does not stop being one. The mapping
+   * lives in `cutDragToSource` / `cutResizeToSource` (edits.ts), pure and
+   * unit-tested there; read `cutResizeToSource` for why a resize has to solve
+   * for the post-rescale geometry rather than convert through it.
+   */
+  const onCutMove = (id: string, targetStartFrac: number): void => {
+    edit.applyTransient((p) => cutDragToSource(p, id, targetStartFrac, manifest.durationMs));
+  };
+
+  /** Resize one edge to an absolute lane fraction. See `onCutMove`. */
+  const onCutResize = (id: string, edge: "start" | "end", tFrac: number): void => {
+    edit.applyTransient((p) => cutResizeToSource(p, id, edge, tFrac, manifest.durationMs));
   };
 
   const runExport = (): void => {
@@ -682,9 +770,6 @@ export function Editor({
           <button type="button" style={button} onClick={() => playerRef.current?.seek(0)}>
             start
           </button>
-          <button type="button" style={button} onClick={addCut}>
-            cut 0.5s here
-          </button>
           <button
             type="button"
             style={button}
@@ -702,20 +787,43 @@ export function Editor({
           </button>
         </div>
 
-        <Timeline
-          durationMs={manifest.durationMs}
-          outputDurationMs={outDuration}
-          cuts={project.cuts}
-          keyframes={project.zoom.keyframes}
-          segments={project.zoom.segments}
-          selectedSegmentId={selectedSegmentId}
-          onSelectSegment={setSelectedSegmentId}
-          playheadMs={playheadMs}
-          playheadRef={playheadElRef}
-          pixelParityZoom={ceiling}
-          maxZoom={project.zoom.config.maxZoom}
-          onSeek={(t) => playerRef.current?.seek(t)}
-        />
+        <div ref={timelineWrapRef} style={{ position: "relative" }}>
+          <Timeline
+            durationMs={manifest.durationMs}
+            outputDurationMs={outDuration}
+            cuts={project.cuts}
+            keyframes={project.zoom.keyframes}
+            segments={project.zoom.segments}
+            selection={edit.selection}
+            onSelect={edit.select}
+            playheadMs={playheadMs}
+            playheadRef={playheadElRef}
+            pixelParityZoom={ceiling}
+            maxZoom={project.zoom.config.maxZoom}
+            onSeek={(t) => playerRef.current?.seek(t)}
+            onSegmentMove={onSegmentMove}
+            onSegmentResize={onSegmentResize}
+            onSegmentDragCommit={edit.commitGesture}
+            onCreateCut={onCreateCut}
+            onCutMove={onCutMove}
+            onCutResize={onCutResize}
+            onCutDragCommit={edit.commitGesture}
+          />
+
+          {selectedSegment !== null && selectedSegmentSpan !== null && outDuration > 0 && (
+            <SegmentPopover
+              segment={selectedSegment}
+              maxZoom={project.zoom.config.maxZoom}
+              leftPct={msToPct(selectedSegmentSpan.startMs, outDuration)}
+              timelineRef={timelineWrapRef}
+              onDepthChange={onSegmentDepthChange}
+              onCameraChange={onSegmentCameraChange}
+              onDelete={onSegmentDelete}
+              onReset={onSegmentReset}
+              onDismiss={() => edit.select(null)}
+            />
+          )}
+        </div>
       </div>
 
       <div
@@ -731,15 +839,13 @@ export function Editor({
           onChange={onConfigChange}
           cursor={project.style.cursor}
           onCursorChange={(cursor) =>
-            setProject((p) => ({ ...p, style: { ...p.style, cursor } }))
+            edit.apply((p) => ({ ...p, style: { ...p.style, cursor } }))
           }
           style={project.style}
           output={project.output}
           dir={bundle.dir}
-          onStyleChange={(style) => setProject((p) => ({ ...p, style }))}
+          onStyleChange={(style) => edit.apply((p) => ({ ...p, style }))}
           onOutputChange={onOutputChange}
-          selectedSegment={selectedSegment}
-          onSegmentCameraChange={onSegmentCameraChange}
         />
       </div>
     </div>

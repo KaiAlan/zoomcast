@@ -5,8 +5,8 @@ describe("normalizeCuts", () => {
   it("sorts by start time", () => {
     const out = normalizeCuts(
       [
-        { startMs: 500, endMs: 600 },
-        { startMs: 100, endMs: 200 },
+        { id: "a", startMs: 500, endMs: 600 },
+        { id: "b", startMs: 100, endMs: 200 },
       ],
       1000,
     );
@@ -16,55 +16,90 @@ describe("normalizeCuts", () => {
   it("merges overlapping cuts", () => {
     const out = normalizeCuts(
       [
-        { startMs: 100, endMs: 400 },
-        { startMs: 300, endMs: 600 },
+        { id: "a", startMs: 100, endMs: 400 },
+        { id: "b", startMs: 300, endMs: 600 },
       ],
       1000,
     );
-    expect(out).toEqual([{ startMs: 100, endMs: 600 }]);
+    expect(out).toEqual([{ id: "a", startMs: 100, endMs: 600 }]);
   });
 
   it("merges exactly touching cuts", () => {
     const out = normalizeCuts(
       [
-        { startMs: 100, endMs: 300 },
-        { startMs: 300, endMs: 500 },
+        { id: "a", startMs: 100, endMs: 300 },
+        { id: "b", startMs: 300, endMs: 500 },
       ],
       1000,
     );
-    expect(out).toEqual([{ startMs: 100, endMs: 500 }]);
+    expect(out).toEqual([{ id: "a", startMs: 100, endMs: 500 }]);
   });
 
   it("swallows a cut fully contained in another", () => {
     const out = normalizeCuts(
       [
-        { startMs: 100, endMs: 900 },
-        { startMs: 300, endMs: 400 },
+        { id: "a", startMs: 100, endMs: 900 },
+        { id: "b", startMs: 300, endMs: 400 },
       ],
       1000,
     );
-    expect(out).toEqual([{ startMs: 100, endMs: 900 }]);
+    expect(out).toEqual([{ id: "a", startMs: 100, endMs: 900 }]);
   });
 
   it("repairs reversed bounds", () => {
-    expect(normalizeCuts([{ startMs: 600, endMs: 200 }], 1000)).toEqual([
-      { startMs: 200, endMs: 600 },
+    expect(normalizeCuts([{ id: "c1", startMs: 600, endMs: 200 }], 1000)).toEqual([
+      { id: "c1", startMs: 200, endMs: 600 },
     ]);
   });
 
   it("clamps to the recording duration", () => {
-    expect(normalizeCuts([{ startMs: -100, endMs: 5000 }], 1000)).toEqual([
-      { startMs: 0, endMs: 1000 },
+    expect(normalizeCuts([{ id: "c1", startMs: -100, endMs: 5000 }], 1000)).toEqual([
+      { id: "c1", startMs: 0, endMs: 1000 },
     ]);
   });
 
   it("drops zero-length cuts", () => {
-    expect(normalizeCuts([{ startMs: 300, endMs: 300 }], 1000)).toEqual([]);
+    expect(normalizeCuts([{ id: "c1", startMs: 300, endMs: 300 }], 1000)).toEqual([]);
   });
 
   it("does not mutate its input", () => {
-    const input = [{ startMs: 600, endMs: 200 }];
+    const input = [{ id: "c1", startMs: 600, endMs: 200 }];
     normalizeCuts(input, 1000);
-    expect(input).toEqual([{ startMs: 600, endMs: 200 }]);
+    expect(input).toEqual([{ id: "c1", startMs: 600, endMs: 200 }]);
+  });
+
+  it("keeps the earlier cut's id when merging", () => {
+    const out = normalizeCuts(
+      [
+        { id: "a", startMs: 100, endMs: 400 },
+        { id: "b", startMs: 300, endMs: 600 },
+      ],
+      1000,
+    );
+    expect(out).toEqual([{ id: "a", startMs: 100, endMs: 600 }]);
+  });
+
+  it("keeps the preferred cut's id when merging", () => {
+    const out = normalizeCuts(
+      [
+        { id: "a", startMs: 100, endMs: 400 },
+        { id: "b", startMs: 300, endMs: 600 },
+      ],
+      1000,
+      "b",
+    );
+    expect(out).toEqual([{ id: "b", startMs: 100, endMs: 600 }]);
+  });
+
+  it("ignores a preferId that is not present", () => {
+    const out = normalizeCuts(
+      [
+        { id: "a", startMs: 100, endMs: 400 },
+        { id: "b", startMs: 300, endMs: 600 },
+      ],
+      1000,
+      "zzz",
+    );
+    expect(out).toEqual([{ id: "a", startMs: 100, endMs: 600 }]);
   });
 });
