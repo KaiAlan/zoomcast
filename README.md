@@ -133,11 +133,11 @@ natively on Windows.
 
 | Command | What it checks |
 | --- | --- |
-| `npm test` | Unit suite — 521 tests across 51 files |
+| `npm test` | Unit suite — 545 tests across 53 files |
 | `npm run typecheck` | `tsc --noEmit`, must be silent |
 | `npm run lint` | Biome, must be clean |
 | `npm run verify:decode` | That a frame rendered at time *t* really is the frame at *t* |
-| `npm run verify:parity` | That the preview and the export compose identically, across 6 configurations × 5 times |
+| `npm run verify:parity` | That the preview and the export compose identically, across 7 configurations (35 comparisons), including one across a cut |
 | `npm run verify:capture` | That capture runs on `ddagrab` at ~55fps rather than falling back to `gdigrab` |
 | `npm run bench:preview -- <take> [ms] [runs]` | What the preview actually achieves while playing |
 | `npm run bench:encoders` | Encoder throughput, to justify the export's choice |
@@ -203,11 +203,10 @@ wired into only one of them is this project's most repeated bug — hence
 
 ## Status
 
-Recording → editing → export works end to end on real footage. Phases 0–7
-and A–D (cursor, compositor, camera, motion blur) are on `main`.
-
-Phase E — timeline editing: draggable zoom segments, real cut regions, a
-per-shot popover, undo/redo and shortcuts — is code-complete on the branch
-`phase-e-timeline-editing`, with a few review fixes and a hand test still to do
-before it merges. Still to build: clip speed (phase F), a UI revamp (phase G)
+Recording → editing → export works end to end on real footage. Phases 0–7,
+A–D (cursor, compositor, camera, motion blur) and E (timeline editing:
+draggable zoom segments, real cut regions, a per-shot popover, undo/redo and
+shortcuts) are on `main`, along with the 2026-09-26 review fixes, a Biome lint
+gate and CI on `windows-latest`. A few of phase E's own review items are still
+open (`docs/DEVELOPER-GUIDE.md` §9). Still to build: clip speed (phase F), a UI revamp (phase G)
 and webcam picture-in-picture. See `docs/DEVELOPER-GUIDE.md` §9.

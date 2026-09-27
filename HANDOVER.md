@@ -36,8 +36,9 @@ between `fixed` and `follow`. On a real 60s take that is 0px/s of motion during
 a hold against **128px/s** — the camera keeps tracking the cursor instead of
 arriving and freezing.
 
-**Phase E is complete — all 12 tasks — on the branch
-`phase-e-timeline-editing`, not on `main`.** See "What landed — phase E"
+**Phase E is complete — all 12 tasks — and merged to `main` (2026-09-27),
+together with the 2026-09-26 review fixes
+(`docs/superpowers/notes/2026-09-26-codebase-review.md`).** See "What landed — phase E"
 below for what shipped and, just as important, what has never been run. The
 design is `docs/specs/2026-09-09-phase-e-timeline-editing-design.md` and the
 task record is `docs/superpowers/plans/2026-09-09-phase-e-ledger.md`,
@@ -142,7 +143,7 @@ Screen Studio equivalent, for personal use. Read these two, in order:
 
 ```powershell
 cd C:\dev\zoomcast
-npm test              # 521 passing, 51 files
+npm test              # 545 passing, 53 files
 npm run typecheck     # silent
 npm run build         # three bundles
 npm run verify:decode # 6/6, k=0 wins each time
@@ -205,8 +206,7 @@ hold 1.40s, shortest gap 1.00s — where the old defaults gave 8 zooms at
 
 ## What landed — phase E (2026-09-09)
 
-Phase E is done, 12 tasks, on `phase-e-timeline-editing` (not merged to
-`main`). It delivered: the `applyPlan` split into `replanFrom` /
+Phase E is done, 12 tasks, merged to `main` on 2026-09-27. It delivered: the `applyPlan` split into `replanFrom` /
 `deriveKeyframes`; cut ids; an undo/redo history with drag-gesture coalescing
 and a 100-entry cap; pure segment and cut edit operations (`edits.ts`) with
 their invariants; one mutation seam for the editor
@@ -298,7 +298,7 @@ answered.
 | C+ | Camera geometry (fixed frame, sampled region), configurable ceiling, depth grading — **done**, spec `2026-09-07-camera-geometry-and-depth-design.md` | C |
 | C+ shots | Per-segment camera switch: segment blocks in the timeline, `fixed`/`follow` in the inspector — **done**, plan `2026-09-07-follow-camera-handoff.md` | C+ |
 | D | Directional motion blur — **done** 2026-09-08, off by default (`style.motionBlurAmount`) | C |
-| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo, keyboard shortcuts — **done** on branch `phase-e-timeline-editing`, unverified by hand | C |
+| E | Draggable zoom segments, segment/global popover, real cut regions, undo/redo, keyboard shortcuts — **done**, merged to `main`; cut-lane drag and playback across a cut checked by hand 2026-09-26 | C |
 | F | Clip speed — reverses v1 decision #9; abandoning it is an acceptable outcome | E |
 | G | **UI revamp** — the whole editor surface, once the features it has to present are known. Requested by the user; deliberately placed after E so it revamps a finished feature set rather than a moving one. No spec section yet. | E |
 

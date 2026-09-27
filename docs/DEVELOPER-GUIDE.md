@@ -42,7 +42,7 @@ editor opens ─► planner turns telemetry into zoom segments ─► preview �
 | Compositor (backgrounds, frame, aspect, resolution) | Done, on `main` |
 | Directional motion blur (phase D) | Done, on `main`, off by default |
 | Export (MP4, mixed audio, hardware encoder) | Done, on `main` |
-| Timeline editing, undo/redo, shortcuts (phase E) | Code complete on branch `phase-e-timeline-editing`; 2 important + 5 minor review fixes open; UI never driven by a human |
+| Timeline editing, undo/redo, shortcuts (phase E) | Done, on `main`; 2 important + 5 minor review fixes still open (§9) |
 | Clip speed (phase F) | Not started, spec only, may be abandoned |
 | UI revamp (phase G) | Not started, needs its own design pass |
 | Webcam picture-in-picture | Not started, data model stub exists |
@@ -51,15 +51,15 @@ editor opens ─► planner turns telemetry into zoom segments ─► preview �
 
 | Branch | What is on it |
 | --- | --- |
-| `main` | Phases 0–7 and A–D. Stable, everything verified. |
-| `phase-e-timeline-editing` | `main` + 17 phase E commits + this guide. **Work from here.** Not merged — see §9. |
+| `main` | Phases 0–7, A–E and the 2026-09-26 review fixes. **Work from here.** |
 
-### Gate status on `phase-e-timeline-editing` (2026-09-18)
+### Gate status on `main` (2026-09-27)
 
-- `npm test` — 521 passing, 51 files
+- `npm run lint` — clean
+- `npm test` — 545 passing, 53 files
 - `npm run typecheck` — silent
-- Last full gate run (2026-09-09, commit `5b73e0a`): decode 6/6, parity 30/30,
-  capture ddagrab 57.7fps, `tune -- all` byte-identical to baseline
+- Last full gate run (2026-09-26): e2e 2/2 (libx264 + h264_amf), decode 6/6,
+  parity 35/35, capture ddagrab 58.9fps
   (md5 `0b48e73fd9719c2dce45316c6fd23348`)
 
 ## 3. Features in detail
@@ -122,12 +122,12 @@ screen regardless of zoom. Controls: visible, size, smoothing, shadow, ripples.
 - Output aspect: native, 16:9, 4:3, 1:1, 9:16; resolution; fps; bitrate.
 - Directional motion blur driven by camera velocity (`style.motionBlurAmount`).
 
-### Editing (on `main`)
+### Editing (phases C–D)
 
 - Play/pause, scrub, a recordings list, re-plan live as dials change.
 - Click a shot in the timeline to switch its camera between fixed and follow.
 
-### Editing (phase E, on the branch)
+### Editing (phase E)
 
 - Timeline split into three lanes: ruler, zoom, cut.
 - Drag and resize zoom segments, including across cuts. A dragged segment is
@@ -161,9 +161,9 @@ writes `project.json` beside the output so it can be re-exported identically.
 | Ctrl+Alt+Z | anywhere | Start / stop recording (chosen at runtime from a candidate list — never hardcode it) |
 | Space | editor | Play / pause |
 | ← | editor | Back to recordings list |
-| Ctrl+Z / Ctrl+Shift+Z | editor (branch) | Undo / redo |
-| Delete / Backspace | editor (branch) | Delete selected shot or cut |
-| Escape | editor (branch) | Clear selection, close popover |
+| Ctrl+Z / Ctrl+Shift+Z | editor | Undo / redo |
+| Delete / Backspace | editor | Delete selected shot or cut |
+| Escape | editor | Clear selection, close popover |
 
 ## 4. Getting set up
 
@@ -181,7 +181,6 @@ Requirements:
 ```powershell
 git clone https://github.com/KaiAlan/zoomcast.git
 cd zoomcast
-git checkout phase-e-timeline-editing
 npm install          # no native build step — prebuilt N-API binaries
 npm run build
 npx electron .       # or: npm run dev  (hot reload for the renderer)
@@ -269,12 +268,12 @@ that touches rendering, planning or capture.
 
 | Command | What it proves |
 | --- | --- |
-| `npm test` | Unit + property tests (vitest, fast-check). 521 tests. |
+| `npm test` | Unit + property tests (vitest, fast-check). 545 tests. |
 | `npm run typecheck` | Must be silent. |
 | `npm run lint` | Biome. Must report no errors or warnings. |
 | `npm run build` | Three bundles (main, preload, renderer). |
 | `npm run verify:decode` | A frame drawn at time t really is the frame at t. |
-| `npm run verify:parity` | Preview and export composite identically — 6 configs × 5 times, 43–47dB PSNR. Builds first. |
+| `npm run verify:parity` | Preview and export composite identically — 7 configs (one across a cut), 35 comparisons, 42–48dB PSNR. Builds first. |
 | `npm run verify:capture` | Real capture runs on ddagrab at ~55fps; fails on gdigrab fallback. |
 | `npm run tune -- all` | Replays every take on disk through the planner. Run before and after touching any zoom dial; diff the output. |
 | `npm run bench:preview -- <take> [ms] [runs]` | Preview frame rate while playing. Compare batch against batch. |
@@ -380,8 +379,8 @@ Checklist:
 
 ### Step 3 — merge phase E to `main`
 
-Fast-forward or merge once steps 1–2 are green. Update `HANDOVER.md` and the
-spec §13 table.
+Done 2026-09-27, together with the 2026-09-26 review fixes. The open items in
+step 1 were carried over and are still open.
 
 ### Step 4 — pick the next phase
 
