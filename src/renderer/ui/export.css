@@ -1,0 +1,31 @@
+.export-page { position:absolute; inset:0; overflow:auto; background:var(--page); color:var(--text); padding:32px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; gap:24px; }
+.export-brand { align-self:flex-start; display:flex; align-items:center; gap:12px; font-weight:650; font-size:18px; }
+.export-brand .rail-brand { margin:0; }
+.export-card { width:min(100%,680px); margin:auto; text-align:center; padding:36px 44px; background:var(--surface); border:1px solid var(--line); border-radius:24px; box-sizing:border-box; }
+.export-heading-icon { display:grid; place-items:center; width:54px; height:54px; border-radius:16px; background:var(--accent-soft); color:var(--accent); margin:0 auto 18px; }
+.export-card h1 { font-size:30px; letter-spacing:-.8px; margin:0 0 10px; }
+.export-detail { color:var(--muted); min-height:20px; margin:0 0 24px; overflow-wrap:anywhere; }
+.export-preview { width:min(100%,400px); margin:0 auto 30px; border-radius:12px; overflow:hidden; background:#111; position:relative; border:1px solid var(--line); }
+.export-preview img { display:block; width:100%; height:auto; }
+.export-preview span { position:absolute; bottom:10px; left:10px; font-size:11px; color:white; background:#0009; padding:5px 8px; border-radius:6px; }
+.export-progress-label,.export-timing { display:flex; justify-content:space-between; gap:16px; text-align:left; }
+.export-progress-label { font-size:14px; margin-bottom:12px; }
+.export-progress-label strong { color:var(--accent); font-size:18px; }
+.export-progress-track { height:18px; background:var(--control); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.export-progress-track>div { height:100%; border-radius:inherit; background:var(--accent); transition:width .2s ease; }
+.export-timing { font-size:12px; color:var(--muted); margin-top:12px; }
+.export-destination { font-size:12px; color:var(--muted); overflow-wrap:anywhere; margin:22px 0 0; }
+.export-actions { margin-top:28px; display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }
+@media(max-width:600px) { .export-page{padding:20px;} .export-card{padding:26px 22px;} .export-card h1{font-size:25px;} }
+.export-activity { position:fixed; bottom:20px; right:20px; z-index:100; display:flex; gap:8px; padding:7px; border-radius:12px; border:1px solid var(--line); background:var(--surface); box-shadow:0 4px 20px #0002; }
+.export-activity button { border:0; border-radius:7px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; font:inherit; font-size:12px; }
+
+.workspace-shell { height:100vh; display:flex; flex-direction:column; }
+.workspace-tabs { display:flex; align-items:center; gap:4px; height:42px; flex:none; padding:0 16px; border-bottom:1px solid var(--line); background:var(--surface); }
+.workspace-tabs>button { height:34px; padding:0 20px; font:inherit; font-size:12px; border:0; border-radius:7px; color:var(--muted); background:transparent; cursor:pointer; }
+.workspace-tabs>button[aria-pressed=true] { color:var(--accent); background:var(--accent-soft); font-weight:600; }
+.workspace-tabs select { margin-left:auto; max-width:50%; }
+.workspace-main { flex:1; min-height:0; position:relative; overflow:hidden; }
+.workspace-editor-pane { height:100%; }
+.workspace-main .editor-shell,.workspace-main .library-page { height:100%; }
+.export-preview-placeholder { height:210px; display:grid; place-items:center; color:#aaa; font-size:12px; }

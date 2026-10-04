@@ -1,0 +1,72 @@
+appId: dev.zoomcast.app
+productName: zoomcast
+artifactName: zoomcast-Setup-${version}.${ext}
+
+publish:
+  provider: github
+  owner: KaiAlan
+  repo: zoomcast
+  private: true
+  releaseType: draft
+
+# uiohook-napi ships prebuildify --napi binaries, which are Node-API and so
+# ABI-stable across Electron versions — the one already in node_modules is what
+# `npx electron .` has been running all along. Rebuilding it from source would
+# need Visual Studio for no gain.
+npmRebuild: false
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built bundles and the manifest. Production dependencies are added
+# automatically; everything else in the repo — src, tools, docs, and the mp4
+# fixtures under tests — has no business in an installer.
+files:
+  - out/**/*
+  - package.json
+
+# Native addons: a .node file cannot be loaded from inside an asar archive.
+#
+# Two of them now. uiohook-napi ships its binary under prebuilds/, but koffi
+# resolves its own from a SEPARATE scoped optional dependency —
+# @koromix/koffi-win32-x64/win32_x64/koffi.node — not from anything inside
+# koffi/ itself. The glob covers both, and `npm run dist` was verified to place
+# both in release/win-unpacked/resources/app.asar.unpacked/node_modules/.
+#
+# This matters more than it looks: `import koffi` sits at module scope in
+# CursorShapeReader, transitively imported from src/main/index.ts, so a
+# resolution failure in the packaged app is a startup crash rather than the
+# graceful degradation start()'s try/catch gives.
+extraResources:
+  - from: vendor/ffmpeg
+    to: ffmpeg
+    filter:
+      - ffmpeg.exe
+      - ffprobe.exe
+      - LICENSE
+      - README.txt
+      - THIRD-PARTY-NOTICES.txt
+      - provenance.json
+
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target: nsis
+  icon: build/icon.ico
+  # Unsigned beta builds still verify the downloaded installer SHA-512.
+  # Set publisherName and remove this override once signing is configured.
+  verifyUpdateCodeSignature: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: zoomcast
+  # A tray app that survives zero windows must not be left running while its
+  # own uninstaller deletes it.
+  allowElevation: true

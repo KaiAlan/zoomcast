@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "fixture-basic",
+  "createdAt": "1970-01-01T00:00:00.000Z",
+  "clockBaseUnixMs": 0,
+  "status": "clean",
+  "durationMs": 5000,
+  "display": {
+    "adapter": "fixture",
+    "outputIdx": 0,
+    "width": 1920,
+    "height": 1080,
+    "refreshHz": 144,
+    "scale": 1
+  },
+  "video": {
+    "file": "screen.mp4",
+    "codec": "h264",
+    "encoder": "libx264",
+    "width": 1920,
+    "height": 1080,
+    "fps": 60,
+    "gop": 30,
+    "drawMouse": false,
+    "startOffsetMs": 0
+  },
+  "audio": [
+    {
+      "role": "mic",
+      "file": "mic.webm",
+      "codec": "opus",
+      "startOffsetMs": 142
+    },
+    {
+      "role": "system",
+      "file": "system.webm",
+      "codec": "opus",
+      "startOffsetMs": 138
+    }
+  ],
+  "telemetry": {
+    "file": "input.jsonl",
+    "hasCursorShapes": false
+  }
+}

@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    # Windows only, by design: capture is DXGI, input is uiohook, cursor
+    # shapes come from user32. The pure suite would pass on Linux, but a
+    # green tick that never touched the platform the app runs on is worthless.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+
+      # A static build with libx264, so the e2e export runs rather than skips.
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - run: npm test
+
+      - run: npm run build
+
+      # The installer, unsigned. verify:* and bench:* need a GPU and Desktop
+      # Duplication and stay manual.
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-gcc-libs mingw-w64-x86_64-crt mingw-w64-x86_64-winpthreads mingw-w64-x86_64-pkgconf
+      - run: npm run dist
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+      - run: npm run verify:release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zoomcast-installer
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+            release/*-source-*.zip
+            release/*-source-*.zip.sha256
+          if-no-files-found: error

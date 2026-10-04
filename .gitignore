@@ -1,0 +1,33 @@
+node_modules/
+dist/
+out/
+release/
+.vite/
+*.log
+
+# vendored binaries — fetched, not committed
+vendor/ffmpeg/
+
+# local capture output and scratch
+recordings/
+tmp/
+*.mp4
+*.webm
+*.wav
+
+# test fixtures are checked in deliberately; see docs/specs
+!tests/fixtures/**/*.mp4
+!tests/fixtures/**/*.webm
+
+# generated on demand: npm run fixture -- spread
+tests/fixtures/spread/
+
+# git worktrees for isolated task branches
+.worktrees/
+
+# Internal working notes remain local
+HANDOVER.md
+docs/DEVELOPER-GUIDE.md
+docs/superpowers/
+docs/specs/
+scratchpad/

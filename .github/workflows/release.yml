@@ -1,0 +1,67 @@
+name: Windows release candidate
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify version and release notes
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw 'The release tag must match package.json version.'
+          }
+          if (!(Test-Path "docs/releases/$version.md")) { throw 'Release notes are missing.' }
+      - run: npm run typecheck
+      - run: npm run lint
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+      - run: npm test
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-gcc-libs mingw-w64-x86_64-crt mingw-w64-x86_64-winpthreads mingw-w64-x86_64-pkgconf
+      - run: npm run dist
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+      - run: npm run verify:release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zoomcast-release-candidate
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+            release/*-source-*.zip
+            release/*-source-*.zip.sha256
+          if-no-files-found: error
+      - name: Create draft release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $assets = @(Get-ChildItem release/*.exe, release/*.blockmap, release/latest.yml, release/*-source-*.zip, release/*-source-*.zip.sha256 | ForEach-Object FullName)
+          gh release create "v$version" @assets --draft --verify-tag --title "Zoomcast $version" --notes-file "docs/releases/$version.md"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

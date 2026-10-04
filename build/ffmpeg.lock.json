@@ -1,0 +1,289 @@
+{
+  "version": "9.0.2",
+  "provider": "Zoomcast source build",
+  "license": "GPL-2.0-or-later",
+  "sources": [
+    {
+      "name": "ffmpeg",
+      "repository": "FFmpeg/FFmpeg",
+      "commit": "946fcce07b6dcd0331c8cc609192aeff5e1924f8",
+      "url": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/946fcce07b6dcd0331c8cc609192aeff5e1924f8",
+      "archive": "ffmpeg.tar.gz",
+      "sha256": "0aa2b1de2a5698b20a23e93d539a9a8e82ca0117496c5bdf05d198805f42bb3b"
+    },
+    {
+      "name": "x264",
+      "repository": "mirror/x264",
+      "commit": "c24e06c2e184345ceb33eb20a15d1024d9fd3497",
+      "url": "https://codeload.github.com/mirror/x264/tar.gz/c24e06c2e184345ceb33eb20a15d1024d9fd3497",
+      "archive": "x264.tar.gz",
+      "sha256": "090d730e867fc63631782a1287974635d1237d0fa7c6fd1d09fd543620a56689"
+    },
+    {
+      "name": "nv-codec-headers",
+      "repository": "FFmpeg/nv-codec-headers",
+      "commit": "eddcea9e27f6b772057c9b3f87de2cc1737faffc",
+      "url": "https://codeload.github.com/FFmpeg/nv-codec-headers/tar.gz/eddcea9e27f6b772057c9b3f87de2cc1737faffc",
+      "archive": "nv-codec-headers.tar.gz",
+      "sha256": "ea251ed884765b7523e0f4fa814dfd9acd7b5dcc43878cad744b77a46b429e48"
+    },
+    {
+      "name": "zlib",
+      "repository": "madler/zlib",
+      "commit": "da607da739fa6047df13e66a2af6b8bec7c2a498",
+      "url": "https://codeload.github.com/madler/zlib/tar.gz/da607da739fa6047df13e66a2af6b8bec7c2a498",
+      "archive": "zlib.tar.gz",
+      "sha256": "b9258cf6254e7f7c37f1cd61dba943a1c5ea3cff5718c789834dac359094f5f7"
+    }
+  ],
+  "amf": {
+    "name": "amf",
+    "repository": "GPUOpen-LibrariesAndSDKs/AMF",
+    "commit": "8c648005e07d4309033282bfd9947df2c7e76104",
+    "url": "https://codeload.github.com/GPUOpen-LibrariesAndSDKs/AMF/tar.gz/8c648005e07d4309033282bfd9947df2c7e76104",
+    "files": [
+      {
+        "path": "LICENSE.txt",
+        "sha256": "eb297397aaa455b5668ab67d216b83828466152dab123fa92384c6ec16b74170"
+      },
+      {
+        "path": "README.md",
+        "sha256": "3016e27a4089889866ba248e0f1037cd2c52717e49435a5041be289762e34b90"
+      },
+      {
+        "path": "amf/public/include/components/AMFXInput.h",
+        "sha256": "41303e3038e8e5717e174cd3e37625163d244bd3ed0bc2d47d8ad347cce65cc5"
+      },
+      {
+        "path": "amf/public/include/components/Ambisonic2SRenderer.h",
+        "sha256": "27770ae77d2f7a16eca9ab1f8b9ce87cf0c0350425b950bdd39189c2c91a519a"
+      },
+      {
+        "path": "amf/public/include/components/AudioCapture.h",
+        "sha256": "05a9ebc32217e69b6c4659f4744dbda9e5a2792f3e56bc1bcf61c15dcfd46cab"
+      },
+      {
+        "path": "amf/public/include/components/Capture.h",
+        "sha256": "bbe91a1e744685a36269d3b6af9cd36d9716ee748c8d0ed95255a6a42b46892f"
+      },
+      {
+        "path": "amf/public/include/components/ChromaKey.h",
+        "sha256": "a3a89490d44adaffc2fa2cccc14313f8f65e5af7a6431d89d85bd80e36c628a1"
+      },
+      {
+        "path": "amf/public/include/components/ColorSpace.h",
+        "sha256": "4ef6392bb4b9c6b05d00b5cd1486b99866e40e61449206a3a515063e4ffd289b"
+      },
+      {
+        "path": "amf/public/include/components/Component.h",
+        "sha256": "f3f18680d55a65fdf5e0351d3fde1dcd9bdd2d6caec268c8c915c4227ffa1edc"
+      },
+      {
+        "path": "amf/public/include/components/ComponentCaps.h",
+        "sha256": "2479eb2a6174a1b63552c509abac1b701eddcab5a5eac5a7f4d9f40274d588b4"
+      },
+      {
+        "path": "amf/public/include/components/CursorCapture.h",
+        "sha256": "7c22337ff313320bd7fe20ef0fb00756735012367a5daa7c621725030f578863"
+      },
+      {
+        "path": "amf/public/include/components/DisplayCapture.h",
+        "sha256": "9c661b9d23dc240e59758246865d8a3a3162b5c61077b54417d07bb0b9d2fa2c"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGAudioConverter.h",
+        "sha256": "9dde7e850c8bdecda82b0cee1b331294f6cc91b32b1d1504344a023cd4dda8af"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGAudioDecoder.h",
+        "sha256": "92f50d789bc18d5ebd143b2925e124594a89110eef7efaa8189eb063bf2f3aa8"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGAudioEncoder.h",
+        "sha256": "2493067de9b3f540ffaae8a6466e57ef75af4772f037a81785b11ee9511029f5"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGComponents.h",
+        "sha256": "87a9ae9480c3af6210b1282d1768e36673fcc1ef4970afa6edaa74481cf0831b"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGEncoderAV1.h",
+        "sha256": "5d64b7d2d50ca17ba601885dcdb51bb16ef4dccf88323437967e8524f26194bc"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGEncoderH264.h",
+        "sha256": "3dae38db05bc55af525000c28559ff76625e0cddc2ad2c4c2af52eab69e915bc"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGEncoderHEVC.h",
+        "sha256": "3ad5cc5d3284b253a671499efa29c7a46b83a6e6373aad7142c7adcbfae31875"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGFileDemuxer.h",
+        "sha256": "be992e14086b04e2a7b5503471a6c262c58fda163c45ad6d00f8e425d9f4a820"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGFileMuxer.h",
+        "sha256": "3fefbe1aa7aaa4c000a97efb2e5ba26dc87ec15d11b07ceb0f43c768a1d589a2"
+      },
+      {
+        "path": "amf/public/include/components/FFMPEGVideoDecoder.h",
+        "sha256": "297b0ab2291baeb44f30f03ffbf791a5603289ab34f625d60a33150f2be1f7b6"
+      },
+      {
+        "path": "amf/public/include/components/FRC.h",
+        "sha256": "5779e08444fa55c2cf91ccc655a012d17110f1b8336f197eabf0b8fef755b0ea"
+      },
+      {
+        "path": "amf/public/include/components/HQScaler.h",
+        "sha256": "714bd1aff002d4df5f2d468efdd487a5aeb46437b7b036abaaa286d953c55d13"
+      },
+      {
+        "path": "amf/public/include/components/MediaSource.h",
+        "sha256": "c4e168d29e3f7d9318435958c3c784ad4c497159a617bd7a5598a2951b1b15f6"
+      },
+      {
+        "path": "amf/public/include/components/PreAnalysis.h",
+        "sha256": "801a197f578104c4481d21f68c3dd6ea8fbe2f9774424277499c5de70d213662"
+      },
+      {
+        "path": "amf/public/include/components/PreProcessing.h",
+        "sha256": "5a01d71e128cf8bcaa4945fe76d9aad0156c409df3b25616a75645ef15972dc3"
+      },
+      {
+        "path": "amf/public/include/components/SupportedCodecs.h",
+        "sha256": "550900e56c8254bf9c42d1b1d6538a390f7f7d3bf4826ee385b019585cb6cd22"
+      },
+      {
+        "path": "amf/public/include/components/VQEnhancer.h",
+        "sha256": "146e7cd35acc846f6b75b696bbe13a5d790f885bc23d9913e7de66f515da789b"
+      },
+      {
+        "path": "amf/public/include/components/VideoCapture.h",
+        "sha256": "08f0162a631833f847d1b4b751e41e28b147a79ed19545b43631222d22e74507"
+      },
+      {
+        "path": "amf/public/include/components/VideoConverter.h",
+        "sha256": "a7d565fbe50d82db7be7922a0d4408e989a632bc46d38cba6d9f107ad8d6dcb5"
+      },
+      {
+        "path": "amf/public/include/components/VideoDecoderUVD.h",
+        "sha256": "588622f7d945c85c1ed334b497174fd46031e01664338bcf59c4b242920df886"
+      },
+      {
+        "path": "amf/public/include/components/VideoEncoderAV1.h",
+        "sha256": "2c4e18f6d0be4701d9a9d9ad4298ed5d7ed7c1fd7a909995c4e745874d8203a0"
+      },
+      {
+        "path": "amf/public/include/components/VideoEncoderHEVC.h",
+        "sha256": "138ad005e4b7131582fc1f82dad8851c1362f0d156bf62f10a64e462c8a037c0"
+      },
+      {
+        "path": "amf/public/include/components/VideoEncoderVCE.h",
+        "sha256": "8dcddd6df00debd096db29f00fa155e3e179ebc6ea4c6c1edc5027eb857cffd5"
+      },
+      {
+        "path": "amf/public/include/components/VideoStitch.h",
+        "sha256": "9bc2d8477d67693b0cd4d433fbc6a5812277190f67be5f188f0206b463f256ec"
+      },
+      {
+        "path": "amf/public/include/components/ZCamLiveStream.h",
+        "sha256": "3c6e6515a8fec111eb1847e349124a8c66c1e78be2d148bc0b8f85b9d9994e2d"
+      },
+      {
+        "path": "amf/public/include/core/AudioBuffer.h",
+        "sha256": "74b4bbc22c66520c233f258dba0642c3f4de66ae02d16201c3e224f9238b5d5d"
+      },
+      {
+        "path": "amf/public/include/core/Buffer.h",
+        "sha256": "3e52733b46e168f1b0118381df1ce17eed17353ca89b39c77394f59e254aef67"
+      },
+      {
+        "path": "amf/public/include/core/Compute.h",
+        "sha256": "dc35befae2cecf5d2b866632a8b16c2f2ec3a543a6b474f941a33fcd7a8d1e0a"
+      },
+      {
+        "path": "amf/public/include/core/ComputeFactory.h",
+        "sha256": "50acf69fb670bc6cf093384d1b698bf9e44cda8dd49e02ef24eacfb86ad8ccae"
+      },
+      {
+        "path": "amf/public/include/core/Context.h",
+        "sha256": "98313f5df4b87e8bffabebd3064689e5f0046fb821e4c364fabb7376761479fc"
+      },
+      {
+        "path": "amf/public/include/core/CurrentTime.h",
+        "sha256": "76d16ba57d48ae9e457f3d904698a1e7c625007ac8887db9bcecdb90fd36d835"
+      },
+      {
+        "path": "amf/public/include/core/D3D12AMF.h",
+        "sha256": "f05771305598b534e1efa0dd28825267ea87418c477b198e373f6764d060c666"
+      },
+      {
+        "path": "amf/public/include/core/Data.h",
+        "sha256": "eaac4d80dd3215638c70f8a4ca01791d26d9df77586f665a772bb51907a8035b"
+      },
+      {
+        "path": "amf/public/include/core/Debug.h",
+        "sha256": "56666589bf6ad20c6286a048da751c2d7722f70c73d962ee3c205a6d709b6aff"
+      },
+      {
+        "path": "amf/public/include/core/Dump.h",
+        "sha256": "a5e0fa9290cae767a4d135962ee5e30302e65e8d0ca5e016c620e72b759c86c6"
+      },
+      {
+        "path": "amf/public/include/core/Factory.h",
+        "sha256": "644814e97dd359f08d66a73748b60262149b106d28423c31b573cecb4be57979"
+      },
+      {
+        "path": "amf/public/include/core/Interface.h",
+        "sha256": "304f6d6077e9b0733859d44a5e43a343ae374c8fe72c7d79741c0aca89c21162"
+      },
+      {
+        "path": "amf/public/include/core/Plane.h",
+        "sha256": "5ad5165e9de2afcfc2da828e8704c838b1f82e8ead7422fbcfc32c758672e1f3"
+      },
+      {
+        "path": "amf/public/include/core/Platform.h",
+        "sha256": "c060dc2466d0d886d1a09e5fea891aa3bc2efd08dc8d5ef59faa4d0a7f42abd4"
+      },
+      {
+        "path": "amf/public/include/core/PropertyStorage.h",
+        "sha256": "0059b787e78cd7c4e57212ccaab56ad7e17e9474a31337da0eac5b2d056a5dd8"
+      },
+      {
+        "path": "amf/public/include/core/PropertyStorageEx.h",
+        "sha256": "871136e46586baa1fc77121935b503aaa16523d006c3e435ce50698605675fad"
+      },
+      {
+        "path": "amf/public/include/core/Result.h",
+        "sha256": "a469ff33875484b5762199da757819056ff4a7535bfdcec1f4cf2ffc403b98f2"
+      },
+      {
+        "path": "amf/public/include/core/Surface.h",
+        "sha256": "2f7f899a9f6291e0b02a447af6dd0e2c367a02271e7295c26cfd3b15de7d82a9"
+      },
+      {
+        "path": "amf/public/include/core/Trace.h",
+        "sha256": "ae8c5fee671f02b90d3ccab312cfa6f74424351f070a7dd4ed7aba437fd55c30"
+      },
+      {
+        "path": "amf/public/include/core/Variant.h",
+        "sha256": "5d15e778f3b846fa6eb95737e7222e0726b09615eb6270aac12bd2caa7137234"
+      },
+      {
+        "path": "amf/public/include/core/Version.h",
+        "sha256": "739f6559891d627fc373bfd63c4bcc3c8a432766703928d94cc1b92bc7bcfdf3"
+      },
+      {
+        "path": "amf/public/include/core/VulkanAMF.h",
+        "sha256": "a7cd8455fb5dd1b7a09bb4a770235d4cde7cf9549a0c6604dc5300e0c5e6ba4e"
+      }
+    ]
+  },
+  "nasm": {
+    "version": "3.02",
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-nasm-3.02-1-any.pkg.tar.zst",
+    "archive": "nasm.pkg.tar.zst",
+    "sha256": "63493c3f1ee2ea71727acfc338c53a6f5a18d1c2c21cdb5d39dea227756e2fe4"
+  }
+}

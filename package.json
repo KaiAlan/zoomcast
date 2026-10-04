@@ -1,0 +1,65 @@
+{
+  "name": "zoomcast",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "Windows screen recorder and editor with cursor-aware auto zoom",
+  "author": "Kaialan",
+  "overrides": {
+    "app-builder-lib": {
+      "@electron/get": "^5.1.0"
+    }
+  },
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fixture": "tsx tools/make-fixture.ts",
+    "verify:ui": "electron tools/verify-ui.cjs",
+    "verify:updates": "electron tools/verify-updates.cjs",
+    "verify:release": "node tools/verify-release.cjs",
+    "verify:packaged": "node tools/verify-packaged.cjs",
+    "verify:decode": "tsx tools/verify-decode.ts",
+    "verify:parity": "npm run build && tsx tools/verify-parity.ts",
+    "verify:capture": "tsx tools/verify-capture.ts",
+    "tune": "tsx tools/tune-planner.ts",
+    "bench:encoders": "tsx tools/bench-encoders.ts",
+    "bench:preview": "tsx tools/bench-preview.ts",
+    "camera:travel": "tsx tools/camera-travel.ts",
+    "render:camera": "tsx tools/render-camera.ts",
+    "icon": "tsx tools/make-icon.ts",
+    "dist": "npm run prepare:ffmpeg && npm run build && electron-builder --win --x64 --publish never",
+    "prepare:ffmpeg": "node tools/prepare-ffmpeg.cjs",
+    "verify:camera": "tsx tools/verify-camera.ts",
+    "verify:installed": "node tools/verify-installed.cjs"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9",
+    "koffi": "^3.2.1",
+    "mp4box": "^2.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "uiohook-napi": "^1.5.5",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "fast-check": "^4.9.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.0"
+  },
+  "license": "MIT"
+}
