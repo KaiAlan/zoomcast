@@ -6,7 +6,7 @@ Download `zoomcast-Setup-<version>.exe` from the [latest release](https://github
 
 ## Updates
 
-Version 0.1.1 was built for private GitHub updates and requires access configured in Settings. Public visibility makes installer downloads available without repository membership, but does not remove the token requirement from that installed version. A later 0.1.x build will provide anonymous public updates. Version 0.1.0 requires a manual upgrade.
+Version 0.1.2 and later check public GitHub releases without an account or access token. Versions 0.1.0 and 0.1.1 need one manual upgrade to 0.1.2. After that, use Update and Restart to update.
 
 Updates download on request. Restart waits for recording and export to finish and saves open projects before silently installing and reopening the app.
 

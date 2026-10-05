@@ -36,8 +36,6 @@ const api: ZoomcastApi = {
     check: () => ipcRenderer.invoke("updates:check"),
     download: () => ipcRenderer.invoke("updates:download"),
     install: () => ipcRenderer.invoke("updates:install"),
-    access: () => ipcRenderer.invoke("updates:access"),
-    setAccess: token => ipcRenderer.invoke("updates:set-access", token),
     onChanged: callback => on("updates:changed", callback),
     onBeforeInstall: save => { saveBeforeUpdate.add(save); return () => { saveBeforeUpdate.delete(save); }; },
   },

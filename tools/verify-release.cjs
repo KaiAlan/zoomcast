@@ -27,7 +27,7 @@ async function hash(file, algorithm = "sha512", encoding = "base64") {
   assert(fs.statSync(`${installer}.blockmap`).size > 0, "installer blockmap is present");
   const resources = path.join(release, "win-unpacked", "resources");
   const feed = yaml.load(fs.readFileSync(path.join(resources, "app-update.yml"), "utf8"));
-  assert(feed.provider === "github" && feed.owner === "KaiAlan" && feed.repo === "zoomcast" && feed.private === true, "packaged update feed uses the private Zoomcast repository");
+  assert(feed.provider === "github" && feed.owner === "KaiAlan" && feed.repo === "zoomcast" && feed.private === false, "packaged update feed uses the public Zoomcast repository");
   assert(!feed.token && !feed.requestHeaders, "packaged feed contains no credential");
   const media = path.join(resources, "ffmpeg");
   for (const name of ["ffmpeg.exe", "ffprobe.exe", "LICENSE", "README.txt", "THIRD-PARTY-NOTICES.txt", "provenance.json"]) {

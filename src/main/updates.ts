@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import updater from "electron-updater";
 import { randomUUID } from "node:crypto";
 import { isRecording } from "./capture/SessionController";
@@ -6,8 +6,8 @@ import { hasActiveExports } from "./exportJobs";
 import { recorderIsBusy } from "./recorderWidget";
 import { UpdateController } from "./updateController";
 import { logDiag } from "./log";
-import { UPDATE_REPOSITORY } from "../shared/updates";
-import { canStoreUpdateAccess, readUpdateAccess, storeUpdateAccess } from "./updateAccess";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 
 let controller: UpdateController | null = null;
 export const isInstallingUpdate = (): boolean => controller?.isInstalling() ?? false;
@@ -35,20 +35,17 @@ async function saveOpenProjects(): Promise<void> {
 export function registerUpdates(enabled: boolean): void {
   // Releases contain a complete NSIS installer, never a web installer.
   updater.autoUpdater.disableWebInstaller = true;
-  let token = readUpdateAccess();
-  const configure = (): void => {
-    if (token) updater.autoUpdater.setFeedURL({ provider: "github", ...UPDATE_REPOSITORY, token });
-  };
-  configure();
-  // Provider errors can contain request details; never log credentials.
-  const redact = (value: unknown): string => {
-    const text = value instanceof Error ? value.message : String(value);
-    return token ? text.replaceAll(token, "[redacted]") : text;
-  };
+  // Public releases use the packaged app-update.yml, without credentials.
+  // Remove credentials left by versions that required private-release access.
+  try {
+    rmSync(join(app.getPath("userData"), "update-access.bin"), { force: true });
+    rmSync(join(app.getPath("userData"), "update-access.bin.new"), { force: true });
+  } catch { logDiag("updates", "Could not remove legacy update access."); }
+  const message = (value: unknown): string => value instanceof Error ? value.message : String(value);
   updater.autoUpdater.logger = {
     info: () => undefined, debug: () => undefined,
-    warn: message => logDiag("updates", redact(message)),
-    error: message => logDiag("updates", redact(message)),
+    warn: message => logDiag("updates", String(message)),
+    error: message => logDiag("updates", String(message)),
   };
   controller = new UpdateController({
     driver: updater.autoUpdater,
@@ -68,35 +65,12 @@ export function registerUpdates(enabled: boolean): void {
       buttons: ["Restart to update", "Later"], defaultId: 0, cancelId: 1,
     })).response === 0,
     save: saveOpenProjects,
-    log: error => logDiag("updates", redact(error)),
-    accessReady: () => token !== null,
+    log: error => logDiag("updates", message(error)),
   });
   ipcMain.handle("updates:state", () => controller?.state());
   ipcMain.handle("updates:check", () => controller?.check());
   ipcMain.handle("updates:download", () => controller?.download());
   ipcMain.handle("updates:install", () => controller?.install());
-  ipcMain.handle("updates:access", () => ({ configured: token !== null, canStore: canStoreUpdateAccess() }));
-  ipcMain.handle("updates:set-access", async (_event, value: unknown) => {
-    if (controller?.isBusy() || controller?.state().status === "downloaded") {
-      throw new Error("Finish this update before changing update access.");
-    }
-    if (value !== null) {
-      if (typeof value !== "string" || value.length < 20 || value.length > 256 || /\s/.test(value)) throw new Error("Enter a valid GitHub access token.");
-      const response = await net.fetch(`https://api.github.com/repos/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases?per_page=1`, {
-        headers: { Authorization: `Bearer ${value}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-        signal: AbortSignal.timeout(15000),
-      }).catch(() => { throw new Error("Could not verify update access. Check your connection."); });
-      if (!response.ok) throw new Error("This token cannot read Zoomcast releases. Check its repository access and permissions.");
-      await response.body?.cancel();
-    }
-    if (controller?.isBusy() || controller?.state().status === "downloaded") {
-      throw new Error("Finish this update before changing update access.");
-    }
-    storeUpdateAccess(value);
-    token = value;
-    configure();
-    await controller?.check();
-  });
   if (enabled) {
     const initial = setTimeout(() => void controller?.check(), 5000);
     const periodic = setInterval(() => void controller?.check(), 6 * 60 * 60 * 1000);

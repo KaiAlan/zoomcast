@@ -24,7 +24,6 @@ export class UpdateController {
     confirm: () => Promise<boolean>;
     save: () => Promise<void>;
     log: (error: unknown) => void;
-    accessReady?: () => boolean;
   }) {
     this.value = { status: options.enabled ? "idle" : "disabled", currentVersion: options.currentVersion };
     const driver = options.driver;
@@ -64,10 +63,6 @@ export class UpdateController {
   check(): Promise<void> {
     if (this.operation) return this.operation;
     if (!this.options.enabled || this.preparing || ["downloaded", "installing"].includes(this.value.status)) return Promise.resolve();
-    if (this.options.accessReady && !this.options.accessReady()) {
-      this.set({ status: "needs-access", message: "Add update access in Settings to check private releases." });
-      return Promise.resolve();
-    }
     this.set({ status: "checking", message: undefined, percent: undefined });
     return this.run(() => this.options.driver.checkForUpdates());
   }

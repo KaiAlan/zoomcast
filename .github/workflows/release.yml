@@ -3,6 +3,7 @@ name: Windows release candidate
 on:
   push:
     tags: ["v*"]
+    branches: ["release/0.1.2"]
   workflow_dispatch:
 
 permissions:
@@ -45,6 +46,8 @@ jobs:
         env:
           MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
       - run: npm run verify:release
+      - run: npm run verify:updates
+      - run: npm run verify:packaged
       - uses: actions/upload-artifact@v4
         with:
           name: zoomcast-release-candidate
@@ -55,13 +58,18 @@ jobs:
             release/*-source-*.zip
             release/*-source-*.zip.sha256
           if-no-files-found: error
-      - name: Create draft release
-        if: github.ref_type == 'tag'
+      - name: Create release
+        if: github.ref_type == 'tag' || github.ref == 'refs/heads/release/0.1.2'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = node -p "require('./package.json').version"
           $assets = @(Get-ChildItem release/*.exe, release/*.blockmap, release/latest.yml, release/*-source-*.zip, release/*-source-*.zip.sha256 | ForEach-Object FullName)
-          gh release create "v$version" @assets --draft --verify-tag --title "Zoomcast $version" --notes-file "docs/releases/$version.md"
+          if ($env:GITHUB_REF -eq 'refs/heads/release/0.1.2') {
+            if ($version -ne '0.1.2') { throw 'This release branch is reserved for 0.1.2.' }
+            gh release create "v$version" @assets --target $env:GITHUB_SHA --latest --title "Zoomcast $version" --notes-file "docs/releases/$version.md"
+          } else {
+            gh release create "v$version" @assets --draft --verify-tag --title "Zoomcast $version" --notes-file "docs/releases/$version.md"
+          }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

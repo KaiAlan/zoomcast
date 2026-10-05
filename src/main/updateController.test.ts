@@ -19,9 +19,8 @@ function setup(enabled = true) {
   const confirm = vi.fn(async () => true);
   const save = vi.fn(async () => undefined);
   const log = vi.fn();
-  const accessReady = vi.fn(() => true);
-  const controller = new UpdateController({ driver, enabled, currentVersion: "0.1.0", changed, busyReason, confirm, save, log, accessReady });
-  return { driver, controller, changed, busyReason, confirm, save, log, accessReady };
+  const controller = new UpdateController({ driver, enabled, currentVersion: "0.1.0", changed, busyReason, confirm, save, log });
+  return { driver, controller, changed, busyReason, confirm, save, log };
 }
 
 describe("installed app updates", () => {
@@ -40,14 +39,10 @@ describe("installed app updates", () => {
     expect(driver.checkForUpdates).not.toHaveBeenCalled();
   });
 
-  it("does not contact private releases before access is configured", async () => {
-    const { controller, driver, accessReady } = setup();
-    accessReady.mockReturnValue(false);
+  it("checks public releases without configuring update access", async () => {
+    const { controller, driver } = setup();
     await controller.check();
-    expect(controller.state().status).toBe("needs-access");
-    expect(driver.checkForUpdates).not.toHaveBeenCalled();
-    accessReady.mockReturnValue(true);
-    await controller.check();
+    expect(controller.state().status).toBe("checking");
     expect(driver.checkForUpdates).toHaveBeenCalledOnce();
   });
 

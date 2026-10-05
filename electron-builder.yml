@@ -6,7 +6,7 @@ publish:
   provider: github
   owner: KaiAlan
   repo: zoomcast
-  private: true
+  private: false
   releaseType: draft
 
 # uiohook-napi ships prebuildify --napi binaries, which are Node-API and so

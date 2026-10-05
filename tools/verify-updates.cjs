@@ -1,5 +1,5 @@
 /** Native updater UI/IPC guard. Simulates provider events; never installs or publishes. */
-const { app, BrowserWindow, dialog, net, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -20,16 +20,6 @@ const result = (ok, error) => fs.writeFileSync(path.join(root, "tmp", "updates-v
 const timer = setTimeout(() => { result(false, "timeout"); app.exit(1); }, 60000);
 let installs = 0;
 let downloads = 0;
-let accessRequests = 0;
-let allowAccess = true;
-const originalFetch = net.fetch.bind(net);
-net.fetch = async (url, options) => {
-  if (String(url).startsWith("https://api.github.com/repos/KaiAlan/zoomcast/releases")) {
-    accessRequests++;
-    return new Response("[]", { status: allowAccess ? 200 : 403 });
-  }
-  return originalFetch(url, options);
-};
 autoUpdater.quitAndInstall = () => { installs++; };
 autoUpdater.downloadUpdate = async () => {
   downloads++;
@@ -50,24 +40,8 @@ app.on("browser-window-created", (_event, editor) => {
     try {
       await wait("Boolean(window.__zc && document.querySelector('.editor-shell'))");
       assert((await js("window.zoomcast.updates.state()")).status === "disabled", "development/headless startup does not contact update feed");
-      const access = await js("window.zoomcast.updates.access()");
-      assert(access.configured === false && access.canStore === true, "native Windows encrypted credential storage is available");
-      assert(Object.keys(access).sort().join("|") === "canStore|configured", "credential API never returns the token");
-      const bad = await js("window.zoomcast.updates.setAccess('bad').then(()=>false,()=>true)");
-      assert(bad, "invalid credential is rejected before network or storage");
-      assert(!fs.existsSync(path.join(profile, "update-access.bin")), "invalid credential is not persisted");
-      assert(accessRequests === 0, "malformed credentials do not make an access request");
-      const encrypted = safeStorage.encryptString("synthetic-validation-credential");
-      assert(!encrypted.includes(Buffer.from("synthetic-validation-credential")) && safeStorage.decryptString(encrypted) === "synthetic-validation-credential", "Windows protection encrypts credentials and round-trips correctly");
-      await js("window.zoomcast.updates.setAccess('synthetic-validation-credential')");
-      const stored = fs.readFileSync(path.join(profile, "update-access.bin"));
-      assert(!stored.includes(Buffer.from("synthetic-validation-credential")) && safeStorage.decryptString(stored) === "synthetic-validation-credential", "verified credential is persisted encrypted by the app");
-      assert((await js("window.zoomcast.updates.access()")).configured === true, "saved access reports only configured status");
-      allowAccess = false;
-      assert(await js("window.zoomcast.updates.setAccess('synthetic-rejected-credential').then(()=>false,()=>true)"), "repository access failure rejects a replacement credential");
-      assert(fs.readFileSync(path.join(profile, "update-access.bin")).equals(stored), "rejected replacement preserves existing encrypted access");
-      await js("window.zoomcast.updates.setAccess(null)");
-      assert(!fs.existsSync(path.join(profile, "update-access.bin")) && !(await js("window.zoomcast.updates.access()")).configured, "removing update access deletes the saved credential");
+      assert(await js("!('access' in window.zoomcast.updates) && !('setAccess' in window.zoomcast.updates)"), "public updates expose no credential setup API");
+      assert(!fs.existsSync(path.join(profile, "update-access.bin")), "updates require no stored credential");
       autoUpdater.emit("update-available", { version: "0.1.2" });
       await wait("Boolean([...document.querySelectorAll('.update-notice button')].find(e=>e.textContent==='Update'))");
       assert(downloads === 0, "new release shows Update without automatically downloading");

@@ -25,7 +25,7 @@ Zoomcast runs in the system tray. Closing the editor keeps the recording hotkey 
 
 ## Updates
 
-Installed version 0.1.1 checks for newer releases on startup and shows **Update**, followed by **Restart to update**. The current build requires GitHub access configured under **Settings → App updates**. Public updates without a token are being prepared. Version 0.1.0 requires one manual upgrade.
+Installed version 0.1.2 and later check for newer releases on startup and shows **Update**, followed by **Restart to update**. Public-update builds need no GitHub account or access token. Older builds that ask for update access need one manual upgrade from [GitHub Releases](https://github.com/KaiAlan/zoomcast/releases).
 
 ## Develop
 

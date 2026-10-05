@@ -51,22 +51,20 @@ let server;
   const feed = `http://127.0.0.1:${server.address().port}`;
   const bootstrap = path.join(scratch, 'bootstrap.cjs');
   fs.writeFileSync(bootstrap, `
-const { app, BrowserWindow, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs'); const path = require('node:path');
 const profile = ${JSON.stringify(profile)};
 if (!process.env.ZOOMCAST_RECORD_TEST) {
 app.setPath('userData', profile);
 process.env.LOCALAPPDATA = path.join(profile, 'local');
-const originalFeed = autoUpdater.setFeedURL.bind(autoUpdater);
-autoUpdater.setFeedURL = () => originalFeed({ provider: 'generic', url: ${JSON.stringify(feed)} });
+autoUpdater.setFeedURL({ provider: 'generic', url: ${JSON.stringify(feed)} });
 // Only automate the confirmation dialog. Updater download/install stays real.
 dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const note = value => fs.appendFileSync(path.join(profile, 'events.jsonl'), JSON.stringify(value) + '\\n');
 for (const event of ['checking-for-update','update-available','update-downloaded','error']) autoUpdater.on(event, value => note({ event, version: app.getVersion(), value: value instanceof Error ? value.message : value }));
 app.whenReady().then(() => {
-  if (!fs.existsSync(path.join(profile, 'update-access.bin'))) fs.writeFileSync(path.join(profile, 'update-access.bin'), safeStorage.encryptString('synthetic-local-feed-test-token'));
   setTimeout(async () => {
     try {
       const editor = new BrowserWindow({ show: false, webPreferences: { preload: path.join(__dirname, '../preload/index.mjs'), contextIsolation: true, sandbox: false } });
