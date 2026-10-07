@@ -143,21 +143,45 @@ app.on("browser-window-created", (_, win) => {
       await click(button("Sand color background")); await click(button("Save project"));
       assert(JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.background.color==="#eee5d9", "color preset persists to project");
       await click(button("Image"));
-      assert(await js("document.querySelectorAll('.image-preset').length===6"), "appearance offers six built-in image backgrounds");
+      assert(await js("document.querySelectorAll('.image-preset').length===24"), "appearance offers 24 built-in image backgrounds");
       assert(await js("[...document.querySelectorAll('.image-preset img')].every(img=>img.complete && img.naturalWidth>0)"), "image preset thumbnails decode");
       await js("window.__zc.renderAt(0)");
-      await click(button("Coast image background")); await pause(300); await click(button("Save project"));
+      await click(button("Ribbons image background")); await pause(300); await click(button("Save project"));
       const savedBg = JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.background;
-      assert(savedBg.imageFile==="background-preset-coast.svg" && fs.existsSync(path.join(dir,savedBg.imageFile)), "image preset is copied into portable project bundle");
+      assert(savedBg.imageFile==="background-preset-ribbons.jpg" && fs.existsSync(path.join(dir,savedBg.imageFile)), "image preset is copied into portable project bundle");
       const pixel = await js("new Promise(resolve=>{const source=document.querySelector('.preview-canvas');const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);resolve([...ctx.getImageData(Math.round(canvas.width*.02),Math.round(canvas.height*.2),1,1).data]);};image.src=source.toDataURL();})");
-      assert(Math.abs(pixel[0]-220)<8 && Math.abs(pixel[1]-239)<8 && Math.abs(pixel[2]-243)<8, "paused preview repaints when preset image finishes loading");
-      const imageSize = await js(`new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve([image.naturalWidth,image.naturalHeight]);image.onerror=reject;image.src=${JSON.stringify(`zc://app/@fs/${dir.replace(/\\/g,"/")}/${"background-preset-coast.svg"}`)}})`);
-      assert(imageSize[0]===1920 && imageSize[1]===1080, "bundled image decodes for preview and export");
+      const expectedPixel = await js(`new Promise(resolve=>{const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=1920;canvas.height=1080;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,1920,1080);resolve([...ctx.getImageData(Math.round(canvas.width*.02),Math.round(canvas.height*.2),1,1).data]);};image.src=${JSON.stringify(`zc://app/@fs/${dir.replace(/\\/g,"/")}/background-preset-ribbons.jpg`)};})`);
+      assert(pixel.slice(0,3).every((v,i)=>Math.abs(v-expectedPixel[i])<12), "paused preview repaints when preset image finishes loading");
+      const imageSize = await js(`new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve([image.naturalWidth,image.naturalHeight]);image.onerror=reject;image.src=${JSON.stringify(`zc://app/@fs/${dir.replace(/\\/g,"/")}/${"background-preset-ribbons.jpg"}`)}})`);
+      assert(imageSize[0]===3840 && imageSize[1]===2160, "bundled image decodes for preview and export");
       await js("window.__zc.renderAt(0)"); await pause(300);
       const imageFrame = await js("window.__zc.renderAt(0)");
       await screenshot("ui-image-presets.png");
       await click(button("Gradient"));
       assert(await js("window.__zc.renderAt(0)")!==imageFrame, "image preset changes rendered composition");
+      assert(await js("document.querySelectorAll('.gradient-swatch').length===24"), "appearance offers 24 gradient presets");
+      await click(button("Cursor"));
+      assert(await js("document.querySelectorAll('.cursor-style-grid button').length===5"), "cursor panel offers five styles");
+      const renderedStyles = new Set();
+      for (const name of ["Classic", "Rounded", "Filled", "Dot", "Outline"]) {
+        await click(button(`${name} cursor`));
+        renderedStyles.add(await js("window.__zc.renderAt(1000)"));
+      }
+      assert(renderedStyles.size===5, "every cursor style visibly changes rendered pixels");
+      for (const [label,value] of [["Cursor Size","2.5"],["Cursor Motion Blur","0.4"],["Cursor Click Bounce","3.5"],["Bounce Speed","350"],["Cursor Sway","0.2"]]) {
+        await click(`document.querySelector('input[aria-label="${label}"]')`);
+        await key("a", ["control"]); await wc.insertText(value); await pause();
+      }
+      await click("[...document.querySelectorAll('.cursor-panel-header label')].find(e=>e.textContent==='Loop Cursor').querySelector('input')");
+      await click(button("Save project"));
+      const savedCursor = JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.cursor;
+      assert(savedCursor.appearance==='outline' && savedCursor.loop && savedCursor.sizePct===250 && savedCursor.motionBlur===0.4 && savedCursor.clickBounce===3.5 && savedCursor.bounceDurationMs===350 && savedCursor.sway===0.2, "all reference cursor controls persist to project");
+      await screenshot("ui-cursor-effects.png");
+      await click(button("Reset cursor")); await click(button("Save project"));
+      assert(JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.cursor.clickBounce===0, "cursor reset restores inert defaults");
+      await click(button("Undo")); await click(button("Save project"));
+      assert(JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.cursor.clickBounce===3.5, "cursor reset is undoable");
+      await click(button("Redo"));
       await click(button("Advanced zoom"));
       assert(await js("document.querySelectorAll('.zoom-control-group .slider-range').length===19"), "advanced zoom uses grouped sliders");
       await js("window.zoomcast.getSettings().then(settings=>window.zoomcast.setSettings({...settings,theme:'dark'}))"); await pause(200);

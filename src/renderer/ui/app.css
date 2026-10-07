@@ -65,10 +65,10 @@ input[type=checkbox]:checked::after { transform: translateX(13px); }
 .segmented-control { display: flex; padding: 3px; background: var(--control); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
 .segmented-control button { flex: 1; border: 0; border-radius: 7px; background: transparent; padding: 7px 2px; color: #7c8491; font-size: 10px; cursor: pointer; }
 .segmented-control button[aria-pressed=true] { background: white; color: var(--text); box-shadow: 0 1px 4px #1d2a4020; }
-.gradient-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 15px; }
-.gradient-swatch { aspect-ratio: 1.8; border: 2px solid transparent; border-radius: 9px; cursor: pointer; padding: 4px; display: flex; align-items: flex-end; overflow: hidden; }
+.gradient-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; margin-bottom: 15px; }
+.gradient-swatch { aspect-ratio: 1; border: 2px solid transparent; border-radius: 9px; cursor: pointer; padding: 4px; display: flex; align-items: flex-end; overflow: hidden; }
 .gradient-swatch.selected { border-color: var(--accent); outline: 2px solid #dce7ff; }
-.gradient-swatch span { color: #fff; font-size: 9px; text-transform: capitalize; padding: 2px 4px; background: #0003; border-radius: 4px; }
+.gradient-swatch span { display: none; color: #fff; font-size: 9px; text-transform: capitalize; padding: 2px 4px; background: #0003; border-radius: 4px; }
 .slider-field { display: flex; align-items: center; position: relative; background: var(--control); border-radius: 10px; height: 40px; margin: 7px 0; padding: 0 10px; overflow: hidden; font-size: 12px; }
 .slider-fill { position: absolute; top: 0; bottom: 0; left: 0; pointer-events: none; background: #dfe3eb; border-right: 2px solid #b4bdcb; border-radius: 10px 0 0 10px; }
 .slider-field label { position: relative; z-index: 2; pointer-events: none; color: #666f7c; white-space: nowrap; }
@@ -163,3 +163,13 @@ input[type=checkbox]:checked::after { transform: translateX(13px); }
 .segment-popover-actions { display: flex; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .segment-popover-actions button { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--control); color: var(--text); font-size: 11px; cursor: pointer; }
 .segment-popover-actions .segment-delete { color: #cc5060; }
+
+.cursor-panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.cursor-panel-header label, .cursor-extra-toggles label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); }
+.inspector-reset { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 3px 0; font: inherit; font-size: 11px; }
+.cursor-style-grid { border: 0; padding: 0; margin: 0 0 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.cursor-style-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; background: #202126; border: 1px solid #42444c; border-radius: 10px; height: 67px; padding: 7px; color: #d5d8e0; cursor: pointer; }
+.cursor-style-grid button[aria-pressed=true] { border-color: var(--accent); outline: 2px solid var(--accent-soft); background: #292d38; }
+.cursor-style-grid button > svg { width: 31px; height: 31px; }
+.cursor-style-grid span { font-size: 9px; }
+.cursor-extra-toggles { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0; }

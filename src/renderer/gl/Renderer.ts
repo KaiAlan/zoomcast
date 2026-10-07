@@ -1,6 +1,7 @@
 import type { CursorSample } from "../../shared/cursor/path";
 import type { Ripple } from "../../shared/cursor/ripples";
-import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
+import { cursorArt } from "../../shared/cursor/appearance";
+import type { CursorEffects } from "../../shared/cursor/effects";
 import type { CursorStyle, StyleConfig, WebcamConfig } from "../../shared/project/types";
 import { webcamLayout } from "../../shared/webcam/layout";
 import type { ZoomState } from "../../shared/zoom/interpolate";
@@ -32,7 +33,7 @@ export type FrameState = {
   style: StyleConfig;
   outputSize: Size;
   sourceSize: Size;
-  cursor?: { sample: CursorSample; style: CursorStyle };
+  cursor?: { sample: CursorSample; style: CursorStyle; effects?: CursorEffects };
   ripples?: Ripple[];
   /**
    * Fully-resolved zc:// URL of the background image, when the style selects
@@ -187,7 +188,7 @@ export class Renderer {
       "u_blurDir",
       "u_blurKernel",
     ]);
-    this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow"]);
+    this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow", "u_spanPx", "u_texturePx", "u_hotPx", "u_angle", "u_cursorBlur"]);
     this.rippleProgram = link(gl, RIPPLE_FRAG, ["u_progress"]);
 
     const tex = gl.createTexture();
@@ -249,7 +250,7 @@ export class Renderer {
     if (state.cursor?.style.visible) {
       const cursor = state.cursor;
       this.withFrameClip(quad, out, () =>
-        this.drawCursor(cursor.sample, cursor.style, quad, region, out, src),
+        this.drawCursor(cursor.sample, cursor.style, quad, region, out, src, cursor.effects),
       );
     }
 
@@ -518,34 +519,37 @@ export class Renderer {
     region: SourceRect,
     out: Size,
     src: Size,
+    effects?: CursorEffects,
   ): void {
     const gl = this.gl;
-    const art = CURSOR_SHAPES[sample.shape];
-
+    const art = cursorArt(sample.shape, style.appearance);
     const sizePx = (out.h / 1080) * 24 * (style.sizePct / 100);
-    const cursorTex = this.cursorTextures.get(gl, sample.shape, sizePx);
-    // Geometry derives from cursorTex.px — the clamped, rounded size the
-    // cache actually rasterised — not the raw sizePx, so the hotspot's
-    // fraction of the drawn quad matches its fraction of the texture.
-    // Same px and the same pad the cache actually rasterised with: geometry
-    // recomputed from anything else puts the hotspot off the click point.
+    const cursorTex = this.cursorTextures.get(gl, sample.shape, sizePx, style.appearance);
+    const scale = effects?.scale ?? 1;
     const pad = padFor(cursorTex.px);
-    const dim = cursorTex.px + pad * 2;
-
+    const dim = (cursorTex.px + pad * 2) * scale;
     const at = sourceToFrame({ x: sample.x / src.w, y: sample.y / src.h }, region, quad);
     if (at === null) return;
-    const { x, y } = at;
-
-    const hotX = (art.hotspot.x / art.viewBox) * cursorTex.px + pad;
-    const hotY = (art.hotspot.y / art.viewBox) * cursorTex.px + pad;
-
+    const hotX = ((art.hotspot.x / art.viewBox) * cursorTex.px + pad) * scale;
+    const hotY = ((art.hotspot.y / art.viewBox) * cursorTex.px + pad) * scale;
+    const blurX = Math.max(-48 * out.h / 1080, Math.min(48 * out.h / 1080, (effects?.blurX ?? 0) * quad.w / src.w));
+    const blurY = Math.max(-48 * out.h / 1080, Math.min(48 * out.h / 1080, (effects?.blurY ?? 0) * quad.h / src.h));
+    const angle = effects?.angleRad ?? 0;
+    // An expanded quad prevents rotated tips and shutter samples clipping at
+    // the texture border. Rotation and bounce remain anchored on the hotspot.
+    const radius = Math.hypot(dim, dim) + Math.hypot(blurX, blurY) + 2;
+    const span = radius * 2;
     gl.useProgram(this.cursorProgram.program);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, cursorTex.texture);
     gl.uniform1i(this.cursorProgram.uniforms.u_tex ?? null, 0);
     gl.uniform1f(this.cursorProgram.uniforms.u_shadow ?? null, style.shadow ? 1 : 0);
-
-    this.setRect(this.cursorProgram, x - hotX, y - hotY, dim, dim, out);
+    gl.uniform2f(this.cursorProgram.uniforms.u_spanPx ?? null, span, span);
+    gl.uniform1f(this.cursorProgram.uniforms.u_texturePx ?? null, dim);
+    gl.uniform2f(this.cursorProgram.uniforms.u_hotPx ?? null, hotX, hotY);
+    gl.uniform1f(this.cursorProgram.uniforms.u_angle ?? null, angle);
+    gl.uniform2f(this.cursorProgram.uniforms.u_cursorBlur ?? null, blurX, blurY);
+    this.setRect(this.cursorProgram, at.x - radius, at.y - radius, span, span, out);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 

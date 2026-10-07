@@ -35,7 +35,18 @@ export type FrameStyle = {
 
 export type AspectChoice = "native" | "16:9" | "4:3" | "1:1" | "9:16";
 
+export type CursorAppearance = "classic" | "rounded" | "filled" | "dot" | "outline";
+
 export type CursorStyle = {
+  appearance: CursorAppearance;
+  loop: boolean;
+  /** Shutter length in fixed 60Hz samples, 0..1. */
+  motionBlur: number;
+  /** Click scale animation strength, 0..5. */
+  clickBounce: number;
+  bounceDurationMs: number;
+  /** Velocity-driven tilt strength, 0..2. */
+  sway: number;
   visible: boolean;
   /** 100 = the shape's natural size at 1x zoom. */
   sizePct: number;

@@ -1,8 +1,9 @@
+import { cursorFrameAt } from "../../shared/cursor/effects";
 import { Icon, type IconName } from "./Icon";
 import { webcamTime } from "../../shared/webcam/layout";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpenedBundle } from "../../shared/api";
-import { buildCursorPath, cursorAt, smoothingToHalfLife } from "../../shared/cursor/path";
+import { buildCursorPath, smoothingToHalfLife } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
 import { outputDurationMs, outputToSource, sourceSpanToOutput } from "../../shared/project/timeline";
@@ -252,7 +253,7 @@ export function Editor({
 
       const { project: p, ctx: c, cursorPath, clicks, backgroundImageUrl } = live.current;
       const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
-      const sample = cursorAt(cursorPath, tSource);
+      const cursorFrame = cursorFrameAt(cursorPath, clicks, tSource, p.style.cursor, { durationMs: manifest.durationMs, cuts: p.cuts, outputMs: tOutputMs, fps: p.output.fps });
 
       const frame = await source.frameAt(tSource);
       let cameraFrame: Awaited<ReturnType<VideoElementSource["frameAt"]>> | undefined;
@@ -291,7 +292,7 @@ export function Editor({
           style: p.style,
           outputSize: c.output,
           sourceSize: c.source,
-          cursor: sample === null ? undefined : { sample, style: p.style.cursor },
+          cursor: cursorFrame === null ? undefined : { ...cursorFrame, style: p.style.cursor },
           ripples: ripplesAt(clicks, tSource, RIPPLE_DURATION_MS),
           backgroundImageUrl,
         });

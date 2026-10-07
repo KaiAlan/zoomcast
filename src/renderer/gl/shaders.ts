@@ -196,21 +196,35 @@ in vec2 v_uv;
 out vec4 outColor;
 uniform sampler2D u_tex;
 uniform float u_shadow;
+uniform vec2 u_spanPx;
+uniform float u_texturePx;
+uniform vec2 u_hotPx;
+uniform float u_angle;
+uniform vec2 u_cursorBlur;
 
-void main() {
-  vec4 c = texture(u_tex, v_uv);
-
+vec4 glyph(vec2 outputPx) {
+  float c = cos(u_angle), s = sin(u_angle);
+  vec2 local = vec2(c * outputPx.x + s * outputPx.y, -s * outputPx.x + c * outputPx.y);
+  vec2 uv = (local + u_hotPx) / u_texturePx;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+  vec4 color = texture(u_tex, uv);
   if (u_shadow > 0.5) {
-    // Offset alpha tap, so the cursor reads against light backgrounds too.
-    float s = texture(u_tex, v_uv - vec2(0.02, 0.02)).a * 0.35;
-    // Source-over, not mix(): mix gives output alpha s(1-c.a) + c.a*c.a, which
-    // squashes the glyph's antialiased boundary (0.5 becomes 0.425 at s=0.35)
-    // and renders every edge thinner and more transparent than intended.
-    float a = c.a + s * (1.0 - c.a);
-    outColor = vec4(c.rgb * c.a / max(a, 1e-4), a);
-  } else {
-    outColor = c;
+    float shadow = texture(u_tex, uv - vec2(0.02)).a * 0.35;
+    float a = color.a + shadow * (1.0 - color.a);
+    color = vec4(color.rgb * color.a / max(a, 1e-4), a);
   }
+  return color;
+}
+void main() {
+  vec2 p = (v_uv - 0.5) * u_spanPx;
+  if (length(u_cursorBlur) < 0.01) { outColor = glyph(p); return; }
+  vec4 sum = vec4(0.0);
+  for (int i = 0; i < 9; i++) {
+    vec4 tap = glyph(p + u_cursorBlur * (float(i) / 8.0));
+    sum += vec4(tap.rgb * tap.a, tap.a);
+  }
+  sum /= 9.0;
+  outColor = vec4(sum.rgb / max(sum.a, 1e-4), sum.a);
 }
 `;
 

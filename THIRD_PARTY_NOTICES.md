@@ -11,3 +11,7 @@ The bundled media build includes x264 and is GPL-2.0-or-later. Each installer re
 Electron includes its MIT license and Chromium third-party notices in the installed application. Application dependencies retain their upstream licenses, distributed within their packages. The exact dependency versions are recorded in `package-lock.json`; native dependencies include Koffi and uiohook-napi. Preserve those notices when redistributing builds.
 
 The Zoomcast license does not grant trademark rights or patent licenses for third-party codecs.
+
+## Background photographs and artwork
+
+The bundled image backgrounds are supplied under the Unsplash License (https://unsplash.com/license), separately from Zoomcast’s MIT license. Original image links and photographer credits are in `src/renderer/public/backgrounds/CREDITS.md`, copied to `out/renderer/backgrounds/CREDITS.md` in packaged builds.

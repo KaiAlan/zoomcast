@@ -1,9 +1,9 @@
 import { registerExportJobs } from "./exportJobs";
 import { openFeedback } from "./feedback";
-import { IMAGE_PRESETS } from "../shared/style/imagePresets";
-import { BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, type WebContents } from "electron";
+import { IMAGE_PRESETS, presetProjectFile } from "../shared/style/imagePresets";
+import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, writeFileSync } from "node:fs";
+import { copyFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import type { ExportStartOptions } from "../shared/api";
 import { formatExportFailure, formatExportStart } from "../shared/export/diagnostics";
@@ -67,8 +67,8 @@ export function registerIpc(): void {
   ipcMain.handle("background:preset", (_event, dir: string, id: string) => {
     const preset = IMAGE_PRESETS.find(image => image.id === id);
     if (!preset) throw new Error("Unknown background preset");
-    const file = `background-preset-${preset.id}.svg`;
-    writeFileSync(join(dir, file), preset.svg, "utf8");
+    const file = presetProjectFile(preset);
+    copyFileSync(join(app.getAppPath(), "out", "renderer", "backgrounds", preset.file), join(dir, file));
     return file;
   });
   ipcMain.handle("background:choose", async (_event, dir: string) => {

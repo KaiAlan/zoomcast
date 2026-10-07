@@ -1,10 +1,11 @@
+import { cursorFrameAt } from "../../shared/cursor/effects";
 import { openExportFrameWriter, type ExportFrameWriter } from "./ExportFrameWriter";
 import { webcamTime } from "../../shared/webcam/layout";
 import { toStreamLocalMs } from "../../shared/bundle/streamTime";
 import type { Manifest } from "../../shared/bundle/manifest";
 import type { TelemetryEvent } from "../../shared/bundle/types";
 import type { CursorPath } from "../../shared/cursor/path";
-import { cursorAt } from "../../shared/cursor/path";
+
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
 import type { AudioInput } from "../../shared/export/ffmpegArgs";
@@ -152,7 +153,7 @@ export async function exportClip(opts: {
       // goes through the helper anyway so a non-zero offset cannot be missed.
       const localMs = toStreamLocalMs(frame.tSourceMs, manifest.video.startOffsetMs);
 
-      const sample = cursorPath === null ? null : cursorAt(cursorPath, frame.tSourceMs);
+      const cursorFrame = cursorFrameAt(cursorPath, clicks, frame.tSourceMs, project.style.cursor, { durationMs: manifest.durationMs, cuts: project.cuts, outputMs: frame.tOutputMs, fps: project.output.fps });
 
       const decodeAt = performance.now();
       const videoFrame = await source.frameAt(localMs);
@@ -177,7 +178,7 @@ export async function exportClip(opts: {
           style: project.style,
           outputSize: output,
           sourceSize,
-          cursor: sample === null ? undefined : { sample, style: project.style.cursor },
+          cursor: cursorFrame === null ? undefined : { ...cursorFrame, style: project.style.cursor },
           ripples: ripplesAt(clicks, frame.tSourceMs, RIPPLE_DURATION_MS),
           backgroundImageUrl,
         });

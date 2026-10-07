@@ -26,6 +26,12 @@ export function defaultProject(bundleId: string): Project {
         blur: "none",
       },
       cursor: {
+        appearance: "filled",
+        loop: false,
+        motionBlur: 0,
+        clickBounce: 0,
+        bounceDurationMs: 350,
+        sway: 0,
         visible: true,
         sizePct: 100,
         smoothing: 0.8,

@@ -1,3 +1,4 @@
+import { CursorPanel } from "./CursorPanel";
 import { SliderField } from "./SliderField";
 import { InspectorSection, InspectorTab } from "./InspectorSection";
 import type {
@@ -110,38 +111,7 @@ export function Inspector({
         <SliderField label="Margin" max={160} unit="px" value={webcam.marginPx} onChange={(marginPx) => onWebcamChange({ ...webcam, marginPx })} />
       </>}
       </InspectorSection>
-      <InspectorSection title="Cursor">
-
-        <label style={row}>
-          <span style={fieldLabel}>visible</span>
-          <input
-            type="checkbox"
-            checked={cursor.visible}
-            onChange={(e) => onCursorChange({ ...cursor, visible: e.target.checked })}
-          />
-        </label>
-
-        <SliderField label="Cursor size" unit="%" min={10} max={300} step={10} value={cursor.sizePct} onChange={sizePct => onCursorChange({ ...cursor, sizePct })} />
-        <SliderField label="Smoothing" min={0} max={1} step={0.05} value={cursor.smoothing} onChange={smoothing => onCursorChange({ ...cursor, smoothing })} />
-
-        <label style={row}>
-          <span style={fieldLabel}>shadow</span>
-          <input
-            type="checkbox"
-            checked={cursor.shadow}
-            onChange={(e) => onCursorChange({ ...cursor, shadow: e.target.checked })}
-          />
-        </label>
-
-        <label style={row}>
-          <span style={fieldLabel}>ripples</span>
-          <input
-            type="checkbox"
-            checked={cursor.ripples}
-            onChange={(e) => onCursorChange({ ...cursor, ripples: e.target.checked })}
-          />
-        </label>
-      </InspectorSection>
+      <CursorPanel cursor={cursor} onChange={onCursorChange} />
       <InspectorSection title="Audio" hint="Mix & sync">
         <SliderField label="Microphone" unit="dB" min={-60} max={24} value={audio.micGainDb} onChange={micGainDb => onAudioChange({ ...audio, micGainDb })} />
         <SliderField label="System audio" unit="dB" min={-60} max={24} value={audio.systemGainDb} onChange={systemGainDb => onAudioChange({ ...audio, systemGainDb })} />

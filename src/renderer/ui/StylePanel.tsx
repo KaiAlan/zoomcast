@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { COLOR_PRESETS, IMAGE_PRESETS, presetImageUrl } from "../../shared/style/imagePresets";
+import { useRef, useState } from "react";
+import { COLOR_PRESETS, IMAGE_PRESETS, presetImageUrl, presetProjectFile } from "../../shared/style/imagePresets";
 import { SliderField } from "./SliderField";
 import { InspectorSection } from "./InspectorSection";
 import type {
@@ -13,7 +13,6 @@ import type {
 import { ASPECT_RATIOS } from "../../shared/style/aspect";
 import { GRADIENT_PRESETS } from "../../shared/style/backgrounds";
 import {
-  buttonInput,
   fieldLabel,
   row,
   selectInput,
@@ -96,11 +95,13 @@ function CheckRow({
 export function StylePanel({ style, output, dir, onStyleChange, onOutputChange, group }: Props) {
   const [imageBusy, setImageBusy] = useState(false);
   const [imageError, setImageError] = useState("");
+  const latestStyle = useRef(style);
+  latestStyle.current = style;
   const bg = style.background;
   const frame = style.frame;
 
   const setBg = (over: Partial<StyleConfig["background"]>): void =>
-    onStyleChange({ ...style, background: { ...bg, ...over } });
+    onStyleChange({ ...latestStyle.current, background: { ...latestStyle.current.background, ...over } });
   const setFrame = (over: Partial<StyleConfig["frame"]>): void =>
     onStyleChange({ ...style, frame: { ...frame, ...over } });
 
@@ -110,11 +111,10 @@ export function StylePanel({ style, output, dir, onStyleChange, onOutputChange, 
       .catch((error: unknown) => setImageError(String(error))).finally(() => setImageBusy(false));
   };
   const chooseImage = (): void => {
-    void (async () => {
-      const file = await window.zoomcast.chooseBackgroundImage(dir);
-      // Null means cancelled, or the copy failed and was logged main-side.
+    setImageBusy(true); setImageError("");
+    void window.zoomcast.chooseBackgroundImage(dir).then(file => {
       if (file !== null) setBg({ imageFile: file, kind: "image" });
-    })();
+    }).catch((error: unknown) => setImageError(String(error))).finally(() => setImageBusy(false));
   };
 
   return (
@@ -143,14 +143,9 @@ export function StylePanel({ style, output, dir, onStyleChange, onOutputChange, 
 
         {bg.kind === "image" && (
           <>
-            <div className="image-preset-grid">{IMAGE_PRESETS.map(preset => <button key={preset.id} type="button" disabled={imageBusy} className={`image-preset ${bg.imageFile === `background-preset-${preset.id}.svg` ? "selected" : ""}`} aria-label={`${preset.label} image background`} aria-pressed={bg.imageFile === `background-preset-${preset.id}.svg`} onClick={() => choosePreset(preset.id)}><img src={presetImageUrl(preset.svg)} alt="" /><span>{preset.label}</span></button>)}</div>
+            <button type="button" className="background-upload" disabled={imageBusy} onClick={chooseImage}>Upload custom image</button>
+            <div className="image-preset-grid">{IMAGE_PRESETS.map(preset => <button key={preset.id} type="button" title={`${preset.label} · ${preset.author}`} disabled={imageBusy} className={`image-preset ${bg.imageFile === presetProjectFile(preset) ? "selected" : ""}`} aria-label={`${preset.label} image background`} aria-pressed={bg.imageFile === presetProjectFile(preset)} onClick={() => choosePreset(preset.id)}><img src={presetImageUrl(preset)} alt="" decoding="async" /><span>{preset.label}</span></button>)}</div>
             {imageError && <p role="alert" className="control-help">{imageError}</p>}
-            <label style={row}>
-              <span style={fieldLabel}>image</span>
-              <button type="button" onClick={chooseImage} style={buttonInput}>
-                Choose image…
-              </button>
-            </label>
             <div
               style={{
                 ...fieldLabel,
@@ -159,7 +154,7 @@ export function StylePanel({ style, output, dir, onStyleChange, onOutputChange, 
                 overflowWrap: "anywhere",
               }}
             >
-              {IMAGE_PRESETS.find(preset => bg.imageFile === `background-preset-${preset.id}.svg`)?.label ?? bg.imageFile ?? "Choose a preset or your own image"}
+              {IMAGE_PRESETS.find(preset => bg.imageFile === presetProjectFile(preset))?.label ?? bg.imageFile ?? "Choose a preset or your own image"}
             </div>
             <SelectRow
               label="blur"

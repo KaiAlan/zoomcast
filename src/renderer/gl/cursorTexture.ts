@@ -1,5 +1,6 @@
 import type { CursorShape } from "../../shared/bundle/types";
-import { CURSOR_SHAPES } from "../../shared/cursor/shapes";
+import { cursorArt, cursorPaint } from "../../shared/cursor/appearance";
+import type { CursorAppearance } from "../../shared/project/types";
 
 /**
  * Extra margin around the glyph so the stroke and shadow are not clipped.
@@ -45,13 +46,14 @@ export type CursorTexture = { texture: WebGLTexture; px: number };
 export class CursorTextureCache {
   private readonly cache = new Map<string, CursorTexture>();
 
-  get(gl: WebGL2RenderingContext, shape: CursorShape, sizePx: number): CursorTexture {
+  get(gl: WebGL2RenderingContext, shape: CursorShape, sizePx: number, appearance: CursorAppearance = "filled"): CursorTexture {
     const px = Math.min(MAX_CURSOR_PX, Math.max(MIN_CURSOR_PX, Math.round(sizePx)));
-    const key = `${shape}@${px}`;
+    const key = `${appearance}:${shape}@${px}`;
     const held = this.cache.get(key);
     if (held !== undefined) return held;
 
-    const art = CURSOR_SHAPES[shape];
+    const art = cursorArt(shape, appearance);
+    const paint = cursorPaint(appearance);
     const scale = px / art.viewBox;
     const pad = padFor(px);
     const dim = px + pad * 2;
@@ -69,10 +71,10 @@ export class CursorTextureCache {
     const path = new Path2D(art.path);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = paint.stroke;
+    ctx.lineWidth = paint.width;
     ctx.stroke(path);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = paint.fill;
     ctx.fill(path);
 
     const tex = gl.createTexture();
@@ -86,6 +88,15 @@ export class CursorTextureCache {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     const entry: CursorTexture = { texture: tex, px };
+    // Size sliders can otherwise retain hundreds of full-resolution textures.
+    if (this.cache.size >= 64) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) {
+        const evicted = this.cache.get(oldest);
+        if (evicted) gl.deleteTexture(evicted.texture);
+        this.cache.delete(oldest);
+      }
+    }
     this.cache.set(key, entry);
     return entry;
   }

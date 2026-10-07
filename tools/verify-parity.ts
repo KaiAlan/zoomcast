@@ -15,6 +15,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, readFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { defaultProject } from "../src/shared/project/defaults";
 import { normalizeProject } from "../src/shared/project/migrate";
 import type { Project } from "../src/shared/project/types";
 
@@ -58,6 +59,15 @@ const CONFIGS: Array<{
   shots?: number[];
 }> = [
   { name: "default" },
+  ...(["classic", "rounded", "filled", "dot", "outline"] as const).map(appearance => ({
+    name: `cursor-${appearance}`,
+    style: { cursor: { ...defaultProject("cursor").style.cursor, appearance, sizePct: 250, motionBlur: 0.4, clickBounce: 3.5, bounceDurationMs: 350, sway: 0.2 } },
+    shots: [0, 1000, 1900, 2500, 4600],
+  })),
+  { name: "cursor-loop-cut", style: { cursor: { ...defaultProject("loop").style.cursor, loop: true, sizePct: 250, sway: 0.2, motionBlur: 0.4 } }, cuts: [{ id: "loop-start", startMs: 0, endMs: 500 }, { id: "loop-end", startMs: 4500, endMs: 5000 }], shots: [0, 1000, 1900, 2500, 3983.3333333333335] },
+  { name: "bright-gradient", style: { background: { ...defaultProject("bright").style.background, preset: "prism" } } },
+  { name: "bundled-wallpaper", style: { background: { ...defaultProject("wallpaper").style.background, kind: "image", imageFile: "background-preset-ribbons.jpg" } } },
+
   { name: "webcam-circle", webcam: {} },
   { name: "webcam-rounded", webcam: { shape: "rounded", position: "top-left", mirror: false } },
   { name: "webcam-portrait", webcam: { sizePct: 40, position: "top-right" }, output: { aspect: "9:16" } },
@@ -226,6 +236,7 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
     manifest.webcam = { file: "webcam.mp4", width: 640, height: 360, fps: 30, startOffsetMs: config.webcamOffsetMs ?? -200 };
     writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest));
   }
+  if (config.name === "bundled-wallpaper") cpSync(join(ROOT, "src", "renderer", "public", "backgrounds", "ribbons.jpg"), join(dir, "background-preset-ribbons.jpg"));
   assertSurvivesMigration(project);
 
   writeFileSync(join(dir, "project.json"), `${JSON.stringify(project, null, 2)}\n`, "utf8");
@@ -264,7 +275,8 @@ let checked = 0;
 const rows: Array<Record<string, string | number>> = [];
 
 execFileSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-t", "7", "-an", "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-g", "15", join(OUT, "camera.mp4")], { stdio: "ignore" });
-for (const config of CONFIGS) {
+const selectedConfigs = process.env.ZOOMCAST_PARITY_CONFIGS?.split(",");
+for (const config of CONFIGS.filter(config => !selectedConfigs || selectedConfigs.includes(config.name))) {
   const { dir, mp4 } = prepare(config);
   const shots = config.shots ?? SHOTS;
 
@@ -314,9 +326,11 @@ for (const config of CONFIGS) {
 }
 
 // Parity alone could pass if both paths forgot to composite the camera.
+if (!selectedConfigs) {
 const cameraDifference = psnr(join(OUT, "default", "preview-1000.png"), join(OUT, "webcam-circle", "preview-1000.png"));
 if (cameraDifference >= 55) throw new Error("webcam composition did not visibly change preview pixels");
 console.log(`webcam visibility guard: ${cameraDifference.toFixed(1)}dB against screen-only preview`);
+}
 console.table(rows);
 
 if (failures > 0) {

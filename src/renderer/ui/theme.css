@@ -12,10 +12,10 @@ select:not([multiple]):not([size]) option { background: var(--surface); color: v
 .color-preset { height: 47px; border: 1px solid #00000012; border-radius: 8px; cursor: pointer; padding: 4px; display: flex; align-items: end; }
 .color-preset span { font-size: 8px; color: #fff; background: #1c253baa; border-radius: 3px; padding: 2px 4px; }
 .color-preset.selected, .image-preset.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
-.image-preset-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 13px 0; }
-.image-preset { position: relative; border: 1px solid var(--line); background: var(--control); border-radius: 8px; overflow: hidden; padding: 0; cursor: pointer; aspect-ratio: 4 / 3; }
+.image-preset-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 13px 0; }
+.image-preset { position: relative; border: 1px solid var(--line); background: var(--control); border-radius: 8px; overflow: hidden; padding: 0; cursor: pointer; aspect-ratio: 1; }
 .image-preset img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.image-preset span { position: absolute; left: 4px; bottom: 4px; background: #172238aa; color: #fff; border-radius: 3px; padding: 2px 4px; font-size: 9px; }
+.image-preset span { display: none; position: absolute; left: 4px; bottom: 4px; background: #172238aa; color: #fff; border-radius: 3px; padding: 2px 4px; font-size: 9px; }
 :root[data-theme=dark] .icon-button, :root[data-theme=dark] .aspect-button, :root[data-theme=dark] .time-readout, :root[data-theme=dark] .slider-field label, :root[data-theme=dark] .position-grid button { color: var(--muted); }
 :root[data-theme=dark] .segmented-control button[aria-pressed=true] { background: var(--surface); color: var(--text); }
 :root[data-theme=dark] .editor-timeline { background: var(--surface); border-color: var(--line); }
@@ -71,3 +71,5 @@ select:not([multiple]):not([size]) option { background: var(--surface); color: v
 
 :root[data-theme=dark] .segment-popover { box-shadow: 0 8px 28px #0006; }
 :root[data-theme=dark] .segment-depth-presets button[aria-pressed=true] { box-shadow: 0 0 9px #ff7a1a1c; }
+
+.background-upload { width: 100%; background: var(--control); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 9px; font: inherit; font-size: 11px; cursor: pointer; }

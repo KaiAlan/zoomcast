@@ -3,11 +3,8 @@ import { defaultProject } from "../project/defaults";
 import { BLUR_LOD, GRADIENT_PRESETS, MESH_POINTS, gradientPreset } from "./backgrounds";
 
 describe("GRADIENT_PRESETS", () => {
-  it("ships a curated set, not an exhaustive one", () => {
-    // Spec §5 chose generation over twelve shipped bitmaps; the point was a
-    // tight launch set, not a full catalogue.
-    expect(GRADIENT_PRESETS.length).toBeGreaterThanOrEqual(4);
-    expect(GRADIENT_PRESETS.length).toBeLessThanOrEqual(8);
+  it("ships the expanded gallery", () => {
+    expect(GRADIENT_PRESETS).toHaveLength(24);
   });
 
   it("has unique names", () => {
