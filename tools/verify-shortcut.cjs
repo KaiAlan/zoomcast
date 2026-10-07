@@ -104,8 +104,10 @@ import('./index.js');
   for (const [kind, version] of [["old", "0.1.3"], ["new", "0.1.4"]]) {
     const config = path.join(scratch, `${kind}.json`);
     fs.writeFileSync(config, JSON.stringify({ extends: path.join(root, "electron-builder.yml"), compression: "store", appId: "dev.zoomcast.shortcut-smoke", productName: product, executableName: identity, artifactName: `shortcut-${kind}.\${ext}`, directories: { output: path.join(scratch, kind) }, extraMetadata: { name: identity, version, main: "./out/main/shortcut-smoke.cjs" }, files: ["out/**/*", "package.json"], nsis: { differentialPackage: false, include: kind === "old" ? empty : path.join(root, "build", "installer.nsh"), shortcutName: product, runAfterFinish: false, createDesktopShortcut: false, createStartMenuShortcut: false } }, null, 2));
-    await run(process.execPath, [path.join(root, "node_modules", "electron-builder", "cli.js"), "--config", config, "--win", "--x64", "--publish", "never"]);
     installers[kind] = path.join(scratch, kind, `shortcut-${kind}.exe`);
+    if (!process.argv.includes("--reuse-installers") || !fs.existsSync(installers[kind])) {
+      await run(process.execPath, [path.join(root, "node_modules", "electron-builder", "cli.js"), "--config", config, "--win", "--x64", "--publish", "never"]);
+    }
   }
   await run(installers.old, ["/S"]);
   spawn(executable, [], { cwd: root, stdio: "ignore" });
@@ -146,7 +148,7 @@ import('./index.js');
   await pause(2000); press();
   const fresh = await command("state");
   assert(fresh.state.mode === "launcher" && fresh.recorderVisible, "Actual launch keys work following a clean installation");
-  assert(fresh.settings.theme === "system" && !fresh.state.startWithWindows, "Fresh users get working launch keys without enabling startup or configuring settings");
+  assert(!fresh.state.startWithWindows && !fs.existsSync(path.join(profile, "settings.json")), "Fresh users get working launch keys without enabling startup or configuring settings");
   await quit(); await run(path.join(installDir, uninstall), ["/S"]);
   await wait(() => !fs.existsSync(executable), "clean-install cleanup");
   assert(registry() === originalRegistry, "Verification leaves the existing Zoomcast installation registration unchanged");
