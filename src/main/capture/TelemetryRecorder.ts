@@ -79,6 +79,10 @@ export class TelemetryRecorder {
   }
 
   private attach(): void {
+    // Hooks emit movement, not the stationary starting position. Record it
+    // explicitly in physical pixels (the same coordinates uiohook reports).
+    const initial = screen.dipToScreenPoint(screen.getCursorScreenPoint());
+    this.push({ t: 0, k: "move", x: initial.x, y: initial.y });
     uIOhook.on("mousemove", (e) => {
       const t = this.now();
       // Throttled to the capture frame rate; the planner resamples anyway and

@@ -33,7 +33,10 @@ export function cursorFrameAt(
   const loopWeight = style.loop && returnMs > 0 && first
     ? smoothstep(Math.min(1, Math.max(0, (timing.outputMs - (lastFrameMs - returnMs)) / returnMs))) : 0;
   const sampleAt = (t: number, outputMs: number): CursorSample | null => {
-    const s = cursorAt(path, t) ?? (style.loop ? first : null);
+    // Older captures logged coordinates only after the first movement. Hold
+    // that first known position through the lead-in so styles are visible on
+    // the opening frame too. An entirely empty position stream still returns null.
+    const s = cursorAt(path, Math.max(path.t0, t));
     if (!s || !first || !style.loop || returnMs <= 0) return s;
     const w = smoothstep(Math.min(1, Math.max(0, (outputMs - (lastFrameMs - returnMs)) / returnMs)));
     return { x: s.x + (first.x - s.x) * w, y: s.y + (first.y - s.y) * w, shape: w >= 0.5 ? first.shape : s.shape };

@@ -20,6 +20,16 @@ const timing: CursorTiming = { durationMs: 2000, cuts: [], outputMs: 0, fps: 60 
 const frame = (ms: number, overrides: Partial<CursorStyle> = {}, time = timing) => cursorFrameAt(path, clicks, outputToSource(ms, time.durationMs, time.cuts), { ...style, ...overrides }, { ...time, outputMs: ms });
 
 describe("cursor presentation", () => {
+  it("holds a late first position through the opening frames, without inventing an empty path", () => {
+    const latePath = buildCursorPath([{ k: "move", t: 1800, x: 820, y: 127 }], { halfLifeMs: 60, sampleHz: 120 });
+    for (const appearance of ["classic", "rounded", "filled", "dot", "outline"] as const) {
+      const opening = cursorFrameAt(latePath, [], 0, { ...style, appearance }, timing);
+      expect(opening?.sample).toEqual({ x: 820, y: 127, shape: "arrow" });
+      expect(opening?.effects).toEqual({ scale: 1, angleRad: 0, blurX: 0, blurY: 0 });
+    }
+    const empty = buildCursorPath([{ k: "key", t: 0, c: "65", d: "down" }], { halfLifeMs: 60, sampleHz: 120 });
+    expect(cursorFrameAt(empty, [], 0, style, timing)).toBeNull();
+  });
   it("preserves legacy cursor positions and disables new effects by default", () => {
     expect(frame(600)?.sample).toEqual(cursorAt(path, 600));
     expect(frame(600)?.effects).toEqual({ scale: 1, angleRad: 0, blurX: 0, blurY: 0 });

@@ -166,9 +166,9 @@ app.on("browser-window-created", (_, win) => {
       const renderedStyles = new Set();
       for (const name of ["Classic", "Rounded", "Filled", "Dot", "Outline"]) {
         await click(button(`${name} cursor`));
-        renderedStyles.add(await js("window.__zc.renderAt(1000)"));
+        renderedStyles.add(await js("document.querySelector('.preview-canvas').toDataURL()"));
       }
-      assert(renderedStyles.size===5, "every cursor style visibly changes rendered pixels");
+      assert(renderedStyles.size===5, "every cursor style updates the paused preview without a forced render");
       for (const [label,value] of [["Cursor Size","2.5"],["Cursor Motion Blur","0.4"],["Cursor Click Bounce","3.5"],["Bounce Speed","350"],["Cursor Sway","0.2"]]) {
         await click(`document.querySelector('input[aria-label="${label}"]')`);
         await key("a", ["control"]); await wc.insertText(value); await pause();

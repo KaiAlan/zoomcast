@@ -24,6 +24,7 @@ type Props = {
   config: ZoomConfig;
   onChange: (next: ZoomConfig) => void;
   cursor: CursorStyle;
+  hasCursorPosition: boolean;
   onCursorChange: (next: CursorStyle) => void;
   style: StyleConfig;
   output: OutputConfig;
@@ -87,6 +88,7 @@ export function Inspector({
   config,
   onChange,
   cursor,
+  hasCursorPosition,
   onCursorChange,
   style,
   output,
@@ -111,7 +113,7 @@ export function Inspector({
         <SliderField label="Margin" max={160} unit="px" value={webcam.marginPx} onChange={(marginPx) => onWebcamChange({ ...webcam, marginPx })} />
       </>}
       </InspectorSection>
-      <CursorPanel cursor={cursor} onChange={onCursorChange} />
+      <CursorPanel cursor={cursor} hasPosition={hasCursorPosition} onChange={onCursorChange} />
       <InspectorSection title="Audio" hint="Mix & sync">
         <SliderField label="Microphone" unit="dB" min={-60} max={24} value={audio.micGainDb} onChange={micGainDb => onAudioChange({ ...audio, micGainDb })} />
         <SliderField label="System audio" unit="dB" min={-60} max={24} value={audio.systemGainDb} onChange={systemGainDb => onAudioChange({ ...audio, systemGainDb })} />

@@ -28,6 +28,8 @@ export class PreviewPlayer {
   private raf = 0;
   private busy = false;
   private playing = false;
+  private disposed = false;
+  private pendingSeek: number | null = null;
   private wallAtStart = 0;
   private outputAtStart = 0;
 
@@ -94,11 +96,15 @@ export class PreviewPlayer {
   }
 
   seek(tOutputMs: number): void {
+    if (this.disposed) return;
     const clamped = Math.max(0, Math.min(tOutputMs, this.durationMs()));
     this.playheadMs = clamped;
     this.outputAtStart = clamped;
     this.wallAtStart = performance.now();
     this.onTick(clamped, this.playing);
+    // Edits and scrubs must survive an in-flight decode. Playback ticks can
+    // be dropped, but dropping a paused redraw leaves the last edit invisible.
+    if (this.busy) { this.pendingSeek = clamped; return; }
     void this.draw(clamped);
   }
 
@@ -111,6 +117,9 @@ export class PreviewPlayer {
       if (this.playing) this.prefetch(tOutputMs);
     } finally {
       this.busy = false;
+      const pending = this.pendingSeek;
+      this.pendingSeek = null;
+      if (pending !== null && !this.disposed) void this.draw(pending);
     }
   }
 
@@ -159,6 +168,8 @@ export class PreviewPlayer {
   };
 
   dispose(): void {
+    this.disposed = true;
+    this.pendingSeek = null;
     this.playing = false;
     this.clock?.stop();
     if (this.clock === undefined) cancelAnimationFrame(this.raf);

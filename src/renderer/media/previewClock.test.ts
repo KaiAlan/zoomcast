@@ -16,6 +16,32 @@ function fakeClock(): PreviewClock & { emit(tMs: number): void } {
 }
 
 describe("PreviewPlayer with a media clock", () => {
+  it("repaints the newest paused edit after an in-flight frame completes", async () => {
+    let finish!: () => void;
+    let style = "filled";
+    const drawn: Array<{ ms: number; style: string }> = [];
+    const player = new PreviewPlayer(async ms => {
+      const snapshot = style;
+      if (drawn.length === 0) await new Promise<void>(resolve => { finish = resolve; });
+      drawn.push({ ms, style: snapshot });
+    }, () => 10000, () => {}, () => {}, fakeClock());
+    player.seek(0);
+    style = "dot"; player.seek(100);
+    style = "outline"; player.seek(200);
+    finish();
+    await Promise.resolve(); await Promise.resolve();
+    expect(drawn).toEqual([{ ms: 0, style: "filled" }, { ms: 200, style: "outline" }]);
+    expect(player.playheadMs).toBe(200);
+    player.dispose();
+  });
+  it("cancels queued redraws when the editor closes", async () => {
+    let finish!: () => void;
+    const render = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const player = new PreviewPlayer(render, () => 10000, () => {}, () => {}, fakeClock());
+    player.seek(0); player.seek(500); player.dispose(); finish();
+    await Promise.resolve(); await Promise.resolve();
+    expect(render).toHaveBeenCalledTimes(1);
+  });
   it("takes the playhead from the frame's presentation time, not the wall clock", async () => {
     const clock = fakeClock();
     const ticks: number[] = [];

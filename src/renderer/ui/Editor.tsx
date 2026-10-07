@@ -843,6 +843,7 @@ export function Editor({
           config={project.zoom.config}
           onChange={onConfigChange}
           cursor={project.style.cursor}
+          hasCursorPosition={cursorPath.xs.length > 0}
           onCursorChange={(cursor) =>
             edit.apply((p) => ({ ...p, style: { ...p.style, cursor } }))
           }

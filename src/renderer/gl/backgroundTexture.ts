@@ -8,6 +8,9 @@
  * failure. Export must not take that trade — see `preload`.
  */
 export class BackgroundTextureCache {
+  // A 4K texture plus mipmaps costs about 44MB. Keep gallery browsing bounded.
+  private static readonly MAX_TEXTURES = 3;
+  private disposed = false;
   private readonly textures = new Map<string, WebGLTexture>();
   private readonly pending = new Map<string, Promise<void>>();
   private readonly failed = new Set<string>();
@@ -15,7 +18,11 @@ export class BackgroundTextureCache {
   /** Null until the image has decoded. Never throws, never blocks. */
   get(gl: WebGL2RenderingContext, url: string): WebGLTexture | null {
     const held = this.textures.get(url);
-    if (held !== undefined) return held;
+    if (held !== undefined) {
+      this.textures.delete(url); this.textures.set(url, held);
+      return held;
+    }
+    if (this.disposed) return null;
 
     // A failure has to be remembered, because nothing else here stops a retry:
     // `load` records success in `textures` and clears `pending` in a finally,
@@ -49,7 +56,8 @@ export class BackgroundTextureCache {
    * to, because it redraws.
    */
   async preload(gl: WebGL2RenderingContext, url: string): Promise<void> {
-    if (this.textures.has(url)) return;
+    if (this.disposed) return;
+    if (this.textures.has(url)) { this.get(gl, url); return; }
 
     const inflight = this.pending.get(url) ?? this.load(gl, url);
     this.pending.set(url, inflight);
@@ -64,6 +72,7 @@ export class BackgroundTextureCache {
         img.onerror = () => reject(new Error(`could not load ${url}`));
         img.src = url;
       });
+      if (this.disposed) return;
 
       const tex = gl.createTexture();
       // Not a bare return: that skipped the catch below, so the failure was
@@ -83,6 +92,14 @@ export class BackgroundTextureCache {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
+      if (this.textures.size >= BackgroundTextureCache.MAX_TEXTURES) {
+        const oldest = this.textures.keys().next().value;
+        if (oldest !== undefined) {
+          const evicted = this.textures.get(oldest);
+          if (evicted) gl.deleteTexture(evicted);
+          this.textures.delete(oldest); this.sizes.delete(oldest);
+        }
+      }
       this.textures.set(url, tex);
       this.sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight });
       // preload() deliberately retries a URL that failed before, so a success
@@ -111,6 +128,7 @@ export class BackgroundTextureCache {
 
   /** Releases every texture. Call once, from the owning Renderer's dispose. */
   dispose(gl: WebGL2RenderingContext): void {
+    this.disposed = true;
     for (const tex of this.textures.values()) gl.deleteTexture(tex);
     this.textures.clear();
     this.pending.clear();
