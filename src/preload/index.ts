@@ -31,6 +31,7 @@ ipcRenderer.on("updates:prepare", (_event, token: string) => {
 });
 
 const api: ZoomcastApi = {
+  openFeedback: request => ipcRenderer.invoke("feedback:open", request),
   updates: {
     state: () => ipcRenderer.invoke("updates:state"),
     check: () => ipcRenderer.invoke("updates:check"),

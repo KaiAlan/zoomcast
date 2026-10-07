@@ -16,6 +16,8 @@ export type OpenedBundle = {
   manifest: Manifest;
   telemetry: TelemetryEvent[];
   project: Project;
+  /** Saved segments (including an empty list) are user-owned on reopening. */
+  hasSavedPlan: boolean;
   media: BundleMedia;
 };
 
@@ -56,6 +58,7 @@ export type ExportStartOptions = Omit<ExportArgsOptions, "outFile"> & {
  * touches the filesystem, and `src/shared/` stays pure.
  */
 export type ZoomcastApi = {
+  openFeedback: (request: import("./feedback").FeedbackRequest) => Promise<{ copied: boolean }>;
   updates: import("./updates").UpdateApi;
   exports: {
     start: (request: ExportRequest) => Promise<string>;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CAPTURE_FPS_CHOICES, type Settings } from "../../shared/settings/types";
 import { fieldLabel, row, selectInput } from "./controls";
 import { UpdateNotice } from "./UpdateNotice";
+import { FeedbackButton } from "./FeedbackButton";
 
 /**
  * The app's first settings surface.
@@ -121,6 +122,8 @@ export function SettingsWindow() {
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>App updates</h2>
       <UpdateNotice settings />
       <p>Updates come from public GitHub releases. No account or access token is needed.</p>
+      <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>Feedback</h2>
+      <FeedbackButton />
     </div>
   );
 }

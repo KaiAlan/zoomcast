@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { OpenedBundle } from "../shared/api";
 import { parseManifest } from "../shared/bundle/manifest";
@@ -42,16 +43,15 @@ export function openBundle(dir: string): OpenedBundle {
   // changed. It changes now, and normalizeProject(null) is exactly
   // defaultProject, so the missing-file case needs no separate branch.
   const projectPath = join(root, PROJECT_FILE);
-  const project: Project = normalizeProject(
-    existsSync(projectPath) ? JSON.parse(readFileSync(projectPath, "utf8")) : null,
-    manifest.id,
-  );
+  const saved = existsSync(projectPath) ? JSON.parse(readFileSync(projectPath, "utf8")) : null;
+  const project: Project = normalizeProject(saved, manifest.id);
 
   return {
     dir: root,
     manifest,
     telemetry,
     project,
+    hasSavedPlan: Array.isArray(saved?.zoom?.segments),
     media: {
       screen: mediaUrl(root, manifest.video.file),
       webcam:
@@ -63,9 +63,16 @@ export function openBundle(dir: string): OpenedBundle {
 }
 
 export function saveProject(dir: string, project: Project): void {
-  writeFileSync(
-    join(resolve(dir), PROJECT_FILE),
-    `${JSON.stringify(project, null, 2)}\n`,
-    "utf8",
-  );
+  const root = resolve(dir);
+  const manifest = parseManifest(JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")));
+  if (project.bundleId !== manifest.id) throw new Error("This project belongs to a different recording. Reopen the recording and try again.");
+  const contents = `${JSON.stringify(project, null, 2)}\n`;
+  const temporary = join(root, `.project-${randomUUID()}.tmp`);
+  try {
+    writeFileSync(temporary, contents, { encoding: "utf8", flag: "wx" });
+    // A failed write never truncates the last saved project.
+    renameSync(temporary, join(root, PROJECT_FILE));
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }

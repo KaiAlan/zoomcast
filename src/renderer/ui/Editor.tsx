@@ -135,6 +135,26 @@ export function Editor({
   const readoutAtRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("loading…");
+  const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
+  const saveProject = async (): Promise<void> => {
+    if (saveInFlight.current || sourceRef.current === null) return;
+    saveInFlight.current = true;
+    setSaving(true);
+    setStatus("Saving project…");
+    const snapshot = live.current.project;
+    try {
+      await window.zoomcast.saveProject(bundle.dir, snapshot);
+      setStatus(live.current.project === snapshot ? "Project saved" : "Project saved. New edits are not saved yet.");
+    } catch (error) {
+      setStatus(`Could not save project: ${error instanceof Error ? error.message : String(error)}. Try saving again.`);
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
+    }
+  };
+  const saveProjectRef = useRef(saveProject);
+  saveProjectRef.current = saveProject;
   const [exporting, setExporting] = useState<string | null>(null);
   const runExportRef = useRef<(target?: string) => Promise<void>>(async () => undefined);
 
@@ -360,10 +380,10 @@ export function Editor({
           }
         }
 
-        // The plan the bundle opens with. `reset` and not `apply`: this is not
-        // an edit the user made, and pushing it would leave the editor with an
-        // undo step back to a project that has no segments in it.
-        resetProject((p) => p, { replan: true });
+        // Saved segments are the document, including deliberately deleted
+        // shots. Rebuild keyframes only; generate a plan for a new/legacy take.
+        // Loading is not an undo step.
+        resetProject((p) => p, { replan: !bundle.hasSavedPlan });
 
         // The capture rate, not the output rate, and labelled as such: it is
         // routinely well under what was requested (gdigrab reaches about 28fps
@@ -536,11 +556,19 @@ export function Editor({
   // otherwise fight this handler.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      // A feedback dialog owns its keyboard, including Space and Escape.
+      if (event.target instanceof Element && event.target.closest("dialog[open]")) return;
       // Shared with the Space branch below -- Delete/Backspace is
       // destructive and Ctrl/Cmd+Z overrides whatever native undo a text
       // field has, so both must yield to typing exactly as Space already
       // does. One shared check keeps the two definitions from drifting apart.
       const typing = isTypingTarget(event.target);
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveProjectRef.current();
+        return;
+      }
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         if (typing) return;
@@ -794,7 +822,7 @@ export function Editor({
         </div>
         <div className="project-heading"><span className="project-name" title={manifest.id}>{manifest.id}</span><span className="project-extension">zoomcast project</span></div>
         <div className="header-actions">
-          <button type="button" className="quiet-action" onClick={() => { void window.zoomcast.saveProject(bundle.dir, project).then(() => setStatus("Project saved")).catch((err: unknown) => setStatus(String(err))); }}><Icon name="save" size={16} />Save project</button>
+          <button type="button" className="quiet-action" aria-label="Save project" title="Save project (Ctrl+S)" disabled={saving || sourceRef.current === null} onClick={() => { void saveProject(); }}><Icon name="save" size={16} />{saving ? "Saving…" : "Save project"}</button>
           <button type="button" className="primary-action" disabled={exporting !== null} onClick={() => { void runExport(); }}><Icon name="output" size={16} />{exporting === null ? "Export video" : `Exporting ${exporting}`}</button>
         </div>
       </header>

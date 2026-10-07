@@ -22,9 +22,13 @@ npm test
 npm run dist
 npm run verify:release
 npm run verify:packaged
+npm run verify:project-save
+npm run verify:feedback
 ```
 
 Run installed upgrade and capture/export validation on Windows before shipping changes to those paths. The installer is currently unsigned.
+
+The project-save guard checks deleted and empty zoom timelines, audio edits, Ctrl+S, disk failures, retry, and switching recordings through the native editor and real save IPC. The feedback guard checks the form and native IPC, report encoding, long-report fallback, keyboard behavior, and browser failure/retry. It captures browser launches and clipboard writes without submitting reports or changing the user's clipboard.
 
 ## Ship
 

@@ -1,4 +1,5 @@
 import { registerExportJobs } from "./exportJobs";
+import { openFeedback } from "./feedback";
 import { IMAGE_PRESETS } from "../shared/style/imagePresets";
 import { BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
@@ -36,6 +37,7 @@ function cancelExport(id: string): void {
 }
 
 export function registerIpc(): void {
+  ipcMain.handle("feedback:open", (_event, request: import("../shared/feedback").FeedbackRequest) => openFeedback(request));
   registerExportJobs();
   ipcMain.handle("library:get", () => getLibrary());
   ipcMain.handle("library:createFolder", (_event, name: string, parentId: string | null) => createLibraryFolder(name, parentId));

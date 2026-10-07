@@ -12,6 +12,7 @@ import { Editor } from "./ui/Editor";
 import { SettingsWindow } from "./ui/SettingsWindow";
 import { Welcome } from "./ui/Welcome";
 import { UpdateNotice } from "./ui/UpdateNotice";
+import { FeedbackButton } from "./ui/FeedbackButton";
 
 /** The headless screenshot harness, used by tools/verify-decode.ts. */
 function ShootHarness() {
@@ -90,10 +91,11 @@ export function App() {
       <button type="button" aria-pressed={activeTab === "exports"} onClick={() => setActiveTab("exports")}>Exports{active.length > 0 ? ` (${active.length})` : ""}</button>
       {activeTab === "exports" && jobs.length > 1 && <select aria-label="Export job" value={current?.id} onChange={event => setSelectedJob(event.target.value)}>{jobs.map(job => <option key={job.id} value={job.id}>{job.file.split(/[\\/]/).at(-1)} · {job.phase}</option>)}</select>}
       <UpdateNotice />
+      <FeedbackButton />
     </nav>
     <div className="workspace-main">
       <div className="workspace-editor-pane" style={activeTab === "exports" ? {display:"none"} : undefined}>
-        {bundle ? <Editor bundle={bundle} onBack={() => setBundle(null)} /> : <Welcome error={error} onOpen={dir => void open(dir)} />}
+        {bundle ? <Editor key={bundle.dir} bundle={bundle} onBack={() => setBundle(null)} /> : <Welcome error={error} onOpen={dir => void open(dir)} />}
         <ExportActivity />
       </div>
       {activeTab === "exports" && (current ? <ExportPage job={current} onCancel={() => { void window.zoomcast.exports.cancel(current.id); }} onBackground={() => setActiveTab("editor")} onBack={() => setActiveTab("editor")} /> : <div className="export-page"><h1>No exports yet</h1><p>Export a recording to see its progress here.</p><button type="button" className="primary-action" onClick={() => setActiveTab("editor")}>Back to recordings</button></div>)}

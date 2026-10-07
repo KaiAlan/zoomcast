@@ -1,0 +1,9 @@
+.feedback-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: 0 20px 80px #0004; }
+.feedback-dialog::backdrop { background: #0006; }
+.feedback-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.feedback-heading h2 { font-size: 18px; font-weight: 400; margin: 0; }
+.feedback-dialog fieldset { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
+.feedback-dialog label { display: flex; flex-direction: column; gap: 7px; margin: 14px 0; font-size: 13px; }
+.feedback-dialog input, .feedback-dialog select, .feedback-dialog textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--control); color: var(--text); font: inherit; }
+.feedback-dialog textarea { resize: vertical; min-height: 90px; }
+.feedback-dialog .feedback-status { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }

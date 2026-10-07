@@ -23,6 +23,10 @@ Press **Ctrl+Alt+Z** to start or stop recording. The editor opens after recordin
 
 Zoomcast runs in the system tray. Closing the editor keeps the recording hotkey available. Quit from the tray menu. Recordings are stored locally in `%LOCALAPPDATA%\zoomcast\recordings`.
 
+Choose **Save project** or press **Ctrl+S** to keep your edits with the recording. Reopening preserves your timeline, including deleted zoom shots.
+
+Choose **Send feedback** in the workspace or Settings to prepare a bug report, feature request, or general feedback. Review and submit it on GitHub; reports are public and require GitHub sign-in. Long reports are copied for you to paste into the description.
+
 ## Updates
 
 Installed version 0.1.2 and later check for newer releases on startup and shows **Update**, followed by **Restart to update**. Public-update builds need no GitHub account or access token. Older builds that ask for update access need one manual upgrade from [GitHub Releases](https://github.com/KaiAlan/zoomcast/releases).

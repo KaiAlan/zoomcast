@@ -132,7 +132,7 @@ app.on("browser-window-created", (_, win) => {
       assert(await js("document.querySelector('input[aria-label=\"Microphone\"]').value==='6'"), "redo restores audio gain");
       await click(button("Save project"));
       assert(JSON.parse(fs.readFileSync(path.join(dir, "project.json"), "utf8")).audio.micGainDb === 6, "save persists audio controls");
-      assert(await js("document.querySelector('[role=status]').textContent==='Project saved'"), "save reports success");
+      assert(await js("document.querySelector('.editor-status').textContent==='Project saved'"), "save reports success");
       await click(button("Webcam"));
       const before = await js("window.__zc.renderAt(1000)");
       await click("Array.from(document.querySelectorAll('label')).find(e=>e.querySelector('span')?.textContent==='mirror').querySelector('input')");
@@ -162,9 +162,9 @@ app.on("browser-window-created", (_, win) => {
       assert(await js("document.querySelectorAll('.zoom-control-group .slider-range').length===19"), "advanced zoom uses grouped sliders");
       await js("window.zoomcast.getSettings().then(settings=>window.zoomcast.setSettings({...settings,theme:'dark'}))"); await pause(200);
       // Wait for the button's CSS background transition, rather than sampling mid-animation.
-      await js("Promise.all(document.querySelector('.primary-action').getAnimations().map(animation=>animation.finished.catch(()=>undefined)))");
+      await js("Promise.all(document.querySelector('.editor-header .primary-action').getAnimations().map(animation=>animation.finished.catch(()=>undefined)))");
       assert(await js("getComputedStyle(document.querySelector('.timeline-playhead')).backgroundColor==='rgb(255, 122, 26)'"), "dark editor timeline follows ember accent");
-      assert(await js("getComputedStyle(document.querySelector('.primary-action')).backgroundColor==='rgb(255, 122, 26)'"), "dark primary action follows ember accent");
+      assert(await js("getComputedStyle(document.querySelector('.editor-header .primary-action')).backgroundColor==='rgb(255, 122, 26)'"), "dark primary action follows ember accent");
       assert(await js("getComputedStyle(document.querySelector('.editor-shell')).backgroundColor==='rgb(19, 19, 19)'"), "dark page uses deeper near-black background");
       assert(await js("getComputedStyle(document.querySelector('.slider-fill')).boxShadow!=='none'"), "dark sliders have subtle accent glow");
       await screenshot("ui-editor-dark.png");
