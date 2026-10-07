@@ -194,7 +194,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     "thumbnail": "mist-thumb.jpg"
   }
 ] as const;
-export const presetImageUrl = (preset: ImagePreset): string => `zc://app/backgrounds/${preset.thumbnail}`;
+export const presetImageUrl = (preset: ImagePreset): string => `/backgrounds/${preset.thumbnail}`;
 export const presetProjectFile = (preset: ImagePreset): string => `background-preset-${preset.file}`;
 export const COLOR_PRESETS = [
   { name: "Cloud", color: "#f5f6f8" }, { name: "Sand", color: "#eee5d9" },

@@ -31,7 +31,7 @@ const checks = [];
 const screenshotFailures = [];
 const pause = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms));
 const result = (ok, error) => fs.writeFileSync(path.join(root, "tmp", "ui-validation.json"), JSON.stringify({ ok, error, checks, screenshotFailures }, null, 2));
-const timer = setTimeout(() => { result(false, "UI validation timed out"); app.exit(1); }, 90000);
+const timer = setTimeout(() => { result(false, "UI validation timed out"); app.exit(1); }, 150000);
 let attached = false;
 app.on("browser-window-created", (_, win) => {
   if (attached) return;
@@ -144,6 +144,7 @@ app.on("browser-window-created", (_, win) => {
       assert(JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.background.color==="#eee5d9", "color preset persists to project");
       await click(button("Image"));
       assert(await js("document.querySelectorAll('.image-preset').length===24"), "appearance offers 24 built-in image backgrounds");
+      await js("Promise.all([...document.querySelectorAll('.image-preset img')].map(img=>img.decode().catch(error=>{throw Error(img.src+': '+error.message)})))");
       assert(await js("[...document.querySelectorAll('.image-preset img')].every(img=>img.complete && img.naturalWidth>0)"), "image preset thumbnails decode");
       await js("window.__zc.renderAt(0)");
       await click(button("Ribbons image background")); await pause(300); await click(button("Save project"));

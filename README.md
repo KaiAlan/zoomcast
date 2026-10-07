@@ -14,7 +14,8 @@ Requires Windows 10 or 11, x64. The current beta installer is unsigned. Download
 - Screen, microphone, system audio, and optional webcam recording.
 - Automatic zooms from cursor and keyboard activity.
 - Editable zoom segments, cuts, undo, and redo.
-- Backgrounds, rounded corners, shadows, and cursor effects.
+- 24 bundled 4K backgrounds, 24 gradients, rounded corners, and shadows.
+- Five cursor styles with size, motion blur, click bounce, sway, and looping controls.
 - MP4 export with hardware encoding when supported.
 
 ## Use
@@ -24,6 +25,8 @@ Press **Ctrl+Alt+Z** to start or stop recording. The editor opens after recordin
 Zoomcast runs in the system tray. Closing the editor keeps the recording hotkey available. Quit from the tray menu. Recordings are stored locally in `%LOCALAPPDATA%\zoomcast\recordings`.
 
 Choose **Save project** or press **Ctrl+S** to keep your edits with the recording. Reopening preserves your timeline, including deleted zoom shots.
+
+Choose **Cursor** in the editor toolbar to customize the cursor. **Loop Cursor** returns it to its first kept position near the end of the edited clip. **Reset cursor** restores the defaults and supports undo. Choose **Appearance → Image** or **Gradient** for the background galleries; image presets are copied into the recording folder so projects remain portable.
 
 Choose **Send feedback** in the workspace or Settings to prepare a bug report, feature request, or general feedback. Review and submit it on GitHub; reports are public and require GitHub sign-in. Long reports are copied for you to paste into the description.
 

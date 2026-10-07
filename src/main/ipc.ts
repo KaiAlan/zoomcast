@@ -1,10 +1,11 @@
 import { registerExportJobs } from "./exportJobs";
 import { openFeedback } from "./feedback";
 import { IMAGE_PRESETS, presetProjectFile } from "../shared/style/imagePresets";
-import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, type WebContents } from "electron";
+import { BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { copyFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExportStartOptions } from "../shared/api";
 import { formatExportFailure, formatExportStart } from "../shared/export/diagnostics";
 import type { Project } from "../shared/project/types";
@@ -68,7 +69,8 @@ export function registerIpc(): void {
     const preset = IMAGE_PRESETS.find(image => image.id === id);
     if (!preset) throw new Error("Unknown background preset");
     const file = presetProjectFile(preset);
-    copyFileSync(join(app.getAppPath(), "out", "renderer", "backgrounds", preset.file), join(dir, file));
+    const assets = process.env.ELECTRON_RENDERER_URL ? "../../src/renderer/public/backgrounds" : "../renderer/backgrounds";
+    copyFileSync(join(dirname(fileURLToPath(import.meta.url)), assets, preset.file), join(dir, file));
     return file;
   });
   ipcMain.handle("background:choose", async (_event, dir: string) => {
