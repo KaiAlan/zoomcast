@@ -10,6 +10,7 @@
 !macro customInstall
   CreateDirectory "$SMPROGRAMS"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME} Recorder.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "--record" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0 SW_SHOWNORMAL "CONTROL|ALT|${ZOOMCAST_RECORD_KEY}" "Open the Zoomcast recorder"
+  WinShell::SetLnkAUMI "$SMPROGRAMS\${PRODUCT_NAME} Recorder.lnk" "${APP_ID}"
   ; Record the actual installation scope (current user or all users).
   FileOpen $0 "$INSTDIR\record-shortcut.path" w
   FileWriteUTF16LE $0 "$SMPROGRAMS\${PRODUCT_NAME} Recorder.lnk$\r$\nCtrl+Alt+${ZOOMCAST_RECORD_KEY}"

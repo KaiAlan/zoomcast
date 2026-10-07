@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { app, globalShortcut, shell } from "electron";
 import { readFileSync } from "node:fs";
 
-vi.mock("electron", () => ({ app: { isPackaged: false }, globalShortcut: { register: vi.fn() }, shell: { readShortcutLink: vi.fn() } }));
+vi.mock("electron", () => ({ app: { isPackaged: false, on: vi.fn() }, globalShortcut: { register: vi.fn() }, shell: { readShortcutLink: vi.fn() } }));
 vi.mock("node:fs", () => ({ readFileSync: vi.fn() }));
 vi.mock("./log", () => ({ logDiag: vi.fn() }));
 import { recordShortcutInfo, registerRecordShortcut, RECORD_HOTKEY } from "./recordShortcut";
@@ -64,5 +64,16 @@ describe("record shortcut ownership", () => {
     // The install helper queued the marker first; the next read is the link itself.
     registerRecordShortcut(vi.fn());
     expect(recordShortcutInfo()).toEqual({ hotkey: "Ctrl+Alt+Z", mode: "launcher" });
+  });
+  it("routes Windows hotkey activation to the recorder, leaving ordinary window commands alone", async () => {
+    install(); const open = vi.fn(); registerRecordShortcut(open);
+    const listener = vi.mocked(app.on).mock.calls[0]?.[1] as (...args: unknown[]) => void;
+    const hookWindowMessage = vi.fn(); listener({}, { hookWindowMessage });
+    expect(hookWindowMessage.mock.calls[0]?.[0]).toBe(0x0112);
+    const callback = hookWindowMessage.mock.calls[0]?.[1] as (param: Buffer) => void;
+    const param = Buffer.alloc(8); param.writeUInt32LE(0xf020); callback(param);
+    await new Promise(resolve => setImmediate(resolve)); expect(open).not.toHaveBeenCalled();
+    param.writeUInt32LE(0xf15f); callback(param);
+    await new Promise(resolve => setImmediate(resolve)); expect(open).toHaveBeenCalledOnce();
   });
 });

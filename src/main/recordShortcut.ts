@@ -28,6 +28,16 @@ export function registerRecordShortcut(openRecorder: () => void): void {
   if (launcher !== null) {
     hotkey = launcher;
     mode = "launcher";
+    // Windows can activate an existing window instead of launching a second
+    // process. Route that activation to the recorder even if its window is hidden.
+    // https://learn.microsoft.com/en-us/cpp/mfc/global-hot-keys
+    app.on("browser-window-created", (_event, win) => {
+      win.hookWindowMessage(0x0112, wParam => {
+        if (wParam.length >= 4 && (wParam.readUInt32LE(0) & 0xfff0) === 0xf150) {
+          setImmediate(openRecorder);
+        }
+      });
+    });
     logDiag("hotkey", `Windows launcher ${hotkey}`);
     return;
   }

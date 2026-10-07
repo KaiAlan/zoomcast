@@ -56,6 +56,8 @@ const {app,BrowserWindow,globalShortcut}=require('electron');
 const fs=require('node:fs');const path=require('node:path');
 const profile=${JSON.stringify(profile)};
 app.setPath('userData',profile);
+const setAppId=app.setAppUserModelId.bind(app);
+app.setAppUserModelId=()=>setAppId('dev.zoomcast.shortcut-smoke');
 process.env.LOCALAPPDATA=path.join(profile,'local');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const ready=async()=>{for(let i=0;i<300;i++){const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('#recorder'));if(w&&await w.webContents.executeJavaScript('Boolean(window.zoomcast)'))return w;await pause(100)}throw Error('No recorder')};
@@ -74,7 +76,7 @@ app.whenReady().then(()=>{
    if(cmd.action==='invalid')extra.rejected=await js('window.zoomcast.setStartWithWindows("yes").then(()=>false,()=>true)');
    if(cmd.action==='settings'){
     await js('window.zoomcast.openSettings()');
-    for(let i=0;i<100;i++){const s=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('#settings'));if(s&&await s.webContents.executeJavaScript('document.body.innerText.includes("Recording shortcut")&&document.body.innerText.includes("Ctrl+Alt+F12")')){extra.settingsText=await s.webContents.executeJavaScript('document.body.innerText');extra.startupDisabled=await s.webContents.executeJavaScript('document.querySelector("[aria-label=\\"Recording shortcut\\"] input").disabled');fs.writeFileSync(path.join(profile,'settings.png'),(await s.webContents.capturePage()).toPNG());break}await pause(100)}
+    for(let i=0;i<100;i++){const s=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('#settings'));if(s&&await s.webContents.executeJavaScript('document.body.innerText.includes("Recording shortcut")&&document.body.innerText.includes("Ctrl+Alt+F12")')){extra.settingsText=await s.webContents.executeJavaScript('document.body.innerText');extra.startupDisabled=await s.webContents.executeJavaScript('document.querySelector("section input").disabled');fs.writeFileSync(path.join(profile,'settings.png'),(await s.webContents.capturePage()).toPNG());break}await pause(100)}
    }
    const state=await js('window.zoomcast.shortcutState()');
    const result={seq:cmd.seq,pid:process.pid,state,settings:await js('window.zoomcast.getSettings()'),recorderVisible:w.isVisible(),recorderCount:BrowserWindow.getAllWindows().filter(w=>w.webContents.getURL().endsWith('#recorder')).length,competingRegistration:globalShortcut.isRegistered('Control+Alt+F12'),...extra};
@@ -120,8 +122,9 @@ import('./index.js');
   assert(cold.state.mode === "launcher" && cold.recorderVisible, "Actual Windows hotkey cold-launches the upgraded app and shows its recorder");
   assert(cold.settings.theme === "dark", "Upgrade preserves existing settings");
   assert(!cold.competingRegistration, "Electron does not steal the Windows launcher keys");
-  await command("hide"); await pause(300); press(); await pause(1500);
-  const warm = await command("state");
+  await command("hide"); await pause(300); press();
+  let warm;
+  await wait(async () => { warm = await command("state"); return warm.recorderVisible; }, "running recorder responds to Windows shortcut");
   assert(warm.pid === cold.pid && warm.recorderVisible && warm.recorderCount === 1, "Hotkey brings the running recorder forward without a second instance");
   const ui = await command("settings");
   assert(ui.settingsText?.includes("even after Quit") && !ui.startupDisabled, "Settings shows the real launcher keys and enabled startup control");
@@ -155,6 +158,8 @@ import('./index.js');
   process.exitCode = 1;
 }).finally(async () => {
   for (const pid of pids) { try { process.kill(pid); } catch {} }
+  // Explorer can finish launching after a failed assertion; only stop this test identity.
+  ps("Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'zoomcast-shortcut-smoke.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }");
   if (fs.existsSync(installDir)) {
     const uninstaller = fs.readdirSync(installDir).find(name => /^Uninstall.*\.exe$/i.test(name));
     if (uninstaller) { try { await run(path.join(installDir, uninstaller), ["/S"]); } catch {} }
