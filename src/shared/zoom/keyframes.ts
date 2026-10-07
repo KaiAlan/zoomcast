@@ -26,7 +26,8 @@ export function segmentsToKeyframes(
     // Do not start leaving early just to reach rest on the last video frame.
     // A shot still active at the end of the take finishes zoomed in.
     const hasExit = s.endMs < ctx.durationMs;
-    const exitStart = hasExit ? end - cfg.transitionOutMs : end;
+    const exitMs = s.pinned || s.origin === "manual" ? Math.min(cfg.transitionOutMs, (end - start) * 0.4) : cfg.transitionOutMs;
+    const exitStart = hasExit ? end - exitMs : end;
     if (exitStart <= start) continue;
 
     const moves: ZoomKeyframe[] = [];
@@ -39,7 +40,7 @@ export function segmentsToKeyframes(
     for (const [i, w] of (automaticFollow ? waypoints.slice(0, 1) : waypoints).entries()) {
       const previous = moves[moves.length - 1];
       const duration = i === 0 ? cfg.transitionMs : cfg.panMs;
-      const departure = i === 0 ? Math.max(start, w.tMs) : Math.max(start, w.tMs,
+      const departure = i === 0 ? Math.max(start, Math.min(w.tMs, exitStart - Math.min(100, duration))) : Math.max(start, w.tMs,
         (previous?.tSourceMs ?? start) + Math.max(0, cfg.minWaypointGapMs - duration));
       const arrival = i === 0 ? Math.max(departure + duration, start + cfg.zoomInOverlapMs) : departure + duration;
       // A manually shortened segment may shorten its entrance, but never start
@@ -108,7 +109,7 @@ export function segmentsToKeyframes(
     kfs.push({ id: `${s.waypoints[s.waypoints.length - 1]?.id ?? s.id}o`,
       tSourceMs: end, scale: 1, cx: last.cx, cy: last.cy,
       easing: cfg.easing === "cameraZoom" ? "cameraExit" : cfg.easing,
-      transitionMs: cfg.transitionOutMs,
+      transitionMs: exitMs,
       origin: s.origin, pinned: s.pinned });
   }
   return projectKeyframes(kfs.sort((a, b) => a.tSourceMs - b.tSourceMs), ctx);

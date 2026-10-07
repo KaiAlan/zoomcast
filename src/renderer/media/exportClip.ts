@@ -107,7 +107,10 @@ export async function exportClip(opts: {
     manifest.durationMs,
     project.cuts,
     project.output.fps,
+    project.clips,
   );
+
+  if (frames.length === 0) throw new Error("Add a clip before exporting.");
 
   const audio: AudioInput[] = manifest.audio.map((track) => ({
     file: `${opts.mediaDir}/${track.file}`,
@@ -124,6 +127,7 @@ export async function exportClip(opts: {
     encoder: opts.encoder,
     durationMs: manifest.durationMs,
     cuts: project.cuts,
+    clips: project.clips,
     audio,
     syncNudgeMs: project.audio.syncNudgeMs,
     outFile,
@@ -153,7 +157,7 @@ export async function exportClip(opts: {
       // goes through the helper anyway so a non-zero offset cannot be missed.
       const localMs = toStreamLocalMs(frame.tSourceMs, manifest.video.startOffsetMs);
 
-      const cursorFrame = cursorFrameAt(cursorPath, clicks, frame.tSourceMs, project.style.cursor, { durationMs: manifest.durationMs, cuts: project.cuts, outputMs: frame.tOutputMs, fps: project.output.fps });
+      const cursorFrame = cursorFrameAt(cursorPath, clicks, frame.tSourceMs, project.style.cursor, { durationMs: manifest.durationMs, cuts: project.cuts, clips: project.clips, outputMs: frame.tOutputMs, fps: project.output.fps });
 
       const decodeAt = performance.now();
       const videoFrame = await source.frameAt(localMs);

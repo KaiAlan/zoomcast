@@ -139,4 +139,40 @@ describe.skipIf(encoders.length === 0)("export end to end", () => {
     expect(probe(outFile, "stream=codec_name", "a:0")).toBe("aac");
   }, 120_000);
 
+  it.each(encoders)("exports reordered source clips with matching video and delayed audio (%s)", async encoder => {
+    mkdirSync(TMP, { recursive: true });
+    const audioFile = join(TMP, `ordered-source-${encoder}.wav`);
+    execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1:sample_rate=48000",
+      "-f", "lavfi", "-i", "sine=frequency=660:duration=2:sample_rate=48000", "-f", "lavfi", "-i", "sine=frequency=880:duration=2:sample_rate=48000",
+      "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[a]", "-map", "[a]", audioFile], { stdio: "ignore" });
+    const clips = [{ id: "later-first", startMs: 3000, endMs: 4000 }, { id: "intro-last", startMs: 0, endMs: 1000 }];
+    const opts: ExportArgsOptions = { width: 320, height: 180, fps: 30, bitrateMbps: 2, encoder, durationMs: 5000, cuts: [], clips,
+      audio: [{ file: audioFile, gainDb: 0, startOffsetMs: 200 }], syncNudgeMs: 0, outFile: join(TMP, `e2e-ordered-${encoder}.mp4`) };
+    const frames = planExportFrames(opts.durationMs, opts.cuts, opts.fps, clips);
+    await runExport(opts, frames, frame => {
+      const rgba = new Uint8Array(320 * 180 * 4);
+      for (let i = 0; i < rgba.length; i += 4) { rgba[i + (frame.tSourceMs >= 3000 ? 0 : 2)] = 255; rgba[i + 3] = 255; }
+      return Promise.resolve(rgba);
+    });
+    expect(Number(probe(opts.outFile, "stream=nb_read_frames", "v:0", true))).toBe(60);
+    expect(Number(probe(opts.outFile, "format=duration", "v:0"))).toBeLessThanOrEqual(2.05);
+    const pixelAt = (time: string) => execFileSync("ffmpeg", ["-v", "error", "-ss", time, "-i", opts.outFile,
+      "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { maxBuffer: 1024 * 1024 }).subarray(3 * (90 * 320 + 160), 3 * (90 * 320 + 160) + 3);
+    expect(pixelAt("0.5")[0]).toBeGreaterThan(230); expect(pixelAt("0.5")[2]).toBeLessThan(20);
+    expect(pixelAt("1.5")[2]).toBeGreaterThan(230); expect(pixelAt("1.5")[0]).toBeLessThan(20);
+    const raw = execFileSync("ffmpeg", ["-v", "error", "-i", opts.outFile, "-vn", "-ar", "48000", "-ac", "1", "-f", "f32le", "pipe:1"]);
+    const signal = (time: number, frequency: number) => {
+      let real = 0; let imaginary = 0; let energy = 0;
+      const start = Math.round(time * 48000); const count = 4800;
+      for (let n = 0; n < count; n++) {
+        const sample = raw.readFloatLE((start + n) * 4); const angle = 2 * Math.PI * frequency * n / 48000;
+        real += sample * Math.cos(angle); imaginary += sample * Math.sin(angle); energy += sample * sample;
+      }
+      return { amplitude: Math.hypot(real, imaginary) / count, rms: Math.sqrt(energy / count) };
+    };
+    expect(signal(0.5, 880).amplitude).toBeGreaterThan(signal(0.5, 440).amplitude * 20);
+    expect(signal(1.5, 440).amplitude).toBeGreaterThan(signal(1.5, 880).amplitude * 20);
+    expect(signal(1.03, 440).rms).toBeLessThan(0.003);
+  }, 120000);
+
 });

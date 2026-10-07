@@ -47,6 +47,11 @@ describe("deriveKeyframes", () => {
 });
 
 describe("replanFrom", () => {
+  it("preserves standalone edits from legacy projects that have no segment model", () => {
+    const p = projectWith([]);
+    p.zoom.keyframes = [{ id: "legacy-shot", tSourceMs: 3000, scale: 1.8, cx: 0.5, cy: 0.5, easing: "cameraZoom", transitionMs: 1000, origin: "manual", pinned: true }];
+    expect(replanFrom(DEFAULT_ZOOM_CONFIG, p, ctx).keyframes[0]?.id).toBe("legacy-shot");
+  });
   it("drops an unpinned auto segment when telemetry is empty", () => {
     const auto: ZoomSegment = { ...segment, pinned: false, origin: "auto" };
     const out = replanFrom(DEFAULT_ZOOM_CONFIG, projectWith([auto]), ctx);

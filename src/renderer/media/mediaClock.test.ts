@@ -6,6 +6,7 @@ type Fake = ClockElement & {
   present(tSourceMs: number): void;
   /** How many times `currentTime` was assigned. */
   seeks: number;
+  end(): void;
 };
 
 /** A video element reduced to what the clock touches. */
@@ -13,6 +14,7 @@ function fakeElement(): Fake {
   const pending = new Map<number, (now: number, meta: { mediaTime: number }) => void>();
   let nextHandle = 1;
   let time = 0;
+  let ended: (() => void) | undefined;
   return {
     get currentTime() {
       return time;
@@ -22,6 +24,9 @@ function fakeElement(): Fake {
       this.seeks++;
     },
     seeks: 0,
+    addEventListener(_type, cb) { ended = cb; },
+    removeEventListener(_type, cb) { if (ended === cb) ended = undefined; },
+    end() { ended?.(); },
     play: vi.fn(),
     pause: vi.fn(),
     requestVideoFrameCallback(cb) {
@@ -249,5 +254,43 @@ describe("createMediaClock", () => {
     clockOver(el).stop();
 
     expect(el.pause).toHaveBeenCalled();
+  });
+});
+
+describe("ordered clip media clock", () => {
+  const clips = [{ id: "last-first", startMs: 3000, endMs: 5000 }, { id: "intro-last", startMs: 0, endMs: 1000 }];
+  it("continues from source EOF to a reordered earlier clip and reports the output end", () => {
+    const el = fakeElement();
+    const seen: number[] = [];
+    const clock = createMediaClock(() => el, () => ({ durationMs: 5000, cuts: [], clips }));
+    clock.onFrame(t => seen.push(t)); clock.start(0);
+    expect(el.currentTime).toBe(3);
+    el.present(3500); expect(seen).toEqual([500]);
+    el.end(); expect(el.currentTime).toBe(0);
+    el.present(100); expect(seen).toEqual([500, 2100]);
+    el.present(1000); expect(seen.at(-1)).toBe(3000);
+    clock.stop();
+  });
+  it("does not advance twice on the decoded frame just before a clip boundary", () => {
+    const el = fakeElement(); const seen: number[] = [];
+    const clock = createMediaClock(() => el, () => ({ durationMs: 5000, cuts: [], clips: [...clips].reverse() }));
+    clock.onFrame(t => seen.push(t)); clock.start(0);
+    el.present(1000); expect(el.currentTime).toBe(3);
+    el.present(2983.3); expect(seen.at(-1)).toBe(1000);
+    el.present(3016.7); expect(seen.at(-1)).toBeCloseTo(1016.7);
+    expect(el.seeks).toBe(2); clock.stop();
+  });
+  it("handles native ended even without a final frame callback, and detaches on stop", () => {
+    const el = fakeElement(); const seen: number[] = [];
+    const clock = clockOver(el, []); clock.onFrame(t => seen.push(t)); clock.start(0);
+    el.end(); expect(seen).toEqual([5000]);
+    clock.stop(); el.end(); expect(seen).toEqual([5000]);
+  });
+  it("seeks while playing to the correct ordered clip", () => {
+    const el = fakeElement(); const seen: number[] = [];
+    const clock = createMediaClock(() => el, () => ({ durationMs: 5000, cuts: [], clips }));
+    clock.onFrame(t => seen.push(t)); clock.start(2400);
+    expect(el.currentTime).toBe(0.4);
+    el.present(450); expect(seen).toEqual([2450]); clock.stop();
   });
 });

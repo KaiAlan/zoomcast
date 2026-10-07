@@ -1,6 +1,6 @@
-import { outputDurationMs } from "../project/timeline";
+import { clipsFor, outputDurationMs } from "../project/timeline";
 import { normalizeCuts } from "../project/cuts";
-import type { Cut } from "../project/types";
+import type { Cut, SourceClip } from "../project/types";
 
 export type AudioInput = {
   file: string;
@@ -16,6 +16,7 @@ export type ExportArgsOptions = {
   encoder: string;
   durationMs: number;
   cuts: Cut[];
+  clips?: SourceClip[];
   audio: AudioInput[];
   syncNudgeMs: number;
   outFile: string;
@@ -51,14 +52,19 @@ function audioChain(
   a: AudioInput,
   spans: Array<[number, number | null]>,
   label: string,
+  durationMs?: number,
 ): string[] {
-  const src = `${inputIndex}:a`;
+  let src = `${inputIndex}:a`;
 
-  if (spans.length === 1) {
+  if (spans.length === 1 && durationMs === undefined) {
     return [`[${src}]volume=${a.gainDb}dB[${label}]`];
   }
 
   const parts: string[] = [];
+  if (durationMs !== undefined) {
+    parts.push(`[${src}]aresample=async=1:first_pts=0,apad=whole_dur=${durationMs / 1000}[${label}source]`);
+    src = `${label}source`;
+  }
   const splitLabels = spans.map((_, i) => `${label}s${i}`);
   const trimLabels = spans.map((_, i) => `${label}t${i}`);
 
@@ -105,13 +111,15 @@ export function buildExportArgs(o: ExportArgsOptions): string[] {
   }
 
   if (o.audio.length > 0) {
-    const spans = keptSpans(o.durationMs, o.cuts);
+    const spans: Array<[number, number | null]> = o.clips
+      ? clipsFor(o.durationMs, o.cuts, o.clips).map(c => [c.startMs / 1000, c.endMs / 1000])
+      : keptSpans(o.durationMs, o.cuts);
     const graph: string[] = [];
     const labels: string[] = [];
 
     o.audio.forEach((a, i) => {
       const label = `a${i}`;
-      graph.push(...audioChain(i + 1, a, spans, label));
+      graph.push(...audioChain(i + 1, a, spans, label, o.clips ? o.durationMs : undefined));
       labels.push(`[${label}]`);
     });
 
@@ -155,7 +163,7 @@ export function buildExportArgs(o: ExportArgsOptions): string[] {
     // Audio capture can finish after the screen. Bound the muxed file to
     // the exact duration represented by the emitted video frames.
     "-t",
-    String(Math.floor(outputDurationMs(o.durationMs, o.cuts) * o.fps / 1000) / o.fps),
+    String(Math.floor(outputDurationMs(o.durationMs, o.cuts, o.clips) * o.fps / 1000) / o.fps),
     o.outFile,
   );
 

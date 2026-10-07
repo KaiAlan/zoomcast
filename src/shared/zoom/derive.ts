@@ -1,3 +1,5 @@
+import { alignSegmentsToClips, segmentPart } from "../project/clips";
+import { clipsFor } from "../project/timeline";
 import type { CursorPath } from "../cursor/path";
 import type { Project } from "../project/types";
 import { outputSizeFor } from "../style/aspect";
@@ -47,17 +49,16 @@ export function replanFrom(
   ctx: DeriveContext,
 ): ZoomParts {
   const planCtx = planContextFor(project, ctx);
-  const segments = replanSegments(
+  const planned = replanSegments(
     project.zoom.segments,
     planZoom(ctx.telemetry, config, planCtx),
   );
 
+  const segments = project.clips ? alignSegmentsToClips(planned, clipsFor(ctx.durationMs, project.cuts, project.clips)) : planned;
+  const generated = segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath);
   return {
     segments,
-    keyframes: projectKeyframes(replan(
-      project.zoom.keyframes,
-      segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath),
-    ), planCtx),
+    keyframes: projectKeyframes(project.zoom.segments.length === 0 ? replan(project.zoom.keyframes, generated) : generated, planCtx),
   };
 }
 
@@ -76,11 +77,26 @@ export function deriveKeyframes(
 ): ZoomParts {
   const planCtx = planContextFor(project, ctx);
 
+  const segments = project.clips ? alignSegmentsToClips(project.zoom.segments, clipsFor(ctx.durationMs, project.cuts, project.clips)) : project.zoom.segments;
   return {
-    segments: project.zoom.segments,
-    keyframes: projectKeyframes(replan(
-      project.zoom.keyframes,
-      segmentsToKeyframes(project.zoom.segments, config, planCtx, ctx.cameraPath),
-    ), planCtx),
+    segments,
+    keyframes: projectKeyframes(segments.length === 0
+      ? project.zoom.keyframes.filter(k => k.pinned || k.origin === "manual")
+      : segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath), planCtx),
   };
+}
+
+/** Reset this shot's camera and depth from telemetry without resurrecting deleted neighbours. */
+export function resetShotToAuto(project: Project, id: string, ctx: DeriveContext): Project {
+  const target = project.zoom.segments.find(s => s.id === id);
+  if (!target) return project;
+  const fresh = planZoom(ctx.telemetry, project.zoom.config, planContextFor(project, ctx));
+  const automatic = fresh.filter(s => s.startMs < target.endMs && s.endMs > target.startMs)
+    .sort((a, b) => Math.min(b.endMs, target.endMs) - Math.max(b.startMs, target.startMs)
+      - (Math.min(a.endMs, target.endMs) - Math.max(a.startMs, target.startMs)))[0];
+  const reset = automatic ? segmentPart(automatic, target.startMs, target.endMs, target.id) : {
+    ...target, waypoints: target.waypoints.map(w => ({ ...w, depth: project.zoom.config.depthClick })),
+  };
+  return { ...project, zoom: { ...project.zoom, segments: project.zoom.segments.map(s => s.id === id
+    ? { ...reset, origin: target.origin, pinned: false, position: "follow", cameraOverride: false } : s) } };
 }

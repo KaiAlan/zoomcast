@@ -1,6 +1,6 @@
 import { normalizeCuts } from "../../shared/project/cuts";
-import { outputDurationMs, outputToSource, sourceToOutput } from "../../shared/project/timeline";
-import type { Cut } from "../../shared/project/types";
+import { clipsFor, outputDurationMs, outputToSource, sourceToOutput } from "../../shared/project/timeline";
+import type { Cut, SourceClip } from "../../shared/project/types";
 import type { PreviewClock } from "./PreviewPlayer";
 
 /** What the clock touches on an HTMLVideoElement. Narrow, so a test can hand in a plain object. */
@@ -11,9 +11,11 @@ export type ClockElement = {
   pause(): void;
   requestVideoFrameCallback(cb: (now: number, meta: { mediaTime: number }) => void): number;
   cancelVideoFrameCallback(handle: number): void;
+  addEventListener?(type: "ended", cb: () => void): void;
+  removeEventListener?(type: "ended", cb: () => void): void;
 };
 
-export type ClockTimeline = { durationMs: number; cuts: Cut[] };
+export type ClockTimeline = { durationMs: number; cuts: Cut[]; clips?: SourceClip[] };
 
 /**
  * A PreviewClock over a video element, in OUTPUT time.
@@ -58,18 +60,31 @@ export function createMediaClock(
   /** The cut end (source ms) the element was last sent to, until a frame outside a cut arrives. */
   let skippingTo: number | null = null;
 
+  let activeClip = 0;
+  let onEnd: (() => void) | null = null;
+  let generation = 0;
+
   const cancel = (el: ClockElement): void => {
     if (handle !== null) el.cancelVideoFrameCallback(handle);
     handle = null;
+    if (onEnd) el.removeEventListener?.("ended", onEnd);
+    onEnd = null;
+    generation++;
   };
 
   return {
     start(fromOutputMs) {
       const el = element();
       if (el === null) return;
-      const { durationMs, cuts } = timeline();
+      const { durationMs, cuts, clips } = timeline();
       skippingTo = null;
-      el.currentTime = outputToSource(fromOutputMs, durationMs, cuts) / 1000;
+      let offset = 0;
+      const ranges = clipsFor(durationMs, cuts, clips);
+      activeClip = Math.max(0, ranges.findIndex(c => {
+        offset += c.endMs - c.startMs;
+        return fromOutputMs < offset;
+      }));
+      el.currentTime = outputToSource(fromOutputMs, durationMs, cuts, clips) / 1000;
       void el.play();
     },
 
@@ -85,6 +100,24 @@ export function createMediaClock(
       if (first === null) return;
       cancel(first);
 
+      const chain = generation;
+      const advanceClip = (el: ClockElement): void => {
+        const { durationMs, cuts, clips } = timeline();
+        const ranges = clipsFor(durationMs, cuts, clips);
+        activeClip++;
+        const next = ranges[activeClip];
+        if (next) { el.currentTime = next.startMs / 1000; void el.play(); }
+        else cb(outputDurationMs(durationMs, cuts, clips));
+      };
+      onEnd = () => {
+        const el = element();
+        if (!el || chain !== generation) return;
+        const { durationMs, cuts, clips } = timeline();
+        if (clips) advanceClip(el);
+        else cb(outputDurationMs(durationMs, cuts));
+      };
+      first.addEventListener?.("ended", onEnd);
+
       const tick = (_now: number, meta: { mediaTime: number }): void => {
         const el = element();
         if (el === null) {
@@ -92,8 +125,20 @@ export function createMediaClock(
           return;
         }
 
-        const { durationMs, cuts } = timeline();
+        const { durationMs, cuts, clips } = timeline();
         const tSource = meta.mediaTime * 1000;
+        if (clips) {
+          const ranges = clipsFor(durationMs, cuts, clips);
+          const current = ranges[activeClip];
+          if (!current) cb(outputDurationMs(durationMs, cuts, clips));
+          else if (tSource >= current.endMs) advanceClip(el);
+          else if (tSource >= current.startMs - 100) {
+            const offset = ranges.slice(0, activeClip).reduce((sum, c) => sum + c.endMs - c.startMs, 0);
+            cb(offset + Math.max(0, tSource - current.startMs));
+          }
+          if (chain === generation) handle = el.requestVideoFrameCallback(tick);
+          return;
+        }
         const tOutput = sourceToOutput(tSource, durationMs, cuts);
 
         if (tOutput !== null) {
@@ -117,7 +162,7 @@ export function createMediaClock(
           }
         }
 
-        handle = el.requestVideoFrameCallback(tick);
+        if (chain === generation) handle = el.requestVideoFrameCallback(tick);
       };
       handle = first.requestVideoFrameCallback(tick);
     },

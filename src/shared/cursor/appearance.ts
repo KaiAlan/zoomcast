@@ -28,6 +28,6 @@ export function cursorArt(shape: CursorShape, appearance: CursorAppearance): Cur
 
 export function cursorPaint(appearance: CursorAppearance): { fill: string; stroke: string; width: number } {
   if (appearance === "classic" || appearance === "rounded") return { fill: "#151515", stroke: "#ffffff", width: 2 };
-  if (appearance === "outline") return { fill: "transparent", stroke: "#ffffff", width: 2 };
+  if (appearance === "outline") return { fill: "#000000", stroke: "#ffffff", width: 2 };
   return { fill: "#ffffff", stroke: "#000000", width: appearance === "dot" ? 1 : 3 };
 }

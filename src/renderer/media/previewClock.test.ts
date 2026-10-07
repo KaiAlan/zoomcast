@@ -77,7 +77,7 @@ describe("PreviewPlayer with a media clock", () => {
     expect(clock.stop).toHaveBeenCalled();
   });
 
-  it("stops at the end of the take", async () => {
+  it("loops and resets the playhead at the end of the take", async () => {
     const clock = fakeClock();
     const player = new PreviewPlayer(
       async () => {},
@@ -91,7 +91,10 @@ describe("PreviewPlayer with a media clock", () => {
     clock.emit(5_000);
     await Promise.resolve();
 
-    expect(player.isPlaying).toBe(false);
+    expect(player.isPlaying).toBe(true);
+    expect(player.playheadMs).toBe(0);
+    expect(clock.start).toHaveBeenLastCalledWith(0);
+    player.dispose();
   });
 
   it("ignores frames that arrive after a pause", async () => {

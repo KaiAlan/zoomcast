@@ -55,6 +55,7 @@ const CONFIGS: Array<{
   output?: Partial<Project["output"]>;
   zoom?: Partial<Project["zoom"]>;
   cuts?: Project["cuts"];
+  clips?: Project["clips"];
   /** Output times to compare when the default SHOTS would overrun a cut config's shorter output. */
   shots?: number[];
 }> = [
@@ -172,6 +173,20 @@ const CONFIGS: Array<{
     cuts: [{ id: "c1", startMs: 1000, endMs: 2000 }],
     shots: [0, 900, 1100, 2500, 3900],
   },
+  {
+    name: "reordered-clips",
+    clips: [{ id: "tail-first", startMs: 3000, endMs: 5000 }, { id: "intro-last", startMs: 0, endMs: 2000 }],
+    style: { cursor: { ...defaultProject("test").style.cursor, appearance: "outline", sizePct: 250, motionBlur: 0.5, sway: 0.5 } },
+    shots: [0, 1000, 1900, 2500, 3900],
+  },
+  {
+    name: "split-short-zooms",
+    zoom: { segments: [
+      { id: "short", startMs: 800, endMs: 1300, position: "fixed", waypoints: [{ id: "short-focus", tMs: 800, depth: 1, cx: 0.5, cy: 0.5 }], origin: "manual", pinned: true },
+      { id: "long", startMs: 1300, endMs: 4200, position: "follow", waypoints: [{ id: "long-focus", tMs: 1300, depth: 0.4, cx: 0.5, cy: 0.5 }], origin: "manual", pinned: true },
+    ] },
+    shots: [0, 1000, 1900, 2500, 4600],
+  },
 ];
 
 rmSync(OUT, { recursive: true, force: true });
@@ -227,6 +242,7 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
     output: { ...base.output, ...config.output },
     zoom: { ...base.zoom, ...config.zoom },
     cuts: config.cuts ?? base.cuts,
+    ...(config.clips ? { clips: config.clips } : {}),
     webcam: { ...base.webcam, ...config.webcam },
   };
 

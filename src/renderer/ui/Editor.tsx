@@ -6,18 +6,13 @@ import type { OpenedBundle } from "../../shared/api";
 import { buildCursorPath, smoothingToHalfLife } from "../../shared/cursor/path";
 import { RIPPLE_DURATION_MS, ripplesAt } from "../../shared/cursor/ripples";
 import { planExportFrames } from "../../shared/export/exportPlan";
-import { outputDurationMs, outputToSource, sourceSpanToOutput } from "../../shared/project/timeline";
+import { clipsFor, outputDurationMs, outputToSource, sourceSpanToOutput } from "../../shared/project/timeline";
 import { outputSizeFor } from "../../shared/style/aspect";
 import { bundleAssetUrl } from "../media/assetUrl";
-import type { Project } from "../../shared/project/types";
+import type { AspectChoice, Project } from "../../shared/project/types";
 import {
-  addSegment,
-  createCutFromDrag,
-  cutDragToSource,
-  cutResizeToSource,
   deleteCut,
   deleteSegment,
-  resetSegment,
   segmentDragToSource,
   segmentResizeToSource,
   setSegmentCamera,
@@ -26,7 +21,7 @@ import {
 import { pixelParityZoom } from "../../shared/zoom/geometry";
 import { zoomAt } from "../../shared/zoom/interpolate";
 import { followPath } from "../../shared/zoom/camera";
-import type { DeriveContext } from "../../shared/zoom/derive";
+import { resetShotToAuto, type DeriveContext } from "../../shared/zoom/derive";
 import type { PlanContext, ZoomConfig, ZoomSegment } from "../../shared/zoom/types";
 import { Renderer } from "../gl/Renderer";
 import { exportClip } from "../media/exportClip";
@@ -37,8 +32,8 @@ import { BLUR_GRID_MS, blurForCamera } from "../../shared/style/motionBlur";
 import { createMediaClock } from "../media/mediaClock";
 import { Inspector } from "./Inspector";
 import { SegmentPopover } from "./SegmentPopover";
-import { Timeline } from "./Timeline";
-import { msToPct } from "./timeline/geometry";
+import { Timeline, TimelineFooter } from "./Timeline";
+import { addZoomAt, deleteClip, reorderClip, splitClip, splitZoom } from "../../shared/project/clips";
 import { useProjectHistory } from "./useProjectHistory";
 
 /** How often the numeric readout catches up with the playhead. */
@@ -80,9 +75,12 @@ export function Editor({
   const webcamRef = useRef<VideoElementSource | DecodedFrameSource | null>(null);
   const sourceRef = useRef<VideoElementSource | null>(null);
   const playerRef = useRef<PreviewPlayer | null>(null);
-  /** Wraps `<Timeline>` so `SegmentPopover` can tell "inside the timeline" from "outside" for its dismiss-on-outside-pointerdown. */
+  /** The popup measures its selected region inside this timeline wrapper. */
+  const [popoverId, setPopoverId] = useState<string | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineZoom, setTimelineZoom] = useState(1);
+  const timelineViewportRef = useRef<HTMLDivElement | null>(null);
+  const splitTimelineRef = useRef<() => void>(() => undefined);
   const timelineWrapRef = useRef<HTMLDivElement | null>(null);
 
   const { manifest } = bundle;
@@ -176,7 +174,7 @@ export function Editor({
   const selectedSegmentSpan =
     selectedSegment === null
       ? null
-      : sourceSpanToOutput(selectedSegment.startMs, selectedSegment.endMs, manifest.durationMs, project.cuts);
+      : sourceSpanToOutput(selectedSegment.startMs, selectedSegment.endMs, manifest.durationMs, project.cuts, project.clips);
 
   const ctx: PlanContext = useMemo(
     () => ({
@@ -196,7 +194,29 @@ export function Editor({
     [ctx],
   );
 
-  const outDuration = outputDurationMs(manifest.durationMs, project.cuts);
+  const outDuration = outputDurationMs(manifest.durationMs, project.cuts, project.clips);
+  const baseClips = useMemo(() => clipsFor(manifest.durationMs, project.cuts, project.clips), [manifest.durationMs, project.cuts, project.clips]);
+
+  useEffect(() => {
+    const viewport = timelineViewportRef.current;
+    if (!viewport) return;
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const next = Math.max(1, Math.min(4, timelineZoom + (event.deltaY < 0 ? 0.25 : -0.25)));
+        const x = event.clientX - viewport.getBoundingClientRect().left - 16;
+        const width = viewport.clientWidth - 32;
+        const fraction = (x + viewport.scrollLeft) / (width * timelineZoom);
+        setTimelineZoom(next);
+        requestAnimationFrame(() => { viewport.scrollLeft = fraction * width * next - x; });
+      } else if (event.shiftKey) {
+        event.preventDefault();
+        viewport.scrollLeft += event.deltaY || event.deltaX;
+      }
+    };
+    viewport.addEventListener("wheel", wheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", wheel);
+  }, [timelineZoom]);
 
   // Built once per bundle: pure and cheap, but rebuilding per frame would be
   // wasteful. Depends on smoothing because that changes the resulting path.
@@ -252,8 +272,8 @@ export function Editor({
       if (source === null || disposed) return;
 
       const { project: p, ctx: c, cursorPath, clicks, backgroundImageUrl } = live.current;
-      const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts);
-      const cursorFrame = cursorFrameAt(cursorPath, clicks, tSource, p.style.cursor, { durationMs: manifest.durationMs, cuts: p.cuts, outputMs: tOutputMs, fps: p.output.fps });
+      const tSource = outputToSource(tOutputMs, manifest.durationMs, p.cuts, p.clips);
+      const cursorFrame = cursorFrameAt(cursorPath, clicks, tSource, p.style.cursor, { durationMs: manifest.durationMs, cuts: p.cuts, clips: p.clips, outputMs: tOutputMs, fps: p.output.fps });
 
       const frame = await source.frameAt(tSource);
       let cameraFrame: Awaited<ReturnType<VideoElementSource["frameAt"]>> | undefined;
@@ -316,7 +336,7 @@ export function Editor({
       const el = playheadElRef.current;
       if (el === null) return;
 
-      const total = outputDurationMs(manifest.durationMs, live.current.project.cuts);
+      const total = outputDurationMs(manifest.durationMs, live.current.project.cuts, live.current.project.clips);
       el.style.left = `${total === 0 ? 0 : (t / total) * 100}%`;
     };
 
@@ -324,12 +344,12 @@ export function Editor({
     // converted to output time. See createMediaClock.
     const clock = createMediaClock(
       () => sourceRef.current?.el ?? null,
-      () => ({ durationMs: manifest.durationMs, cuts: live.current.project.cuts }),
+      () => ({ durationMs: manifest.durationMs, cuts: live.current.project.cuts, clips: live.current.project.clips }),
     );
 
     const player = new PreviewPlayer(
       renderAt,
-      () => outputDurationMs(manifest.durationMs, live.current.project.cuts),
+      () => outputDurationMs(manifest.durationMs, live.current.project.cuts, live.current.project.clips),
       (t, isPlaying) => {
         positionPlayhead(t);
 
@@ -351,7 +371,7 @@ export function Editor({
         // One frame of lookahead, in source time. See VideoSource.prefetch.
         const ahead = tOutputMs + PREFETCH_LOOKAHEAD_MS;
         void source.prefetch(
-          outputToSource(ahead, manifest.durationMs, live.current.project.cuts),
+          outputToSource(ahead, manifest.durationMs, live.current.project.cuts, live.current.project.clips),
         );
       },
       clock,
@@ -435,7 +455,7 @@ export function Editor({
             const started = performance.now();
             let count = 0;
             try {
-              for (const frame of planExportFrames(manifest.durationMs, live.current.project.cuts, live.current.project.output.fps)) {
+              for (const frame of planExportFrames(manifest.durationMs, live.current.project.cuts, live.current.project.output.fps, live.current.project.clips)) {
                 const handle = await source.frameAt(frame.tSourceMs); handle.release(); count++;
               }
               return { frames: count, elapsedMs: performance.now() - started };
@@ -579,13 +599,17 @@ export function Editor({
         return;
       }
 
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b" && !typing) {
+        event.preventDefault(); splitTimelineRef.current(); return;
+      }
+
       if (event.key === "Delete" || event.key === "Backspace") {
         if (typing) return;
         const s = editRef.current.selection;
         if (s === null) return;
         event.preventDefault();
         editRef.current.apply((p) =>
-          s.kind === "segment" ? deleteSegment(p, s.id) : deleteCut(p, s.id),
+          s.kind === "segment" ? deleteSegment(p, s.id) : s.kind === "clip" ? deleteClip(p, s.id, manifest.durationMs) : deleteCut(p, s.id),
         );
         editRef.current.select(null);
         return;
@@ -615,7 +639,7 @@ export function Editor({
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [manifest.durationMs]);
 
   /**
    * The one way an edit reaches a paused preview.
@@ -663,35 +687,14 @@ export function Editor({
     edit.apply((p) => ({ ...p, zoom: { ...p.zoom, config } }), { replan: true });
   };
 
-  /**
-   * Output changes must re-plan, not just re-render.
-   *
-   * The frame comes from the output size, so a segment's centre and its
-   * clamp belong to the shape it was planned against. Changing the aspect with
-   * a bare setProject updated the context and the readout while leaving the
-   * keyframes derived for the old frame.
-   *
-   * Note the reason is no longer the ceiling: since 2026-09-07 that is
-   * `cfg.maxZoom` and independent of output size — the camera samples
-   * 1/scale of the source at any aspect. It is the frame, and therefore the
-   * clamp, that still moves. paddingFactor feeds the same frame if a control
-   * for it ever lands.
-   */
+  /** Rebuild rendered camera geometry for the new aspect without changing shot timing. */
   const onOutputChange = (output: Project["output"]): void => {
-    edit.apply((p) => ({ ...p, output }), { replan: true });
+    edit.apply((p) => ({ ...p, output }));
   };
 
-  /**
-   * Switch one shot's camera.
-   *
-   * It re-plans afterwards rather than only patching the segment, because
-   * keyframes are derived: a follow shot emits a sample every 100ms where a
-   * fixed one emits two keyframes, so nothing would change on screen
-   * otherwise. `replanSegments` carries the new position across that re-plan
-   * by id, which is also what makes the choice survive every later re-plan.
-   */
+  /** Rebuild camera samples while keeping this shot's authored timing. */
   const onSegmentCameraChange = (id: string, position: ZoomSegment["position"]): void => {
-    edit.apply((p) => setSegmentCamera(p, id, position), { replan: true });
+    edit.apply((p) => setSegmentCamera(p, id, position));
   };
 
   /** Set one shot's depth from the popover. Pins the segment (see `setSegmentDepth`). */
@@ -705,12 +708,9 @@ export function Editor({
     edit.select(null);
   };
 
-  /**
-   * Unpin, then re-plan: the shot rejoins the planner. This is what makes
-   * pinning recoverable, and pinning is a one-way door without it.
-   */
+  /** Restore this shot from telemetry without changing other edited or deleted shots. */
   const onSegmentReset = (id: string): void => {
-    edit.apply((p) => resetSegment(p, id), { replan: true });
+    edit.apply((p) => resetShotToAuto(p, id, deriveCtx));
   };
 
   /**
@@ -742,41 +742,6 @@ export function Editor({
     edit.applyTransient((p) => segmentResizeToSource(p, id, edge, tOutputMs, manifest.durationMs));
   };
 
-  /**
-   * Author a cut by dragging across empty space on the cut lane.
-   *
-   * One discrete edit, so it goes through `apply` and not the transient drag
-   * path: nothing is recorded until the pointer comes up, and the result is a
-   * single undo step. `createCutFromDrag` holds the `MIN_CUT_MS` floor, which
-   * `addCut` does not enforce and nothing else now guards.
-   */
-  const onCreateCut = (aFrac: number, bFrac: number): void => {
-    edit.apply((p) =>
-      createCutFromDrag(p, crypto.randomUUID(), aFrac, bFrac, manifest.durationMs),
-    );
-  };
-
-  /**
-   * Drag a cut's seam to an absolute lane fraction.
-   *
-   * A fraction, where the segment callbacks take output ms, because a cut edit
-   * moves the output timebase: growing a cut shortens `outDuration`, so the
-   * same pointer pixel is a different output ms from one pointermove to the
-   * next and output ms stops being an absolute coordinate mid-gesture. The
-   * pointer's position across the lane does not stop being one. The mapping
-   * lives in `cutDragToSource` / `cutResizeToSource` (edits.ts), pure and
-   * unit-tested there; read `cutResizeToSource` for why a resize has to solve
-   * for the post-rescale geometry rather than convert through it.
-   */
-  const onCutMove = (id: string, targetStartFrac: number): void => {
-    edit.applyTransient((p) => cutDragToSource(p, id, targetStartFrac, manifest.durationMs));
-  };
-
-  /** Resize one edge to an absolute lane fraction. See `onCutMove`. */
-  const onCutResize = (id: string, edge: "start" | "end", tFrac: number): void => {
-    edit.applyTransient((p) => cutResizeToSource(p, id, edge, tFrac, manifest.durationMs));
-  };
-
   const runExport = async (chosenTarget?: string): Promise<void> => {
     if (sourceRef.current === null || exporting !== null) return;
     try {
@@ -800,17 +765,35 @@ export function Editor({
   ];
   const addTimelineSegment = (): void => {
     const id = crypto.randomUUID();
-    const next = addSegment(project, outputToSource(playheadMs, manifest.durationMs, project.cuts), manifest.durationMs, id);
-    if (next === project) { setStatus("No room for a zoom after the playhead. Move to an earlier gap."); return; }
+    const next = addZoomAt(project, playerRef.current?.playheadMs ?? playheadMs, manifest.durationMs, id);
+    if (next === project) { setStatus("Move the playhead inside a video clip to add a zoom."); return; }
     edit.apply(() => next);
     edit.select({ kind: "segment", id });
+    setPopoverId(id);
   };
   const deleteTimelineSelection = (): void => {
     const selection = edit.selection;
     if (!selection) return;
-    edit.apply(p => selection.kind === "segment" ? deleteSegment(p, selection.id) : deleteCut(p, selection.id));
+    edit.apply(p => selection.kind === "segment" ? deleteSegment(p, selection.id) : selection.kind === "clip" ? deleteClip(p, selection.id, manifest.durationMs) : deleteCut(p, selection.id));
     edit.select(null);
   };
+  const splitTimelineSelection = (): void => {
+    const at = playerRef.current?.playheadMs ?? playheadMs;
+    const selected = edit.selection;
+    const id = crypto.randomUUID();
+    const next = selected?.kind === "segment"
+      ? splitZoom(project, selected.id, at, manifest.durationMs, id)
+      : splitClip(project, selected?.kind === "clip" ? selected.id : null, at, manifest.durationMs, id);
+    if (next === project) { setStatus("Place the playhead inside the selected clip or zoom to split it."); return; }
+    edit.apply(() => next);
+    edit.select({ kind: selected?.kind === "segment" ? "segment" : "clip", id });
+    setPopoverId(null);
+    setStatus("Segment split. Select a piece to move or delete it.");
+  };
+  splitTimelineRef.current = splitTimelineSelection;
+  const splitEnabled = (edit.selection?.kind === "segment"
+    ? splitZoom(project, edit.selection.id, playheadMs, manifest.durationMs, "split-check")
+    : splitClip(project, edit.selection?.kind === "clip" ? edit.selection.id : null, playheadMs, manifest.durationMs, "split-check")) !== project;
   const timeLabel = (ms: number): string => `${Math.floor(ms / 60000)}:${(ms / 1000 % 60).toFixed(1).padStart(4, "0")}`;
   return (
     <div className="editor-shell">
@@ -824,7 +807,7 @@ export function Editor({
         <div className="project-heading"><span className="project-name" title={manifest.id}>{manifest.id}</span><span className="project-extension">zoomcast project</span></div>
         <div className="header-actions">
           <button type="button" className="quiet-action" aria-label="Save project" title="Save project (Ctrl+S)" disabled={saving || sourceRef.current === null} onClick={() => { void saveProject(); }}><Icon name="save" size={16} />{saving ? "Saving…" : "Save project"}</button>
-          <button type="button" className="primary-action" disabled={exporting !== null} onClick={() => { void runExport(); }}><Icon name="output" size={16} />{exporting === null ? "Export video" : `Exporting ${exporting}`}</button>
+          <button type="button" className="primary-action" disabled={exporting !== null || outDuration <= 0} onClick={() => { void runExport(); }}><Icon name="output" size={16} />{exporting === null ? "Export video" : `Exporting ${exporting}`}</button>
         </div>
       </header>
       <nav className="tool-rail" aria-label="Editor tools">
@@ -855,7 +838,9 @@ export function Editor({
         />
       </aside>
       <main className="editor-workspace">
-        <div className="preview-heading"><span>Preview</span><button type="button" className="aspect-button" onClick={() => setActiveSection("Output")}>{project.output.aspect === "native" ? "Native aspect" : project.output.aspect}<span>⌄</span></button></div>
+        <div className="preview-heading"><span>Preview</span><select className="aspect-button" aria-label="Preview aspect ratio" value={project.output.aspect} onChange={event => onOutputChange({ ...project.output, aspect: event.target.value as AspectChoice })}>
+          {(["native", "16:9", "4:3", "1:1", "9:16"] as const).map(aspect => <option key={aspect} value={aspect}>{aspect === "native" ? "Native aspect" : aspect}</option>)}
+        </select></div>
         <div className="preview-stage"><canvas ref={canvasRef} className="preview-canvas" /></div>
         <div className="transport">
           <span className="editor-status" role="status">{status || "Loading recording…"}</span>
@@ -872,14 +857,15 @@ export function Editor({
           <div className="timeline-toolbar">
             <div className="timeline-actions">
               <button type="button" className="timeline-add" onClick={addTimelineSegment} disabled={outDuration <= 0}><Icon name="plus" size={17} />Add segment<span><Icon name="zoom" size={18} /></span></button>
-              <button type="button" className="icon-button" aria-label="Delete timeline selection" title="Delete selected segment or cut" disabled={edit.selection === null} onClick={deleteTimelineSelection}><Icon name="trash" size={18} /></button>
+              <button type="button" className="icon-button" aria-label="Delete timeline selection" title="Delete selected video clip or zoom" disabled={edit.selection === null} onClick={deleteTimelineSelection}><Icon name="trash" size={18} /></button>
               <button type="button" className="icon-button" aria-label="Timeline undo" title="Undo (Ctrl+Z)" disabled={!edit.canUndo} onClick={edit.undo}><Icon name="undo" size={18} /></button>
               <button type="button" className="icon-button" aria-label="Timeline redo" title="Redo (Ctrl+Shift+Z)" disabled={!edit.canRedo} onClick={edit.redo}><Icon name="redo" size={18} /></button>
+              <button type="button" className="icon-button" aria-label="Split at playhead" title="Split selected clip or zoom (Ctrl+B)" disabled={!splitEnabled} onClick={splitTimelineSelection}><Icon name="scissors" size={18} /></button>
               <button type="button" className="icon-button" aria-label="Reset selected zoom" title="Reset selected zoom" disabled={selectedSegment === null} onClick={() => { if (selectedSegment) onSegmentReset(selectedSegment.id); }}><Icon name="restart" size={18} /></button>
             </div>
-            <div className="timeline-scale"><button type="button" aria-label="Zoom timeline out" disabled={timelineZoom === 1} onClick={() => setTimelineZoom(z => Math.max(1, z - 0.5))}>−</button><input type="range" aria-label="Timeline zoom" min="1" max="4" step="0.5" value={timelineZoom} onChange={event => setTimelineZoom(Number(event.target.value))} /><button type="button" aria-label="Zoom timeline in" disabled={timelineZoom === 4} onClick={() => setTimelineZoom(z => Math.min(4, z + 0.5))}>+</button></div>
+            <div className="timeline-scale"><button type="button" aria-label="Zoom timeline out" disabled={timelineZoom === 1} onClick={() => setTimelineZoom(z => Math.max(1, z - 0.5))}>−</button><input type="range" aria-label="Timeline zoom" min="1" max="4" step="0.25" value={timelineZoom} onChange={event => setTimelineZoom(Number(event.target.value))} /><button type="button" aria-label="Zoom timeline in" disabled={timelineZoom === 4} onClick={() => setTimelineZoom(z => Math.min(4, z + 0.5))}>+</button></div>
           </div>
-          <div className="timeline-viewport" onScroll={event => setTimelineScrollLeft(event.currentTarget.scrollLeft)}><div style={{ width: `${timelineZoom * 100}%` }}>
+          <div className="timeline-viewport" ref={timelineViewportRef} onScroll={event => setTimelineScrollLeft(event.currentTarget.scrollLeft)}><div style={{ width: `${timelineZoom * 100}%` }}>
           <Timeline
             durationMs={manifest.durationMs}
             outputDurationMs={outDuration}
@@ -887,34 +873,33 @@ export function Editor({
             keyframes={project.zoom.keyframes}
             segments={project.zoom.segments}
             selection={edit.selection}
-            onSelect={edit.select}
+            onSelect={selection => { edit.select(selection); setPopoverId(selection?.kind === "segment" ? selection.id : null); }}
             playheadMs={playheadMs}
             playheadRef={playheadElRef}
             pixelParityZoom={ceiling}
-            maxZoom={project.zoom.config.maxZoom}
             onSeek={(t) => playerRef.current?.seek(t)}
             onSegmentMove={onSegmentMove}
             onSegmentResize={onSegmentResize}
             onSegmentDragCommit={edit.commitGesture}
-            onCreateCut={onCreateCut}
-            onCutMove={onCutMove}
-            onCutResize={onCutResize}
-            onCutDragCommit={edit.commitGesture}
+            clips={baseClips}
+            orderedClips={project.clips}
+            onClipReorder={(id, beforeId) => edit.apply(p => reorderClip(p, id, beforeId, manifest.durationMs))}
           />
 
           </div></div>
+          <TimelineFooter clips={baseClips} segments={project.zoom.segments} playheadMs={playheadMs} outputDurationMs={outDuration} maxZoom={project.zoom.config.maxZoom} pixelParityZoom={ceiling} />
 
-          {selectedSegment !== null && selectedSegmentSpan !== null && outDuration > 0 && (
+          {selectedSegment !== null && selectedSegment.id === popoverId && selectedSegmentSpan !== null && outDuration > 0 && (
             <SegmentPopover
               segment={selectedSegment}
               maxZoom={project.zoom.config.maxZoom}
-              leftPct={(16 + msToPct(selectedSegmentSpan.startMs, outDuration) / 100 * timelineZoom * ((timelineWrapRef.current?.clientWidth ?? 1000) - 32) - timelineScrollLeft) / (timelineWrapRef.current?.clientWidth ?? 1000) * 100}
+                layoutVersion={`${timelineZoom}-${timelineScrollLeft}-${selectedSegmentSpan.startMs}-${outDuration}`}
               timelineRef={timelineWrapRef}
               onDepthChange={onSegmentDepthChange}
               onCameraChange={onSegmentCameraChange}
               onDelete={onSegmentDelete}
               onReset={onSegmentReset}
-              onDismiss={() => edit.select(null)}
+              onDismiss={() => setPopoverId(null)}
             />
           )}
         </section>

@@ -60,7 +60,7 @@ export class PreviewPlayer {
   }
 
   play(): void {
-    if (this.playing) return;
+    if (this.playing || this.durationMs() <= 0 || this.disposed) return;
     this.playing = true;
     this.outputAtStart = this.playheadMs >= this.durationMs() ? 0 : this.playheadMs;
 
@@ -102,6 +102,7 @@ export class PreviewPlayer {
     this.outputAtStart = clamped;
     this.wallAtStart = performance.now();
     this.onTick(clamped, this.playing);
+    if (this.playing && this.clock) this.clock.start(clamped);
     // Edits and scrubs must survive an in-flight decode. Playback ticks can
     // be dropped, but dropping a paused redraw leaves the last edit invisible.
     if (this.busy) { this.pendingSeek = clamped; return; }
@@ -133,10 +134,7 @@ export class PreviewPlayer {
 
     const end = this.durationMs();
     if (tMs >= end) {
-      this.playheadMs = end;
-      this.onTick(end, false);
-      void this.draw(end);
-      this.pause();
+      this.restartLoop();
       return;
     }
 
@@ -144,6 +142,15 @@ export class PreviewPlayer {
     this.onTick(tMs, true);
     void this.draw(tMs);
   };
+
+  private restartLoop(): void {
+    this.playheadMs = 0;
+    this.outputAtStart = 0;
+    this.wallAtStart = performance.now();
+    this.onTick(0, true);
+    this.seek(0);
+    if (!this.clock) this.raf = requestAnimationFrame(this.loop);
+  }
 
   private loop = (): void => {
     if (!this.playing) return;
@@ -153,10 +160,7 @@ export class PreviewPlayer {
     const end = this.durationMs();
 
     if (t >= end) {
-      this.playheadMs = end;
-      this.onTick(end, false);
-      void this.draw(end);
-      this.pause();
+      this.restartLoop();
       return;
     }
 

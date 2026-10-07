@@ -1,7 +1,8 @@
 import { normalizeCuts } from "./cuts";
-import type { Cut } from "./types";
+import type { Cut, SourceClip } from "./types";
 
-export function outputDurationMs(durationMs: number, cuts: Cut[]): number {
+export function outputDurationMs(durationMs: number, cuts: Cut[], clips?: SourceClip[]): number {
+  if (clips) return clipsFor(durationMs, cuts, clips).reduce((sum, c) => sum + c.endMs - c.startMs, 0);
   const removed = normalizeCuts(cuts, durationMs).reduce(
     (sum, c) => sum + (c.endMs - c.startMs),
     0,
@@ -14,7 +15,17 @@ export function sourceToOutput(
   tSource: number,
   durationMs: number,
   cuts: Cut[],
+  clips?: SourceClip[],
 ): number | null {
+  if (clips) {
+    let offset = 0;
+    const ranges = clipsFor(durationMs, cuts, clips);
+    for (const [i, c] of ranges.entries()) {
+      if (tSource >= c.startMs && (tSource < c.endMs || (i === ranges.length - 1 && tSource === c.endMs))) return offset + tSource - c.startMs;
+      offset += c.endMs - c.startMs;
+    }
+    return null;
+  }
   let removed = 0;
 
   for (const c of normalizeCuts(cuts, durationMs)) {
@@ -40,7 +51,18 @@ export function outputToSource(
   tOutput: number,
   durationMs: number,
   cuts: Cut[],
+  clips?: SourceClip[],
 ): number {
+  if (clips) {
+    let remaining = Math.max(0, tOutput);
+    const ranges = clipsFor(durationMs, cuts, clips);
+    for (const c of ranges) {
+      const length = c.endMs - c.startMs;
+      if (remaining < length) return c.startMs + remaining;
+      remaining -= length;
+    }
+    return ranges.at(-1)?.endMs ?? 0;
+  }
   let t = tOutput;
 
   for (const c of normalizeCuts(cuts, durationMs)) {
@@ -69,7 +91,9 @@ export function sourceSpanToOutput(
   endSourceMs: number,
   durationMs: number,
   cuts: Cut[],
+  clips?: SourceClip[],
 ): { startMs: number; endMs: number } | null {
+  if (clips) return sourceSpansToOutput(startSourceMs, endSourceMs, durationMs, cuts, clips)[0] ?? null;
   const edge = (tSource: number): number => {
     let removed = 0;
 
@@ -89,4 +113,31 @@ export function sourceSpanToOutput(
   const endMs = edge(endSourceMs);
 
   return endMs <= startMs ? null : { startMs, endMs };
+}
+
+/** Materialize legacy ripple cuts as ordinary clips; explicit ordering wins. */
+export function clipsFor(durationMs: number, cuts: Cut[], clips?: SourceClip[]): SourceClip[] {
+  if (clips) return clips.map(c => ({ ...c, startMs: Math.max(0, Math.min(durationMs, c.startMs)), endMs: Math.max(0, Math.min(durationMs, c.endMs)) })).filter(c => c.endMs > c.startMs);
+  const kept: SourceClip[] = [];
+  let cursor = 0;
+  for (const cut of normalizeCuts(cuts, durationMs)) {
+    if (cursor < cut.startMs) kept.push({ id: `clip-${kept.length}`, startMs: cursor, endMs: cut.startMs });
+    cursor = cut.endMs;
+  }
+  if (cursor < durationMs) kept.push({ id: `clip-${kept.length}`, startMs: cursor, endMs: durationMs });
+  return kept;
+}
+
+/** Each visible piece separately: reordering must never stretch a zoom across unrelated footage. */
+export function sourceSpansToOutput(startMs: number, endMs: number, durationMs: number, cuts: Cut[], clips?: SourceClip[]): Array<{ startMs: number; endMs: number }> {
+  if (!clips) { const span = sourceSpanToOutput(startMs, endMs, durationMs, cuts); return span ? [span] : []; }
+  let offset = 0;
+  const spans: Array<{ startMs: number; endMs: number }> = [];
+  for (const c of clipsFor(durationMs, cuts, clips)) {
+    const start = Math.max(startMs, c.startMs);
+    const end = Math.min(endMs, c.endMs);
+    if (end > start) spans.push({ startMs: offset + start - c.startMs, endMs: offset + end - c.startMs });
+    offset += c.endMs - c.startMs;
+  }
+  return spans;
 }

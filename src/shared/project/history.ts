@@ -1,7 +1,7 @@
 import type { Project } from "./types";
 
 /** What is selected in the timeline. Segments and cuts share one field. */
-export type Selection = { kind: "segment" | "cut"; id: string } | null;
+export type Selection = { kind: "segment" | "cut" | "clip"; id: string } | null;
 
 export type Entry = { project: Project; selection: Selection };
 

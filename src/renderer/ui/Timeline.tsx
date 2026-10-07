@@ -1,10 +1,10 @@
 import type { CSSProperties, RefObject } from "react";
-import type { Cut } from "../../shared/project/types";
+import type { Cut, SourceClip } from "../../shared/project/types";
 import type { Selection } from "../../shared/project/history";
 import type { ZoomKeyframe, ZoomSegment } from "../../shared/zoom/types";
 import { Ruler, rulerStep } from "./timeline/Ruler";
 import { ZoomLane } from "./timeline/ZoomLane";
-import { CutLane } from "./timeline/CutLane";
+import { ClipLane } from "./timeline/ClipLane";
 import { msToPct } from "./timeline/geometry";
 
 type Props = {
@@ -28,27 +28,15 @@ type Props = {
   playheadRef: RefObject<HTMLDivElement | null>;
   /** Where upscaling begins. Keyframes past it are marked. */
   pixelParityZoom: number;
-  /** The configured cap. Since 2026-09-07 these are different numbers. */
-  maxZoom: number;
   onSeek: (tOutputMs: number) => void;
   /** Absolute output-ms target for the segment's start edge. See useRegionDrag. */
   onSegmentMove: (id: string, targetStartOutputMs: number) => void;
   /** Absolute output-ms target for the dragged edge. See useRegionDrag. */
   onSegmentResize: (id: string, edge: "start" | "end", tOutputMs: number) => void;
   onSegmentDragCommit: () => void;
-  /**
-   * Both edges of a drag-to-create, as absolute lane fractions in either
-   * order. Cut callbacks are fractions where the segment ones are output ms:
-   * a cut edit moves the output timebase the drag is measured in, so output ms
-   * is not an absolute coordinate for the length of the gesture. See
-   * `useRegionDrag`.
-   */
-  onCreateCut: (aFrac: number, bFrac: number) => void;
-  /** Absolute lane fraction for the cut's seam. */
-  onCutMove: (id: string, targetStartFrac: number) => void;
-  /** Absolute lane fraction for the dragged edge. */
-  onCutResize: (id: string, edge: "start" | "end", tFrac: number) => void;
-  onCutDragCommit: () => void;
+  clips: SourceClip[];
+  orderedClips?: SourceClip[];
+  onClipReorder: (id: string, beforeId: string | null) => void;
 };
 
 function fmt(ms: number): string {
@@ -69,15 +57,13 @@ export function Timeline({
   playheadMs,
   playheadRef,
   pixelParityZoom,
-  maxZoom,
   onSeek,
   onSegmentMove,
   onSegmentResize,
   onSegmentDragCommit,
-  onCreateCut,
-  onCutMove,
-  onCutResize,
-  onCutDragCommit,
+  clips,
+  orderedClips,
+  onClipReorder,
 }: Props) {
   return (
     <div className="timeline-content">
@@ -88,6 +74,7 @@ export function Timeline({
           durationMs={durationMs}
           outputDurationMs={outputDurationMs}
           cuts={cuts}
+          clips={orderedClips}
           segments={segments}
           keyframes={keyframes}
           selection={selection}
@@ -97,17 +84,7 @@ export function Timeline({
           onSegmentResize={onSegmentResize}
           onSegmentDragCommit={onSegmentDragCommit}
         />
-        <CutLane
-          durationMs={durationMs}
-          outputDurationMs={outputDurationMs}
-          cuts={cuts}
-          selection={selection}
-          onSelect={onSelect}
-          onCreateCut={onCreateCut}
-          onCutMove={onCutMove}
-          onCutResize={onCutResize}
-          onCutDragCommit={onCutDragCommit}
-        />
+        <ClipLane clips={clips} outputDurationMs={outputDurationMs} selection={selection} onSelect={onSelect} onReorder={onClipReorder} />
 
         <div
           className="timeline-playhead"
@@ -128,20 +105,16 @@ export function Timeline({
         />
       </div>
 
-      <div
-        className="timeline-footer"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        <span>2 tracks · {segments.length} segments · {cuts.length} cuts</span>
-        <span>
-          Drag to move · Pull edges to resize · Drag the trim track to cut
-        </span>
-        <span title={`Max zoom ${maxZoom.toFixed(2)}× · Sharp to ${pixelParityZoom.toFixed(2)}×`}>{fmt(playheadMs)} / {fmt(outputDurationMs)}</span>
-      </div>
     </div>
   );
+}
+
+export function TimelineFooter({ clips, segments, playheadMs, outputDurationMs, maxZoom, pixelParityZoom }: {
+  clips: SourceClip[]; segments: ZoomSegment[]; playheadMs: number; outputDurationMs: number; maxZoom: number; pixelParityZoom: number;
+}) {
+  return <div className="timeline-footer">
+    <span>2 tracks · {clips.length} video {clips.length === 1 ? "clip" : "clips"} · {segments.length} {segments.length === 1 ? "zoom" : "zooms"}</span>
+    <span>Split at playhead · Drag video clips to reorder · Ctrl+scroll to zoom · Shift+scroll to pan</span>
+    <span title={`Max zoom ${maxZoom.toFixed(2)}× · Sharp to ${pixelParityZoom.toFixed(2)}×`}>{fmt(playheadMs)} / {fmt(outputDurationMs)}</span>
+  </div>;
 }

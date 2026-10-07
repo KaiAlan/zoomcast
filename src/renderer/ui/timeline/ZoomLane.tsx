@@ -1,7 +1,7 @@
 import { useTrackWidth } from "./useTrackWidth";
 import { Icon } from "../Icon";
-import { sourceSpanToOutput, sourceToOutput } from "../../../shared/project/timeline";
-import type { Cut } from "../../../shared/project/types";
+import { sourceSpansToOutput, sourceToOutput } from "../../../shared/project/timeline";
+import type { Cut, SourceClip } from "../../../shared/project/types";
 import type { Selection } from "../../../shared/project/history";
 import type { ZoomKeyframe, ZoomSegment } from "../../../shared/zoom/types";
 import { EDGE_HIT_PX, MIN_RESIZABLE_PX, msToPct } from "./geometry";
@@ -11,6 +11,7 @@ type Props = {
   durationMs: number;
   outputDurationMs: number;
   cuts: Cut[];
+  clips?: SourceClip[];
   /**
    * The persisted, editable shots. Keyframes below are what renders; these are
    * what the user selects and edits.
@@ -61,7 +62,10 @@ function SegmentRegion({
   const resizable = widthPx >= MIN_RESIZABLE_PX;
 
   return (
-    <div
+    <button type="button"
+      data-segment-id={s.id}
+      aria-label={`${follow ? "Follow cursor" : "Fixed"} zoom at ${(span.startMs / 1000).toFixed(1)} seconds`}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
       className={`timeline-segment ${selected ? "is-selected" : ""}`}
       title={`${s.id} · ${s.position}${s.waypoints.length > 1 ? ` · ${s.waypoints.length} waypoints` : ""}`}
       onPointerDown={(e) => {
@@ -92,7 +96,7 @@ function SegmentRegion({
       <span className="timeline-segment-label"><Icon name="zoom" size={16} />{widthPx > 95 && <span>{follow ? "Follow" : "Zoom"}</span>}</span>
       {resizable && (
         <>
-          <div
+          <span
             className="timeline-region-handle"
             style={{
               position: "absolute",
@@ -103,7 +107,7 @@ function SegmentRegion({
               cursor: "ew-resize",
             }}
           />
-          <div
+          <span
             className="timeline-region-handle"
             style={{
               position: "absolute",
@@ -116,7 +120,7 @@ function SegmentRegion({
           />
         </>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -124,6 +128,7 @@ export function ZoomLane({
   durationMs,
   outputDurationMs,
   cuts,
+  clips,
   segments,
   keyframes,
   selection,
@@ -178,16 +183,16 @@ export function ZoomLane({
         too thin to click. A region also says the right thing: the markers of
         a shot sit inside it.
       */}
-      {segments.map((s) => {
-        const span = sourceSpanToOutput(s.startMs, s.endMs, durationMs, cuts);
-        if (span === null) return null;
+      {segments.flatMap((s) => sourceSpansToOutput(s.startMs, s.endMs, durationMs, cuts, clips).map((span) => {
 
+        const host = clips?.find(c => s.startMs < c.endMs && s.endMs > c.startMs
+          && sourceToOutput(Math.max(s.startMs, c.startMs), durationMs, cuts, clips) === span.startMs);
         const selected = selection?.kind === "segment" && selection.id === s.id;
         const follow = s.position === "follow";
 
         return (
           <SegmentRegion
-            key={s.id}
+            key={`${s.id}-${host?.id ?? "whole"}`}
             s={s}
             span={span}
             outputDurationMs={outputDurationMs}
@@ -198,10 +203,10 @@ export function ZoomLane({
             drag={drag}
           />
         );
-      })}
+      }))}
 
       {keyframes.map((k) => {
-        const out = sourceToOutput(k.tSourceMs, durationMs, cuts);
+        const out = sourceToOutput(k.tSourceMs, durationMs, cuts, clips);
         if (out === null) return null;
         // A follow shot emits a sample every 100ms — 43 of them on a
         // four-second hold — and drawing a marker for each buries the

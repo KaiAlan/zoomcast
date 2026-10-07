@@ -89,9 +89,11 @@ app.on("browser-window-created", (_, win) => {
       await click(button("Follow camera"));
       assert(await js("document.querySelector('[aria-label=\"Follow camera\"]').getAttribute('aria-pressed')==='true'"), "camera mode switch updates selected state");
       await click(button("Timeline undo"));
+      await click("document.querySelector('.timeline-segment.is-selected')");
       await click("document.querySelector('.segment-depth-presets button:nth-child(4)')");
       assert(await js("document.querySelector('.segment-depth-presets button:nth-child(4)').getAttribute('aria-pressed')==='true'"), "zoom preset highlights current selection");
       await click(button("Timeline undo"));
+      await click("document.querySelector('.timeline-segment.is-selected')");
       assert(await js("(()=>{const r=document.querySelector('.segment-popover').getBoundingClientRect();return r.left>=0 && r.right<=innerWidth})()"), "zoom popover fits viewport");
       await screenshot("ui-segment-popover-light.png");
       await js("window.zoomcast.getSettings().then(settings=>window.zoomcast.setSettings({...settings,theme:'dark'}))"); await pause(150);

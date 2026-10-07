@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { depthToScale } from "../../shared/zoom/keyframes";
 import type { ZoomSegment } from "../../shared/zoom/types";
 import { Icon } from "./Icon";
@@ -7,26 +8,15 @@ import { activeDepthPresetIndex, DEPTH_PRESETS } from "./segmentDepthPresets";
 
 export { DEPTH_PRESETS };
 
-/** The popover's fixed width, in px -- used to keep it inside the timeline. */
+/** The popover's fixed width, in px -- used to keep it inside the viewport. */
 const WIDTH = 280;
 
 type Props = {
   segment: ZoomSegment;
   /** `project.zoom.config.maxZoom` -- the ceiling `depthToScale` grades against. */
   maxZoom: number;
-  /**
-   * Where the segment's region starts, as a percentage across the timeline's
-   * own width -- the same number `ZoomLane` positions the region itself with
-   * (`msToPct` against output ms). Anchoring on this rather than measuring the
-   * region's DOM node keeps this component independent of `ZoomLane`'s
-   * internals.
-   */
-  leftPct: number;
-  /**
-   * The timeline's own wrapping element. A pointerdown inside it is left
-   * alone here -- see the outside-pointerdown effect below for why.
-   */
   timelineRef: React.RefObject<HTMLElement | null>;
+  layoutVersion: string;
   onDepthChange: (id: string, depth: number) => void;
   onCameraChange: (id: string, position: ZoomSegment["position"]) => void;
   onDelete: (id: string) => void;
@@ -34,20 +24,10 @@ type Props = {
   onDismiss: () => void;
 };
 
-/**
- * The per-shot editor: spec §11's Shot half, floated next to the segment it
- * edits instead of living in the Inspector's fixed sidebar.
- *
- * Positioned with plain percentage math against the timeline's width, not a
- * measurement of the segment's own DOM node -- there is no floating-ui here,
- * and `ZoomLane` already computes that same percentage to lay the region out,
- * so mirroring the formula is exact and needs no ref into a sibling
- * component's internals.
- */
 export function SegmentPopover({
   segment,
   maxZoom,
-  leftPct,
+  layoutVersion,
   timelineRef,
   onDepthChange,
   onCameraChange,
@@ -56,47 +36,62 @@ export function SegmentPopover({
   onDismiss,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 16, top: 16 });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll and timeline scale change the anchor position without changing its identity.
+  useLayoutEffect(() => {
+    const anchor = [...(timelineRef.current?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])]
+      .find(el => el.dataset.segmentId === segment.id);
+    const viewport = timelineRef.current?.querySelector(".timeline-viewport");
+    if (!anchor || !viewport || !ref.current) return;
+    const update = () => {
+      const box = anchor.getBoundingClientRect();
+      const visible = viewport.getBoundingClientRect();
+      const popup = ref.current?.getBoundingClientRect();
+      const width = popup?.width ?? WIDTH;
+      const height = popup?.height ?? 360;
+      const anchorX = Math.max(visible.left, Math.min(visible.right, box.left));
+      const left = Math.max(12, Math.min(window.innerWidth - width - 12, anchorX));
+      const toolbarTop = timelineRef.current?.getBoundingClientRect().top ?? box.top;
+      const above = Math.min(box.top, toolbarTop) - height - 10;
+      const top = Math.max(12, Math.min(window.innerHeight - height - 12, above >= 12 ? above : box.bottom + 10));
+      setPosition(previous => previous.left === left && previous.top === top ? previous : { left, top });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(viewport);
+    window.addEventListener("resize", update);
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); };
+  }, [segment.id, timelineRef, layoutVersion]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key === "Escape") onDismiss();
     };
 
-    /**
-     * Dismiss on a pointerdown outside the popover -- except inside the
-     * timeline, which task 9/10 already wired for selection: a click there
-     * either selects something else or clears the selection through the
-     * lanes' own empty-space deselect, and either outcome unmounts this
-     * popover on the next render because `selectedSegment` resolves to
-     * something else or to null. Calling `onDismiss` here too would race
-     * that state update -- both handlers fire off the same native event, and
-     * if this one lands second it would null out a selection the lane just
-     * set to a *different* segment.
-     */
     const onPointerDown = (e: PointerEvent): void => {
       const target = e.target;
       if (!(target instanceof Node)) return;
       if (ref.current?.contains(target)) return;
-      if (timelineRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest("[data-segment-id]")) return;
       onDismiss();
     };
 
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerdown", onPointerDown, true);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [onDismiss, timelineRef]);
+  }, [onDismiss]);
 
   const depth = segment.waypoints[0]?.depth ?? 0;
   const scale = depthToScale(depth, maxZoom);
   const activeIndex = activeDepthPresetIndex(depth);
   const seconds = (segment.endMs - segment.startMs) / 1000;
 
-  return (
+  return createPortal(
     <div ref={ref} className="segment-popover" role="dialog" aria-label="Zoom segment controls"
-      style={{ left: `clamp(0px, ${leftPct}%, calc(100% - ${WIDTH}px))`, width: WIDTH }}>
+      style={{ ...position, width: WIDTH }}>
       <header className="segment-popover-header"><span><Icon name="zoom" size={17} />Zoom segment</span><button type="button" className="icon-button" aria-label="Close zoom controls" onClick={onDismiss}><Icon name="close" size={15} /></button></header>
       <fieldset className="segmented-control segment-camera"><legend className="sr-only">Camera behavior</legend>
         {(["fixed", "follow"] as const).map(position => <button key={position} type="button" aria-label={`${position === "fixed" ? "Fixed" : "Follow"} camera`} aria-pressed={segment.position === position} onClick={() => onCameraChange(segment.id, position)}>{position === "fixed" ? "Fixed" : "Follow cursor"}</button>)}
@@ -108,6 +103,6 @@ export function SegmentPopover({
       </fieldset>
       <p className="segment-popover-meta">{seconds.toFixed(1)} seconds · {segment.waypoints.length} {segment.waypoints.length === 1 ? "focus point" : "focus points"}</p>
       <footer className="segment-popover-actions"><button type="button" onClick={() => onReset(segment.id)}><Icon name="restart" size={14} />Reset to auto</button><button type="button" className="segment-delete" onClick={() => onDelete(segment.id)}><Icon name="trash" size={14} />Delete</button></footer>
-    </div>
+    </div>, document.body
   );
 }

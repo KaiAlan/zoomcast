@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { dragKindAt, pxToFrac, type DragKind } from "./geometry";
 
 type Active = {
@@ -59,6 +59,8 @@ type Opts = {
  * version silently used pointerdown-era values for a whole gesture.
  */
 export function useRegionDrag(opts: Opts) {
+  const cleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cleanupRef.current?.(), []);
   const active = useRef<Active | null>(null);
 
   // Read at call time, never capture time -- see the note above.
@@ -72,7 +74,9 @@ export function useRegionDrag(opts: Opts) {
     // for a press that landed on a region.
     e.stopPropagation();
 
+    cleanupRef.current?.();
     const region = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
     const regionBox = region.getBoundingClientRect();
     const track = region.parentElement;
     if (track === null) return;
@@ -89,6 +93,7 @@ export function useRegionDrag(opts: Opts) {
     };
 
     const onPointerMove = (ev: globalThis.PointerEvent): void => {
+      if (ev.pointerId !== pointerId) return;
       const a = active.current;
       if (a === null) return;
 
@@ -104,17 +109,23 @@ export function useRegionDrag(opts: Opts) {
       optsRef.current.onResize(a.id, a.kind === "resize-start" ? "start" : "end", tFrac);
     };
 
-    const onPointerUp = (): void => {
+    const onPointerUp = (event: globalThis.PointerEvent): void => {
+      if (event.pointerId !== pointerId) return;
       active.current = null;
       optsRef.current.onCommit();
-      region.removeEventListener("pointermove", onPointerMove);
-      region.removeEventListener("pointerup", onPointerUp);
-      region.removeEventListener("pointercancel", onPointerUp);
+      cleanup();
     };
 
-    region.addEventListener("pointermove", onPointerMove);
-    region.addEventListener("pointerup", onPointerUp);
-    region.addEventListener("pointercancel", onPointerUp);
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerUp, true);
+      window.removeEventListener("pointercancel", onPointerUp, true);
+      cleanupRef.current = null;
+    };
+    cleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerUp, true);
+    window.addEventListener("pointercancel", onPointerUp, true);
   };
 
   return { onPointerDown };

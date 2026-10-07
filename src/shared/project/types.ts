@@ -2,6 +2,9 @@ import type { ZoomConfig, ZoomKeyframe, ZoomSegment } from "../zoom/types";
 
 export type Cut = { id: string; startMs: number; endMs: number };
 
+/** Surviving source ranges, in playback order. Absent in legacy projects. */
+export type SourceClip = { id: string; startMs: number; endMs: number };
+
 export type BackgroundKind = "gradient" | "color" | "image" | "hidden";
 export type BlurStrength = "none" | "moderate" | "strong";
 
@@ -91,6 +94,7 @@ export type Project = {
   version: 1;
   bundleId: string;
   cuts: Cut[];
+  clips?: SourceClip[];
   zoom: {
     config: ZoomConfig;
     /** The persisted, editable unit; keyframes are derived from these. */

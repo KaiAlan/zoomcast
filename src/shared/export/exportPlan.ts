@@ -1,5 +1,5 @@
 import { outputDurationMs, outputToSource } from "../project/timeline";
-import type { Cut } from "../project/types";
+import type { Cut, SourceClip } from "../project/types";
 
 export type ExportFrame = {
   index: number;
@@ -18,8 +18,9 @@ export function planExportFrames(
   durationMs: number,
   cuts: Cut[],
   fps: number,
+  clips?: SourceClip[],
 ): ExportFrame[] {
-  const outMs = outputDurationMs(durationMs, cuts);
+  const outMs = outputDurationMs(durationMs, cuts, clips);
   const count = Math.floor((outMs * fps) / 1000);
   const frames: ExportFrame[] = [];
 
@@ -28,7 +29,7 @@ export function planExportFrames(
     frames.push({
       index,
       tOutputMs,
-      tSourceMs: outputToSource(tOutputMs, durationMs, cuts),
+      tSourceMs: outputToSource(tOutputMs, durationMs, cuts, clips),
     });
   }
 

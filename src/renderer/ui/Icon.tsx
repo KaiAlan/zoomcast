@@ -22,6 +22,8 @@ const paths = {
   restart: "M5 5v14 M18 5l-10 7 10 7V5z",
   undo: "M9 5L4 10l5 5 M4 10h9a7 7 0 0 1 7 7",
   redo: "M15 5l5 5-5 5 M20 10h-9a7 7 0 0 0-7 7",
+  scissors: "M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M8 8l13 13 M8 16L21 3",
+  video: "M3 5h13v14H3z M16 9l5-3v12l-5-3",
   save: "M5 3h12l4 4v14H3V3h2z M7 3v6h10V3 M7 21v-8h10v8",
 } as const;
 export type IconName = keyof typeof paths;

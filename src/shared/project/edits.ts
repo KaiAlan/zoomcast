@@ -1,7 +1,8 @@
+import { MIN_CLIP_MS } from "./clips";
 import { cutLaneSpan } from "./cutLane";
 import type { ZoomConfig, ZoomSegment, ZoomWaypoint } from "../zoom/types";
 import { normalizeCuts } from "./cuts";
-import { outputDurationMs, outputToSource, sourceSpanToOutput } from "./timeline";
+import { clipsFor, outputDurationMs, outputToSource, sourceSpanToOutput } from "./timeline";
 import type { Cut, Project } from "./types";
 
 /** Minimum editable span: an entrance and an exit, with no overlap. */
@@ -48,6 +49,23 @@ export function moveSegment(
   deltaMs: number,
   durationMs: number,
 ): Project {
+  if (p.clips) {
+    const target = p.zoom.segments.find(s => s.id === id);
+    if (!target) return p;
+    const requested = target.startMs + deltaMs;
+    const host = clipsFor(durationMs, p.cuts, p.clips).find(c => requested >= c.startMs && requested < c.endMs);
+    if (!host) return p;
+    const length = target.endMs - target.startMs;
+    const others = p.zoom.segments.filter(s => s.id !== id && s.startMs < host.endMs && s.endMs > host.startMs);
+    const prevEnd = Math.max(host.startMs, ...others.filter(s => s.endMs <= requested).map(s => s.endMs));
+    const nextStart = Math.min(host.endMs, ...others.filter(s => s.endMs > requested).map(s => s.startMs));
+    if (nextStart - prevEnd < length) return p;
+    const startMs = Math.max(prevEnd, Math.min(nextStart - length, requested));
+    const delta = startMs - target.startMs;
+    return { ...p, zoom: { ...p.zoom, segments: p.zoom.segments.map(s => s.id !== id ? s : {
+      ...s, startMs, endMs: startMs + length, pinned: true, waypoints: s.waypoints.map(w => ({ ...w, tMs: w.tMs + delta }))
+    }).sort((a, b) => a.startMs - b.startMs) } };
+  }
   return replaceSegment(
     p,
     id,
@@ -157,9 +175,13 @@ export function resizeSegment(
   return replaceSegment(
     p,
     id,
-    (s, { prevEnd, nextStart }) => {
+    (s, neighbours) => {
+      const host = p.clips ? clipsFor(durationMs, p.cuts, p.clips).find(c => s.startMs >= c.startMs && s.endMs <= c.endMs) : undefined;
+      const prevEnd = Math.max(neighbours.prevEnd, host?.startMs ?? 0);
+      const nextStart = Math.min(neighbours.nextStart, host?.endMs ?? durationMs);
+      const floor = p.clips || s.origin === "manual" ? MIN_CLIP_MS : Math.min(min, s.endMs - s.startMs);
       if (edge === "start") {
-        const startMs = Math.max(prevEnd, Math.min(s.endMs - min, tMs));
+        const startMs = Math.max(prevEnd, Math.min(s.endMs - floor, tMs));
         return {
           ...s,
           startMs,
@@ -168,7 +190,7 @@ export function resizeSegment(
         };
       }
 
-      const endMs = Math.min(nextStart, Math.max(s.startMs + min, tMs));
+      const endMs = Math.min(nextStart, Math.max(s.startMs + floor, tMs));
       return {
         ...s,
         endMs,
@@ -200,7 +222,7 @@ export function segmentDragToSource(
 ): Project {
   const s = p.zoom.segments.find((x) => x.id === id);
   if (s === undefined) return p;
-  const targetSourceMs = outputToSource(targetStartOutputMs, durationMs, p.cuts);
+  const targetSourceMs = outputToSource(targetStartOutputMs, durationMs, p.cuts, p.clips);
   return moveSegment(p, id, targetSourceMs - s.startMs, durationMs);
 }
 
@@ -223,7 +245,7 @@ export function segmentResizeToSource(
   tOutputMs: number,
   durationMs: number,
 ): Project {
-  return resizeSegment(p, id, edge, outputToSource(tOutputMs, durationMs, p.cuts), durationMs);
+  return resizeSegment(p, id, edge, outputToSource(tOutputMs, durationMs, p.cuts, p.clips), durationMs);
 }
 
 /**
@@ -266,7 +288,7 @@ export function setSegmentCamera(
 export function deleteSegment(p: Project, id: string): Project {
   const segments = p.zoom.segments.filter((s) => s.id !== id);
   if (segments.length === p.zoom.segments.length) return p;
-  return { ...p, zoom: { ...p.zoom, segments } };
+  return { ...p, zoom: { ...p.zoom, segments, keyframes: [] } };
 }
 
 /** Hand the shot back to the planner. The caller must re-plan afterwards. */

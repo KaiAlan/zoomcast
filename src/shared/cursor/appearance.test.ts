@@ -4,6 +4,9 @@ import { cursorArt, cursorPaint } from "./appearance";
 import { CURSOR_SHAPES } from "./shapes";
 
 describe("selected cursor glyphs", () => {
+  it("fills the outline cursor black inside its white border", () => {
+    expect(cursorPaint("outline")).toEqual({ fill: "#000000", stroke: "#ffffff", width: 2 });
+  });
   it("keeps dot, rounded, and outline selections when hovering links or text", () => {
     for (const shape of Object.keys(CURSOR_SHAPES) as CursorShape[]) {
       for (const appearance of ["dot", "rounded", "outline"] as const) {

@@ -153,6 +153,7 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     // truth, and a copied project directory would otherwise keep a stale id.
     bundleId,
     cuts: Array.isArray(raw.cuts) ? migrateCuts(raw.cuts as unknown[]) : base.cuts,
+    ...(Array.isArray(raw.clips) ? { clips: migrateCuts(raw.clips) } : {}),
     zoom: {
       config: zoomConfig(zoom.config),
       // A project written before phase C has keyframes but no segments. It
