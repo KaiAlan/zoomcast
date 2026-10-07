@@ -94,6 +94,8 @@ export type ZoomcastApi = {
   listRecordings: () => Promise<RecordingSummary[]>;
   /** Display label for the global record shortcut, so the UI cannot drift. */
   recordHotkey: () => Promise<string>;
+  shortcutState: () => Promise<import("./shortcut").ShortcutState>;
+  setStartWithWindows: (enabled: boolean) => Promise<import("./shortcut").ShortcutState>;
   toggleRecording: () => Promise<void>;
   isRecording: () => Promise<boolean>;
   recording: RecordingEvents;

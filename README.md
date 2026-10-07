@@ -19,9 +19,10 @@ Requires Windows 10 or 11, x64. The current beta installer is unsigned. Download
 
 ## Use
 
-Press **Ctrl+Alt+Z** to start or stop recording. The editor opens after recording. Press **Space** to play or pause, edit the timeline, and choose **Export**.
+Press **Ctrl+Alt+R** to open recording controls, then choose Record or Stop. The Windows installer adds a **zoomcast Recorder** Start menu shortcut with these keys, so they also launch Zoomcast after Quit. If another app uses the same keys, release them there. Development/unpacked builds require Zoomcast to be running and report conflicts in Settings instead of silently changing keys. The editor opens after recording. Press **Space** to play or pause, edit the timeline, and choose **Export**.
 
 Zoomcast runs in the system tray. Closing the editor keeps the recording hotkey available. Quit from the tray menu. Recordings are stored locally in `%LOCALAPPDATA%\zoomcast\recordings`.
+Enable **Start with Windows** in Settings or the tray menu to start quietly at sign-in for faster recorder access. It stays off until you enable it.
 
 Choose **Save project** or press **Ctrl+S** to keep your edits with the recording. Reopening preserves your timeline, including deleted zoom shots.
 

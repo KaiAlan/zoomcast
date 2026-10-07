@@ -16,7 +16,7 @@ import { pickEncoder } from "./ffmpeg";
 import { ExportFrameStream } from "./exportFrameStream";
 import { ExportSession } from "./exportRunner";
 import { logDiag } from "./log";
-import { listRecordings, recordHotkeyLabel, showSettings, toggleRecording } from "./recording";
+import { changeAutostart, listRecordings, recordHotkeyLabel, shortcutState, showSettings, toggleRecording } from "./recording";
 
 import { getLibrary, createLibraryFolder, moveLibraryRecording, archiveLibraryRecording, deleteLibraryRecording, libraryThumbnail } from "./library";
 import { prepareRecorderFolder, showRecorderWidget } from "./recorderWidget";
@@ -113,6 +113,8 @@ export function registerIpc(): void {
 
   ipcMain.handle("recording:list", () => listRecordings());
   ipcMain.handle("recording:hotkey", () => recordHotkeyLabel());
+  ipcMain.handle("shortcut:state", () => shortcutState());
+  ipcMain.handle("shortcut:startup", (_event, enabled: boolean) => changeAutostart(enabled));
   ipcMain.handle("recording:toggle", () => toggleRecording());
   ipcMain.handle("recording:isActive", () => isRecording());
 
