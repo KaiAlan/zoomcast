@@ -88,6 +88,7 @@ const api: ZoomcastApi = {
   chooseBackgroundImage: (dir: string) =>
     ipcRenderer.invoke("background:choose", dir) as Promise<string | null>,
 
+  audioHealth: (role, health) => ipcRenderer.send("audio:health", role, health),
   audioChunk: (role: "mic" | "system", chunk: Uint8Array) =>
     ipcRenderer.invoke("audio:chunk", role, chunk) as Promise<void>,
   webcamChunk: (chunk: Uint8Array) => ipcRenderer.invoke("webcam:chunk", chunk) as Promise<void>,
@@ -106,6 +107,7 @@ const api: ZoomcastApi = {
     onError: (fn) => on<string>("recording:error", fn),
   },
 
+  openMediaSettings: device => ipcRenderer.invoke("settings:media-permissions", device),
   openSettings: () => ipcRenderer.invoke("settings:open") as Promise<void>,
   getSettings: () => ipcRenderer.invoke("settings:get") as Promise<Settings>,
   onSettingsChanged: (fn: (settings: Settings) => void) => on("settings:changed", fn),

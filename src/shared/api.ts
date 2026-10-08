@@ -3,6 +3,7 @@ import type { ExportArgsOptions } from "./export/ffmpegArgs";
 import type { Manifest } from "./bundle/manifest";
 import type { TelemetryEvent } from "./bundle/types";
 import type { Project } from "./project/types";
+import type { AudioHealth } from "./recorder";
 import type { Settings } from "./settings/types";
 
 /** Media served over the private zc:// scheme, ready to hand to fetch(). */
@@ -89,6 +90,7 @@ export type ZoomcastApi = {
   chooseBackgroundImage: (dir: string) => Promise<string | null>;
 
   /** Used only by the hidden audio-capture renderer. */
+  audioHealth: (role: "mic" | "system", health: AudioHealth) => void;
   audioChunk: (role: "mic" | "system", chunk: Uint8Array) => Promise<void>;
   webcamChunk: (chunk: Uint8Array) => Promise<void>;
 
@@ -102,6 +104,7 @@ export type ZoomcastApi = {
   recording: RecordingEvents;
 
   /** App-level settings. Separate from Project, which lives inside a bundle. */
+  openMediaSettings: (device: "microphone" | "camera") => Promise<void>;
   openSettings: () => Promise<void>;
   getSettings: () => Promise<Settings>;
   onSettingsChanged: (fn: (settings: Settings) => void) => () => void;

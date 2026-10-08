@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fixture": "tsx tools/make-fixture.ts",
+    "verify:audio-devices": "electron tools/verify-audio-devices.cjs",
     "verify:ui": "electron tools/verify-ui.cjs",
     "verify:project-save": "electron tools/verify-project-save.cjs",
     "verify:feedback": "electron tools/verify-feedback.cjs",

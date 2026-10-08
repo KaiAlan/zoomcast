@@ -26,6 +26,10 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     theme: raw.theme === "light" || raw.theme === "dark" || raw.theme === "system" ? raw.theme : base.theme,
     captureFps: captureFps(raw.captureFps, base.captureFps),
+    microphoneDeviceId: typeof raw.microphoneDeviceId === "string" ? raw.microphoneDeviceId : base.microphoneDeviceId,
+    noiseSuppression: typeof raw.noiseSuppression === "boolean" ? raw.noiseSuppression : base.noiseSuppression,
+    echoCancellation: typeof raw.echoCancellation === "boolean" ? raw.echoCancellation : base.echoCancellation,
+    autoGainControl: typeof raw.autoGainControl === "boolean" ? raw.autoGainControl : base.autoGainControl,
     webcamEnabled: typeof raw.webcamEnabled === "boolean" ? raw.webcamEnabled : base.webcamEnabled,
     webcamDeviceId: typeof raw.webcamDeviceId === "string" ? raw.webcamDeviceId : base.webcamDeviceId,
   };

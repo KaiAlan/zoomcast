@@ -290,6 +290,10 @@ app.on("browser-window-created", (_, win) => {
       const settings = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith("#settings"));
       assert(Boolean(settings), "library opens settings window");
       const settingsJs = code => settings.webContents.executeJavaScript(code);
+      for (let i = 0; i < 50; i++) {
+        if (await settingsJs("document.querySelectorAll('.settings-sidebar nav button').length===5")) break;
+        await pause(100);
+      }
       const settingsNav = async name => { await settingsJs(`document.querySelector('.settings-sidebar button[aria-current="page"]');Array.from(document.querySelectorAll('.settings-sidebar nav button')).find(b=>b.textContent.trim()===${JSON.stringify(name)}).click();`); await pause(); };
       const settingsSearch = async text => { await settingsJs(`(()=>{const e=document.querySelector('[aria-label="Search settings"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(text)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`); await pause(); };
       assert(await settingsJs("document.querySelectorAll('.settings-sidebar nav button').length===5 && document.querySelector('.settings-sidebar [aria-current=page]').textContent==='General'"), "settings opens with five clear sections and General selected");
@@ -298,7 +302,7 @@ app.on("browser-window-created", (_, win) => {
       await settingsNav("Recording");
       assert(await settingsJs("document.body.innerText.includes('Record webcam')"), "recording settings exposes webcam capture");
       await settingsJs("document.querySelector('[aria-label=\"Record webcam\"]').click()"); await pause();
-      assert(await settingsJs("Boolean(document.querySelector('[aria-label=\"Camera\"]'))"), "enabling webcam reveals camera selection");
+      assert(await settingsJs("Boolean(document.querySelector('[aria-label=\"Camera\"]'))"), "recording settings includes camera selection");
       await settingsJs("(()=>{const e=document.querySelector('[aria-label=\"Capture frame rate\"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(e,'30');e.dispatchEvent(new Event('change',{bubbles:true}));})()"); await pause();
       assert(JSON.parse(fs.readFileSync(path.join(profile,"settings.json"),"utf8")).captureFps===30 && JSON.parse(fs.readFileSync(path.join(profile,"settings.json"),"utf8")).webcamEnabled, "recording controls save automatically to disk");
       const settingsFile = path.join(profile,"settings.json"), savedSettingsFile = `${settingsFile}.saved`;

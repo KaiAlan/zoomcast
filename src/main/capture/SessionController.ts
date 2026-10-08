@@ -17,7 +17,7 @@ import { recordingsRoot } from "../recordingsRoot";
 import { LibraryStore } from "../libraryStore";
 import { loadSettings } from "../settingsStore";
 import { WebcamRecorder } from "./WebcamRecorder";
-import type { RecorderOptions } from "../../shared/recorder";
+import type { AudioHealth, RecorderOptions } from "../../shared/recorder";
 import { resolveRecordingTarget, windowRegion } from "./recordingTarget";
 
 /**
@@ -57,6 +57,9 @@ type Active = {
 };
 
 let active: Active | null = null;
+let audioHealth: Partial<Record<AudioRole, AudioHealth>> = {};
+export function recordingAudioHealth(): Partial<Record<AudioRole, AudioHealth>> { return active?.audio?.health ?? audioHealth; }
+
 let cachedTarget: CaptureTarget | null = null;
 let cachedEncoder: string | null = null;
 
@@ -101,6 +104,7 @@ export async function startRecording(options?: RecorderOptions): Promise<void> {
   // it after the screen would silently clip the head of every take. Starting it
   // earlier makes its offsets negative, which is the same convention
   // toStreamLocalMs uses and which -itsoffset accepts directly.
+  audioHealth = {};
   let audio: AudioRecorder | null = null;
   let audioStarted: Array<{ role: AudioRole; startedAtUnixMs: number }> = [];
 
@@ -108,10 +112,14 @@ export async function startRecording(options?: RecorderOptions): Promise<void> {
     const roles: AudioRole[] = options === undefined ? ["mic", "system"] : [...(options.mic ? ["mic" as const] : []), ...(options.system ? ["system" as const] : [])];
     if (roles.length > 0) {
       audio = await AudioRecorder.open(dir);
-      audioStarted = await audio.start(roles);
+      audioStarted = await audio.start(roles, { ...settings, microphoneDeviceId: options?.microphoneDeviceId ?? settings.microphoneDeviceId });
     }
   } catch (err) {
     logDiag("audio:start", err);
+    await audio?.stop(Date.now(), audioStarted);
+    const message = "Audio could not start. Stop the take and check microphone access in Settings.";
+    if (options?.mic ?? true) audioHealth.mic = { status: "failed", level: 0, message };
+    if (options?.system ?? true) audioHealth.system = { status: "failed", level: 0, message };
     audio = null;
     audioStarted = [];
   }

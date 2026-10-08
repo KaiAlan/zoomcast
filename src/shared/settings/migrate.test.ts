@@ -30,6 +30,7 @@ describe("normalizeSettings", () => {
 
   it("ignores unknown keys rather than carrying them", () => {
     expect(normalizeSettings({ captureFps: 30, somethingOld: true })).toEqual({
+      ...defaultSettings(),
       theme: "light",
       captureFps: 30,
       webcamEnabled: false,
@@ -46,4 +47,10 @@ describe("normalizeSettings", () => {
 it("preserves theme preference and defaults old or invalid files to light", () => {
   for (const theme of ["light", "dark", "system"]) expect(normalizeSettings({ theme }).theme).toBe(theme);
   for (const theme of [undefined, "invalid", null, true]) expect(normalizeSettings({ theme }).theme).toBe("light");
+});
+
+ it("preserves microphone preferences and safely migrates older settings", () => {
+  const audio = { microphoneDeviceId: "usb-mic", noiseSuppression: true, echoCancellation: true, autoGainControl: true };
+  expect(normalizeSettings(audio)).toMatchObject(audio);
+  expect(normalizeSettings({ microphoneDeviceId: 3, noiseSuppression: "true", echoCancellation: null, autoGainControl: 1 })).toEqual(defaultSettings());
 });

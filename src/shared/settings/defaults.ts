@@ -14,5 +14,5 @@ import type { Settings } from "./types";
  * already CPU-bound. Real 60fps capture needs ddagrab, not this setting.
  */
 export function defaultSettings(): Settings {
-  return { theme: "light", captureFps: 60, webcamEnabled: false, webcamDeviceId: "" };
+  return { theme: "light", captureFps: 60, webcamEnabled: false, webcamDeviceId: "", microphoneDeviceId: "", noiseSuppression: false, echoCancellation: false, autoGainControl: false };
 }

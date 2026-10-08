@@ -29,7 +29,7 @@ function SourcePreview({ source }: { source?: RecorderSource }) {
 export function RecorderWidget() {
   const shell = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<RecorderState>({ phase: "idle", paused: false, cutting: false, elapsedMs: 0, countdownLeft: 0, error: null });
-  const [options, setOptions] = useState<RecorderOptions>({ sourceId: "", countdown: 3, mic: false, system: false, webcam: false, webcamDeviceId: "" });
+  const [options, setOptions] = useState<RecorderOptions>({ sourceId: "", countdown: 3, mic: false, system: false, webcam: false, webcamDeviceId: "", microphoneDeviceId: "" });
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [sources, setSources] = useState<RecorderSource[]>([]);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -38,10 +38,12 @@ export function RecorderWidget() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     document.body.classList.add("recorder-window");
-    void window.zoomcast.recorder.state().then(setState);
-    void window.zoomcast.getSettings().then(s => setOptions(o => ({ ...o, webcam: s.webcamEnabled, webcamDeviceId: s.webcamDeviceId })));
-    const unsubscribe = window.zoomcast.recorder.onState(setState);
-    return () => { unsubscribe(); document.body.classList.remove("recorder-window"); };
+    const receiveState = (next: RecorderState) => setState(next);
+    void window.zoomcast.recorder.state().then(receiveState);
+    void window.zoomcast.getSettings().then(s => setOptions(o => ({ ...o, webcam: s.webcamEnabled, webcamDeviceId: s.webcamDeviceId, microphoneDeviceId: s.microphoneDeviceId })));
+    const unsubscribe = window.zoomcast.recorder.onState(receiveState);
+    const unsubscribeSettings = window.zoomcast.onSettingsChanged(s => setOptions(o => ({ ...o, webcamDeviceId: s.webcamDeviceId, microphoneDeviceId: s.microphoneDeviceId })));
+    return () => { unsubscribe(); unsubscribeSettings(); document.body.classList.remove("recorder-window"); };
   }, []);
   useEffect(() => {
     const el = shell.current;
@@ -67,6 +69,17 @@ export function RecorderWidget() {
     window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", close); window.removeEventListener("pointerdown", outside); window.removeEventListener("blur", blur); };
   }, [panel]);
+  useEffect(() => {
+    if (panel !== "more") return;
+    let live = true;
+    const refresh = () => { void navigator.mediaDevices.enumerateDevices().then(next => { if (live) setDevices(next); }).catch(e => setError(String(e))); };
+    refresh(); navigator.mediaDevices.addEventListener("devicechange", refresh);
+    return () => { live = false; navigator.mediaDevices.removeEventListener("devicechange", refresh); };
+  }, [panel]);
+  const selectDevice = (field: "microphoneDeviceId" | "webcamDeviceId", value: string) => {
+    setOptions(o => ({ ...o, [field]: value }));
+    void window.zoomcast.getSettings().then(settings => window.zoomcast.setSettings({ ...settings, [field]: value })).catch(() => setError("Device choice could not be saved. Try again in Settings."));
+  };
   const idle = state.phase === "idle";
   const recording = state.phase === "recording";
   const act = (action: RecorderAction) => {
@@ -82,10 +95,11 @@ export function RecorderWidget() {
     setPanel(panel === next ? null : next);
     if (next === "source") setSourceQuery("");
     if (next === "source") refreshSources();
-    if (next === "more") void navigator.mediaDevices.enumerateDevices().then(d => setDevices(d.filter(x => x.kind === "videoinput"))).catch(e => setError(String(e)));
   };
   const minutes = Math.floor(state.elapsedMs / 60000).toString().padStart(2, "0");
   const seconds = Math.floor(state.elapsedMs / 1000 % 60).toString().padStart(2, "0");
+  const micHealth = state.audioHealth?.mic;
+  const warning = recording ? Object.entries(state.audioHealth ?? {}).filter(([, health]) => health?.status === "failed" || health?.status === "muted").map(([role, health]) => `${role === "mic" ? "Microphone" : "System audio"}: ${health?.message}`).join(" ") : "";
   const selected = sources.find(s => s.id === options.sourceId);
   return <div className="recorder-shell" ref={shell}>
     <div className={`recorder-bar ${idle ? "" : "is-capturing"}`} role="toolbar" aria-label="Recording controls">
@@ -99,6 +113,7 @@ export function RecorderWidget() {
         <button type="button" className="recorder-icon recorder-delay" title="Countdown" aria-label="Countdown" aria-expanded={panel === "timer"} aria-controls="recorder-timer-panel" onClick={() => togglePanel("timer")}><Icon name="timer"/><small>{options.countdown}s</small></button>
       </> : <>
         <span className="recorder-time"><i className={state.paused ? "paused" : ""}/>{recording || state.phase === "stopping" ? `${minutes}:${seconds}` : state.phase === "countdown" ? `${state.countdownLeft}s` : "Starting…"}<small>{state.paused ? "Paused" : state.cutting ? "Marking cut" : state.phase === "recording" ? "Recording" : state.phase === "stopping" ? "Saving…" : "Get ready"}</small></span>
+        {recording && micHealth && <span className={`recorder-mic-health ${micHealth.status}`} role="img" aria-label={`Microphone status: ${micHealth.message}`} title={micHealth.message}><Icon name="mic" off={micHealth.status === "failed" || micHealth.status === "muted"}/><i />{micHealth.status === "recording" && <meter aria-label="Recording microphone level" min={0} max={1} value={micHealth.level} />}</span>}
         <button type="button" className={`recorder-icon ${state.paused ? "enabled" : ""}`} disabled={!recording} aria-label={state.paused ? "Resume" : "Pause"} title={state.paused ? "Resume recording" : "Pause — omit time until resumed"} onClick={() => act("pause")}><Icon name={state.paused ? "play" : "pause"}/></button>
         <button type="button" className={`recorder-icon ${state.cutting ? "cutting" : ""}`} disabled={!recording} aria-label={state.cutting ? "End cut" : "Begin cut"} title={state.cutting ? "Finish marking the section to remove" : "Mark a section to remove"} onClick={() => act("cut")}><Icon name="cut"/></button>
       </>}
@@ -124,7 +139,11 @@ export function RecorderWidget() {
       <p>Keep the selected app window restored and at the same size during recording.</p>
     </div>}
     {panel === "timer" && <div className="recorder-panel" id="recorder-timer-panel"><header>Start recording after</header><div className="recorder-choices">{([0, 3, 5, 10] as const).map(n => <button type="button" className={options.countdown === n ? "selected" : ""} aria-pressed={options.countdown === n} key={n} onClick={() => { setOptions(o => ({ ...o, countdown: n })); setPanel(null); }}>{n === 0 ? "No delay" : `${n} seconds`}</button>)}</div></div>}
-    {panel === "more" && <div className="recorder-panel" id="recorder-more-panel"><header>Recording options</header><label>Camera device<select disabled={!idle} value={options.webcamDeviceId} onChange={e => setOptions(o => ({ ...o, webcamDeviceId: e.target.value }))}><option value="">Default camera</option>{devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select></label><div className="recorder-choices"><button type="button" onClick={() => act("editor")}>Open library / editor</button><button type="button" onClick={() => void window.zoomcast.openSettings()}>Settings</button></div><p>The toolbar stays on your desktop and is excluded from your video.</p></div>}
+    {panel === "more" && <div className="recorder-panel" id="recorder-more-panel"><header>Recording options</header>
+      {([ ["microphoneDeviceId", "Microphone device", "audioinput", "microphone"], ["webcamDeviceId", "Camera device", "videoinput", "camera"] ] as const).map(([field, label, kind, name]) => <label key={field}>{label}<select aria-label={label} disabled={!idle} value={options[field] ?? ""} onChange={event => selectDevice(field, event.target.value)}><option value="">Default {name}</option>{devices.filter(d => d.kind === kind && d.deviceId !== "default" && d.deviceId !== "communications").map((device, i) => <option key={device.deviceId} value={device.deviceId}>{device.label || `${name === "camera" ? "Camera" : "Microphone"} ${i + 1}`}</option>)}{options[field] && !devices.some(d => d.deviceId === options[field]) && <option value={options[field]}>Selected {name} (disconnected)</option>}</select></label>)}
+      <div className="recorder-choices"><button type="button" onClick={() => act("editor")}>Open library / editor</button><button type="button" onClick={() => void window.zoomcast.openSettings()}>Settings</button></div><p>Test devices and microphone access in Settings → Recording. Device choices apply to the next take.</p></div>}
+    {warning && <div className="recorder-error" role="alert">{warning}</div>}
+    {recording && !warning && micHealth?.status === "quiet" && !state.paused && <div className="recorder-audio-hint" role="status">{micHealth.message}</div>}
     {(error || state.error) && <div className="recorder-error" role="alert">{error || state.error}</div>}
   </div>;
 }

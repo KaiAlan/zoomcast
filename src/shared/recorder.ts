@@ -8,6 +8,7 @@ export type RecorderOptions = {
   system: boolean;
   webcam: boolean;
   webcamDeviceId: string;
+  microphoneDeviceId?: string;
   folderId?: string | null;
 };
 export type RecorderSource = { id: string; name: string; kind: "screen" | "window"; thumbnail?: string; isPrimary?: boolean };
@@ -18,6 +19,7 @@ export type RecorderState = {
   elapsedMs: number;
   countdownLeft: number;
   error: string | null;
+  audioHealth?: Partial<Record<"mic" | "system", AudioHealth>>;
   folderId?: string | null;
   folderName?: string;
 };
@@ -33,3 +35,9 @@ export type RecorderApi = {
 export function recorderCuts(cuts: Cut[], durationMs: number): Cut[] {
   return normalizeCuts(cuts, durationMs);
 }
+
+export type AudioHealth = {
+  status: "starting" | "recording" | "quiet" | "muted" | "failed";
+  level: number;
+  message: string;
+};

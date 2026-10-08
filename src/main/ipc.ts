@@ -2,7 +2,7 @@ import { registerCaptionIpc } from "./captions/ipc";
 import { registerExportJobs } from "./exportJobs";
 import { openFeedback } from "./feedback";
 import { IMAGE_PRESETS, presetProjectFile } from "../shared/style/imagePresets";
-import { BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, type WebContents } from "electron";
+import { BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, shell, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { copyFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
@@ -106,6 +106,10 @@ export function registerIpc(): void {
     return name;
   });
 
+  ipcMain.handle("settings:media-permissions", (_event, device: unknown) => {
+    if (device !== "microphone" && device !== "camera") throw new Error("Unknown media device");
+    return shell.openExternal(device === "camera" ? "ms-settings:privacy-webcam" : "ms-settings:privacy-microphone");
+  });
   ipcMain.handle("settings:open", () => showSettings());
   ipcMain.handle("settings:get", () => loadSettings());
   ipcMain.handle("settings:set", (_event, settings: Settings) => {

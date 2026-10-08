@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { RecorderAction, RecorderOptions, RecorderState } from "../shared/recorder";
 import { recorderCuts } from "../shared/recorder";
 import type { Cut } from "../shared/project/types";
-import { isRecording, recordingClockBase, recordingDisplayBounds, startRecording, stopRecording } from "./capture/SessionController";
+import { isRecording, recordingAudioHealth, recordingClockBase, recordingDisplayBounds, startRecording, stopRecording } from "./capture/SessionController";
 import { recorderSources } from "./capture/recordingTarget";
 import { openBundle, saveProject } from "./bundleIo";
 import { showRecordingBorder } from "./overlays";
@@ -29,6 +29,7 @@ function broadcast(channel: string, value: unknown): void {
 }
 function push(): void {
   if (state.phase === "recording") {
+    state.audioHealth = recordingAudioHealth();
     const t = now();
     const removed = recorderCuts([...cuts, ...(pauseAt === null ? [] : [{ id: "pending", startMs: pauseAt, endMs: t }])], t);
     state.elapsedMs = t - removed.reduce((sum, c) => sum + c.endMs - c.startMs, 0);
@@ -101,6 +102,7 @@ export async function recorderAction(action: RecorderAction, options?: RecorderO
   }
   if (action !== "start" || state.phase !== "idle" || isRecording()) return;
   if (!options || ![0, 3, 5, 10].includes(options.countdown) || typeof options.sourceId !== "string") throw new Error("Invalid recording options");
+  state.audioHealth = {};
   state.error = null; cuts = []; pauseAt = cutAt = null; cancelled = false;
   state.elapsedMs = 0; state.phase = "countdown";
   try {

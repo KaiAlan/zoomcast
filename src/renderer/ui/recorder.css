@@ -111,3 +111,17 @@ body.recorder-window, body.recorder-window #root { background: transparent; marg
 .recorder-bar.is-capturing .recorder-source { min-width: 80px; padding: 0 5px; }
 .recorder-bar.is-capturing .recorder-source-label { max-width: 40px; font-size: 11px; }
 .recorder-bar.is-capturing .recorder-time { min-width: 74px; font-size: 15px; }
+
+.recorder-panel label + label { margin-top:12px; }
+.recorder-mic-health { position:relative; width:22px; flex-shrink:0; height:30px; display:grid; place-items:center; color:var(--accent); -webkit-app-region:no-drag; }
+.recorder-mic-health i { position:absolute; right:-1px; top:2px; width:6px; height:6px; border:1px solid var(--surface); border-radius:50%; background:currentColor; }
+.recorder-mic-health.failed,.recorder-mic-health.muted { color:#e54459; }
+.recorder-mic-health.quiet,.recorder-mic-health.starting { color:#bb842e; }
+.recorder-mic-health meter { position:absolute; bottom:0; width:20px; height:5px; }
+.recorder-audio-hint { background:var(--surface); color:var(--muted); border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:7px; font-size:11px; -webkit-app-region:no-drag; }
+.recorder-bar.is-capturing .recorder-source { min-width:63px; padding:0 4px; }
+.recorder-bar.is-capturing .recorder-source-label { max-width:36px; }
+
+.recorder-bar.is-capturing .recorder-grip,.recorder-bar.is-capturing .recorder-chevron { display:none; }
+.recorder-bar.is-capturing .recorder-source { width:63px; }
+.recorder-bar.is-capturing .recorder-source-label { max-width:32px; }

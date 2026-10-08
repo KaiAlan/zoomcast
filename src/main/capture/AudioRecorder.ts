@@ -3,6 +3,8 @@ import { logDiag } from "../log";
 import { preloadPath, rendererUrl } from "../windows";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
+import type { AudioHealth } from "../../shared/recorder";
+import type { MicrophoneSettings } from "../../shared/settings/types";
 
 export type AudioRole = "mic" | "system";
 
@@ -68,6 +70,22 @@ export function registerDisplayMediaHandler(): void {
  */
 export class AudioRecorder {
   private readonly streams = new Map<AudioRole, WriteStream>();
+  private readonly healthByRole: Partial<Record<AudioRole, AudioHealth>> = {};
+  private readonly bytesWritten = new Map<AudioRole, number>();
+  private lastHealthAt: Partial<Record<AudioRole, number>> = {};
+  get health(): Partial<Record<AudioRole, AudioHealth>> {
+    for (const role of ["mic", "system"] as const) {
+      const health = this.healthByRole[role];
+      if (health && health.status !== "failed" && Date.now() - (this.lastHealthAt[role] ?? Date.now()) > 8000) this.healthByRole[role] = { status: "failed", level: 0, message: "Audio recorder stopped responding. Stop the take and check your device." };
+    }
+    return this.healthByRole;
+  }
+  private readonly receiveHealth = (event: Electron.IpcMainEvent, role: AudioRole, health: AudioHealth): void => {
+    if (event.sender !== this.win.webContents || !["mic", "system"].includes(role)) return;
+    if (this.health[role]?.status === "failed") return;
+    this.lastHealthAt[role] = Date.now();
+    this.healthByRole[role] = health;
+  };
   private offsets: AudioTrackResult[] = [];
 
   private constructor(
@@ -88,7 +106,8 @@ export class AudioRecorder {
       },
     });
 
-    await win.loadURL(rendererUrl("#audio"));
+    try { await win.loadURL(rendererUrl("#audio")); }
+    catch (error) { win.destroy(); throw error; }
 
     win.webContents.on("console-message", (event) => {
       if (event.level === "error") logDiag("audioRenderer", event.message);
@@ -98,28 +117,40 @@ export class AudioRecorder {
     recorder.attachChunkSink();
 
     let ready = false;
-    for (let tries = 0; tries < 100; tries++) {
-      ready = (await win.webContents.executeJavaScript(
-        "typeof window.__audio === 'object' && window.__audio !== undefined",
-      )) as boolean;
-      if (ready) break;
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    }
+    try {
+      for (let tries = 0; tries < 100; tries++) {
+        ready = (await win.webContents.executeJavaScript(
+          "typeof window.__audio === 'object' && window.__audio !== undefined",
+        )) as boolean;
+        if (ready) break;
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      }
 
-    if (!ready) throw new Error("audio renderer never installed its hooks");
+      if (!ready) throw new Error("audio renderer never installed its hooks");
+    } catch (error) { await recorder.stop(Date.now(), []); throw error; }
 
     return recorder;
   }
 
   private attachChunkSink(): void {
+    ipcMain.on("audio:health", this.receiveHealth);
     ipcMain.removeHandler("audio:chunk");
-    ipcMain.handle("audio:chunk", (_event, role: AudioRole, chunk: Uint8Array) => {
+    ipcMain.handle("audio:chunk", (event, role: AudioRole, chunk: Uint8Array) => {
+      if (event.sender !== this.win.webContents || !["mic", "system"].includes(role)) throw new Error("Invalid audio source");
       let stream = this.streams.get(role);
       if (stream === undefined) {
         stream = createWriteStream(join(this.dir, FILE_FOR[role]));
+        stream.on("error", (error) => { this.health[role] = { status: "failed", level: 0, message: "Audio could not be saved. Check available disk space and stop the take." }; logDiag(`audio:${role}:write`, error); });
         this.streams.set(role, stream);
       }
-      stream.write(chunk);
+      const sink = stream;
+      return new Promise<void>((resolve, reject) => {
+        sink.write(chunk, error => {
+          if (error) { reject(error); return; }
+          this.bytesWritten.set(role, (this.bytesWritten.get(role) ?? 0) + chunk.byteLength);
+          resolve();
+        });
+      });
     });
   }
 
@@ -131,9 +162,9 @@ export class AudioRecorder {
    * these offsets negative — the same convention `toStreamLocalMs` uses, and
    * one ffmpeg's `-itsoffset` accepts directly.
    */
-  async start(roles: AudioRole[]): Promise<Array<{ role: AudioRole; startedAtUnixMs: number }>> {
+  async start(roles: AudioRole[], settings?: MicrophoneSettings): Promise<Array<{ role: AudioRole; startedAtUnixMs: number }>> {
     const results = (await this.win.webContents.executeJavaScript(
-      `window.__audio.start(${JSON.stringify(roles)})`,
+      `window.__audio.start(${JSON.stringify(roles)}, ${JSON.stringify(settings)})`,
     )) as Array<{ role: AudioRole; startedAtUnixMs: number; ok: boolean; error?: string }>;
 
     const started: Array<{ role: AudioRole; startedAtUnixMs: number }> = [];
@@ -141,7 +172,7 @@ export class AudioRecorder {
     for (const r of results) {
       if (r.ok) started.push({ role: r.role, startedAtUnixMs: r.startedAtUnixMs });
       // A missing track degrades the recording; it never aborts it.
-      else logDiag(`audio:${r.role}`, r.error ?? "unknown failure");
+      else { this.health[r.role] = { status: "failed", level: 0, message: r.error ?? "Audio could not start" }; logDiag(`audio:${r.role}`, r.error ?? "unknown failure"); }
     }
 
     return started;
@@ -154,15 +185,12 @@ export class AudioRecorder {
       // The window may already be gone; the streams still need closing.
     }
 
-    // Give the last chunks time to arrive over IPC before closing the files.
-    await new Promise<void>((resolve) => setTimeout(resolve, 400));
-
     for (const stream of this.streams.values()) {
-      await new Promise<void>((resolve) => stream.end(resolve));
+      if (!stream.destroyed) await new Promise<void>((resolve) => { stream.once("error", () => resolve()); stream.end(resolve); });
     }
 
     this.offsets = started
-      .filter((s) => this.streams.has(s.role))
+      .filter((s) => (this.bytesWritten.get(s.role) ?? 0) > 0)
       .map((s) => ({
         role: s.role,
         file: FILE_FOR[s.role],
@@ -170,6 +198,7 @@ export class AudioRecorder {
       }));
 
     ipcMain.removeHandler("audio:chunk");
+    ipcMain.removeListener("audio:health", this.receiveHealth);
     if (!this.win.isDestroyed()) this.win.destroy();
 
     return this.offsets;

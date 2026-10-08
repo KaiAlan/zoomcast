@@ -18,7 +18,14 @@ export type CaptureFps = (typeof CAPTURE_FPS_CHOICES)[number];
  */
 export type ThemePreference = "light" | "dark" | "system";
 
-export type Settings = {
+export type MicrophoneSettings = {
+  microphoneDeviceId: string;
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
+};
+
+export type Settings = MicrophoneSettings & {
   theme: ThemePreference;
   captureFps: CaptureFps;
   webcamEnabled: boolean;
