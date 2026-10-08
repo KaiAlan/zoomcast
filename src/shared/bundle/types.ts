@@ -1,3 +1,5 @@
+import type { ControlContext } from "../zoom/context";
+
 export type CursorShape =
   | "arrow"
   | "ibeam"
@@ -14,4 +16,5 @@ export type TelemetryEvent =
   | { t: number; k: "up"; x: number; y: number; b: number }
   | { t: number; k: "key"; d: "down" | "up"; c: string }
   | { t: number; k: "wheel"; x: number; y: number; dy: number }
-  | { t: number; k: "cursor"; shape: CursorShape };
+  | { t: number; k: "cursor"; shape: CursorShape }
+  | { t: number; k: "context"; trigger: "down" | "key" | "wheel"; target: ControlContext };

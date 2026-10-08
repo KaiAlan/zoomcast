@@ -1,8 +1,14 @@
+import type { TelemetryEvent } from "../bundle/types";
+import { adaptiveCamera } from "./adaptive";
 import type { CursorPath } from "../cursor/path";
 import { clampToSource, safeAreaFollower } from "./camera";
 import type { PlanContext, ZoomConfig, ZoomKeyframe, ZoomSegment } from "./types";
 import { projectKeyframes } from "./viewport";
 import { EASINGS } from "./easing";
+
+export function usesAdaptiveCamera(s: ZoomSegment): boolean {
+  return s.position === "follow" && s.origin === "auto" && !s.pinned && !s.cameraOverride;
+}
 
 /** Fixed source-time grid, independent of preview/export frame rate. */
 export const FOLLOW_SAMPLE_MS = 1000 / 60;
@@ -18,9 +24,14 @@ export function segmentsToKeyframes(
   cfg: ZoomConfig,
   ctx: PlanContext,
   follow: CursorPath | null = null,
+  telemetry?: TelemetryEvent[],
 ): ZoomKeyframe[] {
   const kfs: ZoomKeyframe[] = [];
+  const adaptive = telemetry && segments.some(usesAdaptiveCamera) ? adaptiveCamera(telemetry, cfg, ctx) : null;
   for (const s of [...segments].sort((a, b) => a.startMs - b.startMs)) {
+    if (adaptive && usesAdaptiveCamera(s)) {
+      kfs.push(...adaptive(s)); continue;
+    }
     const start = Math.max(0, s.startMs);
     const end = Math.min(s.endMs, ctx.durationMs);
     // Do not start leaving early just to reach rest on the last video frame.

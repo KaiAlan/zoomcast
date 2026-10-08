@@ -17,7 +17,7 @@ import type { ZoomState } from "../zoom/interpolate";
 export type CameraSample = { x: number; y: number; scale: number };
 
 /** Below this the blur is zero, or an idle camera shimmers. */
-const DEADZONE_PX_PER_S = 15;
+const DEADZONE_PX_PER_S = 200;
 /** Speed at which the curve reaches full strength. */
 const SPEED_SATURATION = 2000;
 const MAX_BLUR_PX = 8;
@@ -74,8 +74,7 @@ export const BLUR_GRID_MS = 1000 / 60;
  *
  * Takes the normalised zoom centres the planner produces and converts them to
  * output pixels, which is the space the control law is calibrated in.
- * Returning undefined at zero amount keeps the default configuration
- * bit-identical to before the feature existed.
+ * Returning undefined at zero amount preserves projects that disable blur.
  */
 export function blurForCamera(
   prev: ZoomState,

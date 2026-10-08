@@ -4,7 +4,7 @@ import type { CursorPath } from "../cursor/path";
 import type { Project } from "../project/types";
 import { outputSizeFor } from "../style/aspect";
 import type { TelemetryEvent } from "../bundle/types";
-import { segmentsToKeyframes } from "./keyframes";
+import { segmentsToKeyframes, usesAdaptiveCamera } from "./keyframes";
 import { planZoom } from "./planner";
 import { replan, replanSegments } from "./replan";
 import { projectKeyframes } from "./viewport";
@@ -55,7 +55,7 @@ export function replanFrom(
   );
 
   const segments = project.clips ? alignSegmentsToClips(planned, clipsFor(ctx.durationMs, project.cuts, project.clips)) : planned;
-  const generated = segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath);
+  const generated = segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath, ctx.telemetry);
   return {
     segments,
     keyframes: projectKeyframes(project.zoom.segments.length === 0 ? replan(project.zoom.keyframes, generated) : generated, planCtx),
@@ -68,7 +68,8 @@ export function replanFrom(
  * Keyframes are derived, so moving, resizing or re-depthing a segment must
  * rebuild them — but running the planner as well would walk the whole
  * telemetry array on every commit and re-derive every OTHER segment, so
- * dragging one shot could move its neighbours.
+ * dragging one shot could move its neighbours. Automatic follow samples still
+ * use telemetry to keep their current control and fast interactions visible.
  */
 export function deriveKeyframes(
   config: ZoomConfig,
@@ -82,7 +83,7 @@ export function deriveKeyframes(
     segments,
     keyframes: projectKeyframes(segments.length === 0
       ? project.zoom.keyframes.filter(k => k.pinned || k.origin === "manual")
-      : segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath), planCtx),
+      : segmentsToKeyframes(segments, config, planCtx, ctx.cameraPath, segments.some(usesAdaptiveCamera) ? ctx.telemetry : undefined), planCtx),
   };
 }
 

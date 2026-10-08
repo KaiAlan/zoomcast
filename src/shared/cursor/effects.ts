@@ -48,6 +48,8 @@ export function cursorFrameAt(
   const previous = Math.abs(sourceMs - previousSource) > GRID_MS + 0.01 ? sample : sampleAt(previousSource, Math.max(0, timing.outputMs - GRID_MS)) ?? sample;
   const dx = sample.x - previous.x;
   const dy = sample.y - previous.y;
+  const speed = Math.hypot(dx, dy) * 1000 / GRID_MS;
+  const blurStrength = style.motionBlur * smoothstep(Math.min(1, Math.max(0, (speed - 500) / 1000)));
   let scale = 1;
   if (style.clickBounce > 0) {
     // clicks is sorted and prefiltered by both callers; binary search avoids
@@ -70,8 +72,8 @@ export function cursorFrameAt(
     effects: {
       scale,
       angleRad: Math.max(-0.5, Math.min(0.5, dx / 80)) * style.sway * (1 - loopWeight) || 0,
-      blurX: dx * style.motionBlur * (1 - loopWeight) || 0,
-      blurY: dy * style.motionBlur * (1 - loopWeight) || 0,
+      blurX: dx * blurStrength * (1 - loopWeight) || 0,
+      blurY: dy * blurStrength * (1 - loopWeight) || 0,
     },
   };
 }

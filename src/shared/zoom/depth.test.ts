@@ -85,6 +85,10 @@ describe("zoomDepth", () => {
       .toBeCloseTo(scaleFor("click"), 9);
   });
 
+  it("pulls back for a whole wide control even when click spread is zero", () => {
+    expect(zoomDepth({ intent: "click", spread: none, targetSize: { x: 0.7, y: 0.08 } }, cfg)).toBeCloseTo(cfg.contextFraction / 0.7, 9);
+  });
+
   /** DEFAULT_DEPTH_CONFIG is derived, so a retune of config.ts reaches here. */
   it("tracks the shipped config rather than a copy of it", () => {
     // Raised from 1.6 on 2026-09-08: too shallow to be worth the move.

@@ -7,7 +7,7 @@ import type { TelemetryEvent } from "../bundle/types";
 import { buildCursorPath, cursorAt } from "./path";
 import { cursorFrameAt, type CursorTiming } from "./effects";
 
-const style = defaultProject("test").style.cursor;
+const style = { ...defaultProject("test").style.cursor, motionBlur: 0 };
 const events: TelemetryEvent[] = [
   { k: "move", t: 0, x: 10, y: 20 },
   { k: "down", t: 100, x: 10, y: 20, b: 1 },

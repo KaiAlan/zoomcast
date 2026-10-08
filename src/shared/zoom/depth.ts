@@ -13,14 +13,7 @@ export type DepthInputs = {
    * same way a 1080p one does.
    */
   spread: { x: number; y: number };
-  /**
-   * NOT AVAILABLE TODAY, and deliberately so. The telemetry is raw screen
-   * coordinates with no element behind them; getting real bounds needs either
-   * UI Automation over COM or computer vision on the captured frame, and both
-   * are their own project. See the 2026-09-07 spec §8.
-   *
-   * Absent means "no constraint" — never "size zero".
-   */
+  /** Optional control bounds; adaptive.ts also fits the actual output geometry. */
   targetSize?: { x: number; y: number };
 };
 
@@ -57,7 +50,7 @@ export function zoomDepth(inputs: DepthInputs, cfg: DepthConfig): number {
   // The base is relative to the ceiling, so raising maxZoom deepens every
   // shot and the grading between them is preserved.
   const base = 1 + cfg.base[inputs.intent] * (cfg.maxZoom - 1);
-  const spreadMax = Math.max(inputs.spread.x, inputs.spread.y);
+  const spreadMax = Math.max(inputs.spread.x, inputs.spread.y, inputs.targetSize?.x ?? 0, inputs.targetSize?.y ?? 0);
 
   // A zero-spread cluster has no spread constraint. Written out rather than
   // left to division by zero: `0.6 / 0` is Infinity and therefore happens to

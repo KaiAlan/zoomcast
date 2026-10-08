@@ -53,7 +53,7 @@ describe("normalizeProject", () => {
     // Without this the editor throws on style.cursor.smoothing and the take
     // renders nothing at all.
     const p = normalizeProject(PRE_CURSOR, "b");
-    expect(p.style.cursor).toEqual(defaultProject("b").style.cursor);
+    expect(p.style.cursor).toEqual({ ...defaultProject("b").style.cursor, motionBlur: 0 });
   });
 
   it("preserves everything the old file did carry", () => {

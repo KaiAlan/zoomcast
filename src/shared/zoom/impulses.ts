@@ -1,4 +1,5 @@
 import type { TelemetryEvent } from "../bundle/types";
+import { contextResolver } from "./context";
 import type { Impulse, ZoomConfig } from "./types";
 
 const CLICK_WEIGHT = 1;
@@ -9,12 +10,12 @@ const WHEEL_WEIGHT = 0.3;
  * Turn raw telemetry into weighted attention impulses.
  *
  * uiohook reports keystrokes with no coordinates, so typing tells us WHEN
- * attention is concentrated but never WHERE. Keystrokes therefore borrow the
- * most recent click's position — people click into an editor before typing
- * into it — falling back to the cursor once that click goes stale.
+ * attention is concentrated. Focused-control bounds supply WHERE when present.
+ * Older/opaque captures borrow the most recent click, then the cursor.
  */
 export function toImpulses(events: TelemetryEvent[], cfg: ZoomConfig): Impulse[] {
   const out: Impulse[] = [];
+  const context = contextResolver(events);
   let lastCursor: { x: number; y: number } | null = null;
   let lastClick: { x: number; y: number; t: number } | null = null;
 
@@ -39,7 +40,8 @@ export function toImpulses(events: TelemetryEvent[], cfg: ZoomConfig): Impulse[]
         if (e.d !== "down") break;
         const click = lastClick;
         const fresh = click !== null && e.t - click.t <= cfg.keyAnchorWindowMs;
-        const anchor = fresh ? click : lastCursor;
+        const focused = context(e.t, "key");
+        const anchor = focused ? { x: focused.rect.x + focused.rect.w / 2, y: focused.rect.y + focused.rect.h / 2 } : fresh ? click : lastCursor;
         if (anchor === null) break;
         out.push({ t: e.t, x: anchor.x, y: anchor.y, w: KEY_WEIGHT, srcIndex: i, kind: "key" });
         break;
