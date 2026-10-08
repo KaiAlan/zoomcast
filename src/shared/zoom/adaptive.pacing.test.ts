@@ -9,6 +9,7 @@ import { DEFAULT_ZOOM_CONFIG as cfg } from "./config";
 import { zoomAt } from "./interpolate";
 import { adaptiveCamera } from "./adaptive";
 import { projectKeyframes } from "./viewport";
+import { buildCursorPath, cursorAt } from "../cursor/path";
 import type { PlanContext, ZoomSegment } from "./types";
 
 const ctx: PlanContext = { source: { w: 1920, h: 1080 }, output: { w: 1920, h: 1080 }, paddingFactor: 0.85, durationMs: 10000 };
@@ -21,7 +22,8 @@ const shot: ZoomSegment = { id: "shot", startMs: 0, endMs: 10000, position: "fol
 function movement(events: TelemetryEvent[], from: number, until: number, hold = false) {
   const parts = hold ? { segments: [shot], keyframes: projectKeyframes(adaptiveCamera(events, cfg, ctx)(shot), ctx) } : derive(events, until);
   let previous = zoomAt(parts.keyframes, from), peakPan = 0, peakDepth = 0, peakAcceleration = 0;
-  let lastVelocity = { x: 0, y: 0 };
+  const preceding = zoomAt(parts.keyframes, from - 1000 / 60);
+  let lastVelocity = previous.quad && preceding.quad ? { x: previous.quad.x - preceding.quad.x, y: previous.quad.y - preceding.quad.y } : { x: 0, y: 0 };
   for (let t = from + 1000 / 60; t < until; t += 1000 / 60) {
     const next = zoomAt(parts.keyframes, t);
     peakDepth = Math.max(peakDepth, Math.abs(next.scale - previous.scale));
@@ -81,7 +83,9 @@ describe("click-triggered, steady automatic shots", () => {
     for (let t = 2600; t <= 3400; t += 1000 / 120) events.push({ t, k: "move", x: 500 + (t - 2600) * 1.6, y: 500 });
     events.push(click(6500, 1700));
     const result = movement(events, 2400, 5000, true);
-    expect(result.peakPan).toBeLessThan(22);
+    // Fast pans may exceed the old 0.6-view/second ceiling; their acceleration
+    // stays bounded so keeping up does not bring back one-frame jumps.
+    expect(result.peakPan).toBeLessThan(60);
     expect(result.peakAcceleration).toBeLessThan(3);
     expect(result.peakDepth).toBeLessThan(0.00001);
   });
@@ -98,6 +102,69 @@ describe("click-triggered, steady automatic shots", () => {
     const changed = deriveKeyframes(cfg, project, { source: ctx.source, durationMs: 10000, telemetry, cameraPath: null });
     expect(changed.keyframes[0]?.quad?.w).toBeCloseTo(918, 5);
     expect(zoomAt(changed.keyframes, 3000).quad?.w).toBeLessThan(2300);
+  });
+});
+
+function overflow(events: TelemetryEvent[], plan: PlanContext, from: number, until: number) {
+  const frames = projectKeyframes(adaptiveCamera(events, cfg, plan)(shot), plan);
+  const paths = [0, 72, 90].map(halfLifeMs => buildCursorPath(events, { halfLifeMs, sampleHz: 120, pinClicks: true }));
+  let peak = 0;
+  for (let t = from; t < until; t += 1000 / 60) {
+    const quad = zoomAt(frames, t).quad;
+    if (!quad) continue;
+    // Verify the actual drawn cursor too: default and maximum smoothing can
+    // trail the raw pointer even when the camera is ahead of its movement.
+    for (const path of paths) {
+      const cursor = cursorAt(path, t); if (!cursor) continue;
+      const x = quad.x + cursor.x / plan.source.w * quad.w, y = quad.y + cursor.y / plan.source.h * quad.h;
+      peak = Math.max(peak, -x, x - plan.output.w, -y, y - plan.output.h);
+    }
+  }
+  return { frames, peak };
+}
+
+describe("fast cursor visibility", () => {
+  it("retains a close composition for slow movement near the clicked control", () => {
+    const events: TelemetryEvent[] = [click(100, 700)];
+    for (let t = 2400; t <= 4400; t += 50) events.push({ t, k: "move", x: 700 + (t - 2400) * 0.025, y: 500 });
+    const result = overflow(events, ctx, 2200, 4800);
+    expect(result.peak).toBeLessThan(1);
+    expect(zoomAt(result.frames, 4000).scale).toBeGreaterThan(2);
+  });
+  it("keeps up with a sustained sweep without accelerating abruptly or changing depth", () => {
+    const events: TelemetryEvent[] = [click(100, 500)];
+    for (let t = 2600; t <= 3400; t += 1000 / 120) events.push({ t, k: "move", x: 500 + (t - 2600) * 1.6, y: 500 });
+    const result = overflow(events, ctx, 2500, 4100);
+    expect(result.peak).toBeLessThan(1);
+    expect(zoomAt(result.frames, 3900).scale).toBeCloseTo(zoomAt(result.frames, 2200).scale, 8);
+  });
+  it("follows travel during the entrance while preserving the slower depth transition", () => {
+    const events: TelemetryEvent[] = [click(100, 500)];
+    for (let t = 500; t <= 1300; t += 1000 / 120) events.push({ t, k: "move", x: 500 + (t - 500) * 1.6, y: 500 });
+    const result = overflow(events, ctx, 100, 2200);
+    expect(result.peak).toBeLessThan(1);
+    const settled = zoomAt(result.frames, 1700).scale;
+    expect(zoomAt(result.frames, 100 + cfg.transitionMs / 4).scale - 1).toBeLessThan((settled - 1) * 0.35);
+    expect(zoomAt(result.frames, 100).scale).toBe(1);
+  });
+  for (const output of [{ w: 1920, h: 1080 }, { w: 1080, h: 1080 }, { w: 1080, h: 1920 }]) {
+    it(`keeps a very fast diagonal sweep visible with one steady composition in ${output.w}x${output.h}`, () => {
+      const events: TelemetryEvent[] = [click(100, 200, 100)];
+      for (let t = 2600; t <= 2800; t += 1000 / 120) events.push({ t, k: "move", x: 200 + (t - 2600) * 8, y: 100 + (t - 2600) * 4.4 });
+      const result = overflow(events, { ...ctx, output }, 2300, 4200);
+      expect(result.peak).toBeLessThan(1);
+      const settled = zoomAt(result.frames, 2200).scale;
+      for (const t of [2500, 2700, 2900, 4000]) expect(zoomAt(result.frames, t).scale).toBeCloseTo(settled, 8);
+    });
+  }
+  it("does not lose the pointer when it reverses near the edge", () => {
+    const events: TelemetryEvent[] = [click(100, 500)];
+    for (let t = 2600; t <= 4100; t += 1000 / 120) {
+      const x = t <= 3400 ? 500 + (t - 2600) * 1.6 : 1780 - (t - 3400) * 2;
+      events.push({ t, k: "move", x, y: 500 });
+    }
+    expect(overflow(events, ctx, 2300, 4800).peak).toBeLessThan(1);
+    expect(movement(events, 2300, 4800, true).peakAcceleration).toBeLessThan(3);
   });
 });
 

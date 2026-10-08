@@ -64,6 +64,17 @@ const CONFIGS: Array<{
 }> = [
   { name: "default" },
   {
+    name: "cursor-sweep",
+    telemetry: [
+      { t: 0, k: "move", x: 300, y: 200 },
+      { t: 100, k: "down", x: 300, y: 200, b: 1 },
+      { t: 200, k: "up", x: 300, y: 200, b: 1 },
+      ...Array.from({ length: 25 }, (_, i): TelemetryEvent => ({ t: 2500 + i * 1000 / 120, k: "move", x: 300 + i * 1500 / 24, y: 200 + i * 780 / 24 })),
+      { t: 4200, k: "move", x: 1800, y: 980 },
+    ],
+    shots: [900, 2400, 2600, 2733.3333333333335, 3900],
+  },
+  {
     name: "click-pacing",
     telemetry: [
       { t: 0, k: "move", x: 500, y: 500 },

@@ -49,18 +49,18 @@ export function fitContext(rect: Rect, desired: number, preferred: { cx: number;
 }
 
 /** Closed-form damping carries velocity instead of clamping the rendered position. */
-function damp(value: number, velocity: number, target: number, dt: number, maxSpeed: number) {
-  const frequency = 8;
+function damp(value: number, velocity: number, target: number, dt: number, maxSpeed: number, maxAcceleration: number) {
+  if (dt <= 0) return { value, velocity };
+  const frequency = 12;
   const displacement = value - target, b = velocity + frequency * displacement;
   const decay = Math.exp(-frequency * dt);
   const next = target + (displacement + b * dt) * decay;
-  if ((value < target && next > target) || (value > target && next < target)) return { value: target, velocity: 0 };
-  const travel = next - value;
-  if (Math.abs(travel) > maxSpeed * dt) {
-    const speed = Math.sign(travel) * maxSpeed;
-    return { value: value + speed * dt, velocity: speed };
-  }
-  return { value: next, velocity: (velocity - frequency * b * dt) * decay };
+  const naturalVelocity = (velocity - frequency * b * dt) * decay;
+  const requested = clamp(naturalVelocity, -maxSpeed, maxSpeed);
+  const speed = clamp(requested, velocity - maxAcceleration * dt, velocity + maxAcceleration * dt);
+  // Keep the analytical velocity when unconstrained. Storing frame-average
+  // travel as velocity turns a critically damped response into an oscillator.
+  return { value: speed === naturalVelocity ? next : value + (velocity + speed) * dt / 2, velocity: speed };
 }
 const interpolateRect = (from: Rect, to: Rect, progress: number): Rect => ({
   x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress,
@@ -71,8 +71,9 @@ const interpolateRect = (from: Rect, to: Rect, progress: number): Rect => ({
 export function adaptiveCamera(events: TelemetryEvent[], cfg: ZoomConfig, ctx: PlanContext): (segment: ZoomSegment) => ZoomKeyframe[] {
   const resolve = contextResolver(events);
   const path = followPath(events);
+  const rawPath = followPath(events, { halfLifeMs: 0 });
   const clicks = events.filter((e): e is Extract<TelemetryEvent, { k: "down" }> => e.k === "down");
-  const positions: Point[] = events.filter((e): e is Extract<TelemetryEvent, { k: "move" | "up" }> => e.k === "move" || e.k === "up")
+  const positions: Point[] = events.filter((e): e is Extract<TelemetryEvent, { k: "move" | "down" | "up" }> => e.k === "move" || e.k === "down" || e.k === "up")
     .map(e => ({ t: e.t, x: e.x, y: e.y }));
   const ups = events.filter((e): e is Extract<TelemetryEvent, { k: "up" }> => e.k === "up");
   const keys = events.filter((e): e is Extract<TelemetryEvent, { k: "key" }> => e.k === "key" && e.d === "down");
@@ -115,12 +116,44 @@ export function adaptiveCamera(events: TelemetryEvent[], cfg: ZoomConfig, ctx: P
       previous.semantic ||= stage.semantic; previous.burst = true; previous.endT = stage.endT;
     } else grouped.push({ ...stage });
   }
+  // Reserve the corridor of genuinely fast travel once, before the shot.
+  // Ordinary hover movement still cannot change its depth or start a shot.
+  const sweeps: { t: number; endT: number; rect: Rect }[] = [];
+  for (let i = 1; i < positions.length; i++) {
+    const a = positions[i - 1], b = positions[i];
+    if (!a || !b || b.t <= a.t || b.t - a.t > 80) continue;
+    if (Math.hypot((b.x - a.x) / ctx.source.w, (b.y - a.y) / ctx.source.h) * 1000 / (b.t - a.t) < 1) continue;
+    const rect = union(padded({ x: a.x, y: a.y, w: 1, h: 1 }, ctx.source), padded({ x: b.x, y: b.y, w: 1, h: 1 }, ctx.source));
+    const previous = sweeps[sweeps.length - 1];
+    if (previous && a.t - previous.endT <= 60) { previous.endT = b.t; previous.rect = union(previous.rect, rect); }
+    else sweeps.push({ t: a.t, endT: b.t, rect });
+  }
   return segment => {
     const start = Math.max(0, segment.startMs), end = Math.min(ctx.durationMs, segment.endMs);
     const hasExit = segment.endMs < ctx.durationMs;
     const exitStart = hasExit ? Math.max(start, end - cfg.transitionOutMs) : end;
     const shotStages = grouped.filter(stage => stage.endT >= start && stage.t <= exitStart).map(stage => ({ ...stage, t: Math.max(start, stage.t) }));
     if (!shotStages.length || exitStart <= start) return [];
+    for (const [index, stage] of shotStages.entries()) {
+      if (stage.semantic) continue;
+      const until = shotStages[index + 1]?.t ?? exitStart;
+      const entranceEnd = Math.min(stage.t + cfg.transitionMs, until);
+      const firstKey = keys[lower(keys, stage.t)];
+      if (!firstKey || firstKey.t > entranceEnd) {
+        // The entrance must cover ongoing activity, not arrive at a click
+        // the pointer left a second ago. Reserve that travel before zooming.
+        for (let i = lower(positions, stage.t); i < positions.length; i++) {
+          const point = positions[i]; if (!point || point.t > entranceEnd) break;
+          stage.rect = union(stage.rect, padded({ x: point.x, y: point.y, w: 1, h: 1 }, ctx.source));
+        }
+      }
+      for (const sweep of sweeps) {
+        if (sweep.t < stage.t || sweep.endT > until) continue;
+        const keyIndex = lower(keys, sweep.t + 0.00001) - 1;
+        if (keyIndex >= 0 && sweep.t - (keys[keyIndex]?.t ?? -Infinity) < 1200) continue;
+        stage.rect = union(stage.rect, sweep.rect); stage.burst = true;
+      }
+    }
     const rest = screenRect(ctx.source, ctx.output, ctx.paddingFactor);
     // A rapid burst or drag earns one wider composition for the busy shot.
     // It cannot pump back in every time the pointer pauses for a few frames.
@@ -133,10 +166,11 @@ export function adaptiveCamera(events: TelemetryEvent[], cfg: ZoomConfig, ctx: P
     let pose = rest, from = rest, target = rest;
     let stageIndex = -1, phaseStart = start, phaseDuration = cfg.transitionMs;
     let vx = 0, vy = 0, previousT = start;
+    let shiftX = 0, shiftY = 0;
     for (const t of [...times].sort((a, b) => a - b)) {
       const next = shotStages[stageIndex + 1];
       if (next && t >= next.t) {
-        stageIndex++; phaseStart = next.t; from = pose; vx = 0; vy = 0;
+        stageIndex++; phaseStart = next.t; from = pose; vx = 0; vy = 0; shiftX = 0; shiftY = 0;
         const fit = fitContext(next.rect, Math.min(ceiling, 1 + next.depth * (cfg.maxZoom - 1)),
           { cx: next.rect.x + next.rect.w / 2, cy: next.rect.y + next.rect.h / 2 }, ctx);
         target = screenQuadFor(ctx.source, ctx.output, ctx.paddingFactor, fit);
@@ -145,28 +179,52 @@ export function adaptiveCamera(events: TelemetryEvent[], cfg: ZoomConfig, ctx: P
       const current = shotStages[stageIndex];
       const dt = (t - previousT) / 1000;
       if (!current) pose = rest;
-      else if (t < phaseStart + phaseDuration) {
-        // Interpolate the drawn rectangle, not focus coordinates through a
-        // scale-dependent clamp. The entire configured transition is paid.
-        pose = interpolateRect(from, target, EASINGS.cameraPan((t - phaseStart) / phaseDuration));
-      } else {
+      else {
+        // Depth pays the full configured transition while pan can already
+        // follow travel during the entrance, rather than waiting 1.5 seconds.
+        const composition = t < phaseStart + phaseDuration
+          ? interpolateRect(from, target, EASINGS.cameraPan((t - phaseStart) / phaseDuration)) : target;
         const keyIndex = lower(keys, t + 0.00001) - 1;
         const typing = keyIndex >= 0 && t - (keys[keyIndex]?.t ?? -Infinity) < 1200;
-        const cursor = cursorAt(path, t);
+        // The take is already recorded: short pan lookahead compensates for
+        // input filtering and damping, without anticipating a zoom or click.
+        const cursor = cursorAt(path, Math.min(t + 280, exitStart));
+        const actual = cursorAt(rawPath, t);
+        const ahead = cursorAt(path, Math.min(t + 320, exitStart));
+        const behind = cursorAt(path, Math.min(t + 240, exitStart));
+        let goal = { ...composition, x: composition.x + shiftX, y: composition.y + shiftY };
         if (!current.semantic && !typing && cursor) {
           const adjust = (pixel: number, offset: number, span: number, output: number) => {
+            if (span <= output) return 0;
             const left = Math.max(0, offset), right = Math.min(output, offset + span), inset = (right - left) * 0.2;
             const frame = offset + pixel * span;
             return frame - clamp(frame, left + inset, right - inset);
           };
-          target = { ...target,
-            x: clamp(target.x - adjust(cursor.x / ctx.source.w, target.x, target.w, ctx.output.w), Math.min(0, ctx.output.w - target.w), Math.max(0, ctx.output.w - target.w)),
-            y: clamp(target.y - adjust(cursor.y / ctx.source.h, target.y, target.h, ctx.output.h), Math.min(0, ctx.output.h - target.h), Math.max(0, ctx.output.h - target.h)) };
+          goal = { ...goal,
+            x: clamp(goal.x - adjust(cursor.x / ctx.source.w, goal.x, goal.w, ctx.output.w), Math.min(0, ctx.output.w - goal.w), Math.max(0, ctx.output.w - goal.w)),
+            y: clamp(goal.y - adjust(cursor.y / ctx.source.h, goal.y, goal.h, ctx.output.h), Math.min(0, ctx.output.h - goal.h), Math.max(0, ctx.output.h - goal.h)) };
+          // Anticipation must not pull the current pointer out of view when
+          // a sweep stops or reverses direction.
+          const contain = (offset: number, pixel: number, span: number, output: number) => {
+            if (span <= output) return offset;
+            const p = clamp(pixel, 0, 1), margin = Math.min(24, p * span, (1 - p) * span);
+            return clamp(offset, Math.max(output - span, margin - p * span), Math.min(0, output - margin - p * span));
+          };
+          if (actual) goal = { ...goal,
+            x: contain(goal.x, actual.x / ctx.source.w, goal.w, ctx.output.w),
+            y: contain(goal.y, actual.y / ctx.source.h, goal.h, ctx.output.h) };
+          shiftX = goal.x - composition.x; shiftY = goal.y - composition.y;
         }
         const release = hasExit ? ease((exitStart - t) / 350) : 1;
-        const x = damp(pose.x, vx, target.x, dt * release, ctx.output.w * 0.6);
-        const y = damp(pose.y, vy, target.y, dt * release, ctx.output.h * 0.6);
-        pose = { ...target, x: x.value, y: y.value }; vx = x.velocity; vy = y.velocity;
+        const speed = (axis: "x" | "y", source: number, span: number, output: number) => Math.min(output * 3,
+          Math.max(output * 0.6, ahead && behind ? Math.abs(ahead[axis] - behind[axis]) / source * span / 0.08 * 1.25 : 0,
+            Math.abs(goal[axis] - pose[axis]) * 5));
+        if (current.semantic) { pose = composition; vx = 0; vy = 0; }
+        else {
+          const x = damp(pose.x, vx, goal.x, dt * release, speed("x", ctx.source.w, goal.w, ctx.output.w), ctx.output.w * 5);
+          const y = damp(pose.y, vy, goal.y, dt * release, speed("y", ctx.source.h, goal.h, ctx.output.h), ctx.output.h * 5);
+          pose = { ...composition, x: x.value, y: y.value }; vx = x.velocity; vy = y.velocity;
+        }
       }
       const scale = pose.w / rest.w;
       const authority = lateralAuthority(scale, ctx.paddingFactor);
