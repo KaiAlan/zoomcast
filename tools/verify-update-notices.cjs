@@ -74,7 +74,9 @@ import('../out/main/index.js').then(async () => {
     await js("window.zoomcast.openSettings()");
     await wait(() => BrowserWindow.getAllWindows().some(win => win.webContents.getURL().endsWith('#settings')), 'opening Settings');
     const settings = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().endsWith('#settings'));
-    await wait(() => settings.webContents.executeJavaScript("Boolean(document.querySelector('.update-whats-new'))"), 'Settings summary');
+    await wait(() => settings.webContents.executeJavaScript("Boolean(document.querySelector('.settings-sidebar'))"), 'Settings navigation');
+    await settings.webContents.executeJavaScript("Array.from(document.querySelectorAll('.settings-sidebar nav button')).find(b=>b.textContent==='App updates').click()");
+    await wait(() => settings.webContents.executeJavaScript("document.body.innerText.includes('What’s new in Zoomcast')"), 'Settings summary');
     assert(await settings.webContents.executeJavaScript(`document.querySelector('.update-settings').textContent.includes(${JSON.stringify(remoteVersion)})`), 'Settings shows the available update without an interrupting dialog');
     settings.hide();
     await js("window.zoomcast.updates.check()");

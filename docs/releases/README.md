@@ -8,9 +8,9 @@ Download `zoomcast-Setup-<version>.exe` from the [latest release](https://github
 
 Version 0.1.2 and later check public GitHub releases without an account or access token. Versions 0.1.0 and 0.1.1 need one manual upgrade to the latest version. After that, use Update and Restart to update.
 
-The next release checks automatically once, five seconds after opening the app. A new published stable release appears in a quiet in-app notice in the editor, idle recorder and Settings. There are no Windows notifications, hourly checks or wake-up checks. Users can still choose Check for updates in Settings. Publishing a draft makes it discoverable the next time someone opens Zoomcast; drafts and prereleases are excluded.
+Version 0.1.6 checks automatically once, five seconds after opening the app. A new published stable release appears in a quiet in-app notice in the editor, idle recorder and Settings. There are no Windows notifications, hourly checks or wake-up checks. Users can still choose Check for updates in Settings. Publishing a draft makes it discoverable the next time someone opens Zoomcast; drafts and prereleases are excluded.
 
-Each installed version shows a short What's new card on the workspace and idle recorder until Got it is clicked. Dismissal persists across restarts and updates every open window. Settings always retains the summary and its link to the detailed GitHub release. The first launch also shows the installed version's highlights.
+Release highlights stay in Settings and the idle recorder. The editor keeps its full workspace without an installed-release card. Dismissal persists across restarts and updates every open window. Settings always retains the summary and its link to the detailed GitHub release. The first launch also shows the installed version's highlights.
 
 Updates download on request. Restart waits for recording and export to finish and saves open projects before silently installing and reopening the app.
 

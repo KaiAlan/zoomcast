@@ -17,6 +17,7 @@ const profile = path.join(root, "tmp", "ui-validation-profile");
 fs.rmSync(profile, { recursive: true, force: true });
 fs.mkdirSync(profile, { recursive: true });
 app.setPath("userData", profile);
+app.getVersion = () => require("../package.json").version;
 process.env.LOCALAPPDATA = path.join(profile, "local");
 const libraryRoot = path.join(process.env.LOCALAPPDATA, "zoomcast", "recordings");
 fs.rmSync(libraryRoot, { recursive: true, force: true });
@@ -66,6 +67,8 @@ app.on("browser-window-created", (_, win) => {
     try {
       for (let i = 0; i < 150; i++) { if (await js("Boolean(window.__zc)")) break; await pause(100); }
       assert(await js("Boolean(window.__zc)"), "editor opens camera bundle");
+      assert(await js("window.zoomcast.updates.state().then(s=>s.showWhatsNew)"), "first-launch validation uses an undismissed release summary");
+      assert(await js("!document.querySelector('.workspace-shell .update-whats-new') && document.querySelector('.workspace-main').getBoundingClientRect().top<=48"), "release summary never takes space from the editor on first launch");
       win.show(); win.focus(); await pause(500);
       assert(await js("document.querySelectorAll('summary').length===6"), "six grouped inspector sections");
       assert(await js(`${section("Appearance")}.parentElement.open`), "appearance opens by default");
@@ -286,7 +289,38 @@ app.on("browser-window-created", (_, win) => {
       await click(button("Settings")); await pause(800);
       const settings = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith("#settings"));
       assert(Boolean(settings), "library opens settings window");
-      assert(await settings.webContents.executeJavaScript("document.body.innerText.includes('Record webcam')"), "settings exposes webcam capture");
+      const settingsJs = code => settings.webContents.executeJavaScript(code);
+      const settingsNav = async name => { await settingsJs(`document.querySelector('.settings-sidebar button[aria-current="page"]');Array.from(document.querySelectorAll('.settings-sidebar nav button')).find(b=>b.textContent.trim()===${JSON.stringify(name)}).click();`); await pause(); };
+      const settingsSearch = async text => { await settingsJs(`(()=>{const e=document.querySelector('[aria-label="Search settings"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(text)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`); await pause(); };
+      assert(await settingsJs("document.querySelectorAll('.settings-sidebar nav button').length===5 && document.querySelector('.settings-sidebar [aria-current=page]').textContent==='General'"), "settings opens with five clear sections and General selected");
+      assert(await settingsJs("!document.body.innerText.includes('Record webcam') && !document.body.innerText.includes('What’s new in Zoomcast')"), "settings shows only the selected section instead of the full list of controls");
+      await screenshot("ui-settings-general-light.png",settings.webContents);
+      await settingsNav("Recording");
+      assert(await settingsJs("document.body.innerText.includes('Record webcam')"), "recording settings exposes webcam capture");
+      await settingsJs("document.querySelector('[aria-label=\"Record webcam\"]').click()"); await pause();
+      assert(await settingsJs("Boolean(document.querySelector('[aria-label=\"Camera\"]'))"), "enabling webcam reveals camera selection");
+      await settingsJs("(()=>{const e=document.querySelector('[aria-label=\"Capture frame rate\"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(e,'30');e.dispatchEvent(new Event('change',{bubbles:true}));})()"); await pause();
+      assert(JSON.parse(fs.readFileSync(path.join(profile,"settings.json"),"utf8")).captureFps===30 && JSON.parse(fs.readFileSync(path.join(profile,"settings.json"),"utf8")).webcamEnabled, "recording controls save automatically to disk");
+      const settingsFile = path.join(profile,"settings.json"), savedSettingsFile = `${settingsFile}.saved`;
+      fs.renameSync(settingsFile,savedSettingsFile); fs.mkdirSync(settingsFile);
+      try {
+        await settingsJs("(()=>{const e=document.querySelector('[aria-label=\"Capture frame rate\"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(e,'60');e.dispatchEvent(new Event('change',{bubbles:true}));})()"); await pause();
+        assert(await settingsJs("document.querySelector('.settings-save-state').textContent==='Changes could not be saved.'"), "a real disk write failure is reported instead of pretending settings were saved");
+      } finally { fs.rmSync(settingsFile,{recursive:true,force:true}); fs.renameSync(savedSettingsFile,settingsFile); }
+      await settingsJs("document.querySelector('.settings-sidebar>.settings-action').click()"); await pause();
+      assert(JSON.parse(fs.readFileSync(settingsFile,"utf8")).captureFps===60 && await settingsJs("!document.querySelector('.settings-sidebar>.settings-action')"), "Retry saving persists the intended settings after the disk recovers");
+      await screenshot("ui-settings-recording-light.png",settings.webContents);
+      await settingsNav("Captions");
+      assert(await settingsJs("document.body.innerText.includes('Download caption support') && !document.body.innerText.includes('Record webcam')"), "caption management has its own section without recording clutter");
+      await settingsNav("App updates");
+      assert(await settingsJs("document.body.innerText.includes('What’s new in Zoomcast')"), "release highlights remain accessible in App updates");
+      await settingsSearch("camera");
+      assert(await settingsJs("document.querySelectorAll('.settings-sidebar nav button').length===1 && document.body.innerText.includes('Record webcam')"), "settings search finds camera controls by keyword");
+      await settingsSearch("nothing-matches-this");
+      assert(await settingsJs("document.body.innerText.includes('No settings found')"), "settings search explains an empty result");
+      await settingsSearch(""); await settingsNav("Recording");
+      assert(await settingsJs("document.querySelector('[aria-label=\"Record webcam\"]').checked"), "section navigation and search retain webcam state");
+      await settingsNav("General");
       const setTheme = async theme => {
         await settings.webContents.executeJavaScript(`(()=>{const el=document.querySelector('select[aria-label="Theme"]');const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set;setter.call(el,${JSON.stringify(theme)});el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await pause(250);
@@ -315,12 +349,13 @@ app.on("browser-window-created", (_, win) => {
       assert(await settings.webContents.executeJavaScript("document.documentElement.dataset.theme==='light'"), "system theme follows appearance changes live");
       await setTheme("light");
       assert(await js("document.documentElement.dataset.theme==='light'"), "light theme restores across windows");
-      await settings.webContents.executeJavaScript("document.querySelector('input[type=checkbox]').click()");
+
       await settings.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", { width: 620, height: 260, deviceScaleFactor: 1, mobile: false });
       await pause(300);
 
-      const metrics = await settings.webContents.executeJavaScript("({height:innerHeight,scroll:document.querySelector('.settings-page').scrollHeight,checked:document.querySelector('input[type=checkbox]').checked})");
-      assert(metrics.scroll > metrics.height, `short settings viewport scrolls (${JSON.stringify(metrics)})`);
+      const metrics = await settings.webContents.executeJavaScript("({height:document.querySelector('.settings-content').clientHeight,scroll:document.querySelector('.settings-content').scrollHeight,width:innerWidth,scrollWidth:document.querySelector('.settings-page').scrollWidth})");
+      assert(metrics.scroll > metrics.height && metrics.scrollWidth<=metrics.width, `short settings viewport scrolls content without horizontal clipping (${JSON.stringify(metrics)})`);
+      await screenshot("ui-settings-small.png",settings.webContents);
       settings.destroy();
       result(true); clearTimeout(timer); app.exit(0);
     } catch (error) { await screenshot("ui-failed.png"); result(false, `${String(error)} · focus=${await js("document.activeElement?.outerHTML")}`); clearTimeout(timer); app.exit(1); }

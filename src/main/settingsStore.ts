@@ -33,5 +33,6 @@ export function saveSettings(s: Settings): void {
     // Worth knowing about: the UI would show the new value while the next
     // recording silently used the old one.
     logDiag("settings:save", err);
+    throw new Error("Could not save settings. Please try again.", { cause: err });
   }
 }

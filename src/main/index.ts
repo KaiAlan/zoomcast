@@ -2,7 +2,7 @@ import { cancelCaptionTasks } from "./captions/ipc";
 import { registerExportViewer } from "./exportJobs";
 import { isInstallingUpdate, registerUpdates } from "./updates";
 import { loadSettings } from "./settingsStore";
-import { app, BrowserWindow, Menu, nativeTheme, net, protocol } from "electron";
+import { app, BrowserWindow, Menu, nativeTheme, net, protocol, screen } from "electron";
 import { cancelAllExportSessions, registerIpc } from "./ipc";
 import { captureCapabilityError } from "./ffmpeg";
 import { logDiag } from "./log";
@@ -180,9 +180,7 @@ let settingsWindow: BrowserWindow | null = null;
 /**
  * One settings window, focused if it already exists.
  *
- * Smaller than the editor and not resizable to editor proportions: it holds one
- * control today and a handful later, and a 1400x900 window for that reads as a
- * mistake.
+ * Room for section navigation and controls, bounded by the desktop work area.
  */
 function openSettings(): void {
   if (settingsWindow !== null && !settingsWindow.isDestroyed()) {
@@ -192,7 +190,8 @@ function openSettings(): void {
 
   settingsWindow = createWindow(true, "#settings");
   settingsWindow.setMenuBarVisibility(false);
-  settingsWindow.setSize(620, 540);
+  const area = screen.getPrimaryDisplay().workAreaSize;
+  settingsWindow.setSize(Math.min(860, area.width), Math.min(700, area.height));
   settingsWindow.center();
   settingsWindow.on("closed", () => {
     settingsWindow = null;

@@ -8,10 +8,11 @@ Changes included in 0.1.6; see the reviewed release notes in 0.1.6.md.
 - Choose from 24 photo backgrounds and 24 gradients.
 - Split, reorder and delete video clips, and split zoom segments at the playhead.
 - Generate editable offline transcripts, export subtitles and include captions in MP4s.
-- See an in-app update notice when opening Zoomcast and a short summary after updating.
+- Find settings in searchable sections, with release highlights kept out of the editor.
 
 ## Added
 
+- Settings uses searchable General, Recording, Captions, App updates and Help & feedback sections. Controls save automatically, report disk failures and offer retry. The editor no longer shows the installed-release card.
 - A Figma-style custom background picker supports a saturation/brightness area, hue slider, HEX/RGB/HSB inputs, a screen eyedropper and recent colors. Continuous adjustments preview live and form one Undo step.
 - Optional offline caption support downloads about 64 MB only when requested. Generate from microphone or system audio, edit text and timing, and export SRT/VTT or MP4 captions. Saved captions follow cuts, reordered clips and audio sync. Removing speech support retains saved captions.
 - Classic, rounded, filled, dot and outline cursor styles, with size, motion blur, bounce, duration and sway controls. Outline has a black fill and white border.
