@@ -1,6 +1,6 @@
 {
   "name": "zoomcast",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "description": "Windows screen recorder and editor with cursor-aware auto zoom",
@@ -22,6 +22,7 @@
     "verify:ui": "electron tools/verify-ui.cjs",
     "verify:project-save": "electron tools/verify-project-save.cjs",
     "verify:feedback": "electron tools/verify-feedback.cjs",
+    "verify:shortcut": "node tools/verify-shortcut.cjs",
     "verify:updates": "electron tools/verify-updates.cjs",
     "verify:release": "node tools/verify-release.cjs",
     "verify:packaged": "node tools/verify-packaged.cjs",

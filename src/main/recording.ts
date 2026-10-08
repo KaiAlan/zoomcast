@@ -5,37 +5,23 @@ import {
 import { autostartEnabled, setAutostart } from "./autostart";
 import { logDiag } from "./log";
 import { destroyRecorderWidget, registerRecorderWidget, showRecorderWidget } from "./recorderWidget";
+import { recordShortcutInfo, registerRecordShortcut } from "./recordShortcut";
+import type { ShortcutState } from "../shared/shortcut";
 
-/**
- * Candidate record shortcuts, best first.
- *
- * A global shortcut is taken from every other app while zoomcast runs, so the
- * obvious picks are all bad: Ctrl+Shift+R is hard-reload in every browser,
- * Ctrl+Shift+W closes the window, Win+Alt+R belongs to the Xbox Game Bar
- * recorder. Even Ctrl+Alt+R turned out to be claimed on the author's machine.
- *
- * Rather than guess, the app walks this list and keeps the first one Windows
- * actually grants. `recordHotkeyLabel()` then reports what it got, so the UI
- * always shows the shortcut that really works.
- */
-const RECORD_HOTKEY_CANDIDATES = [
-  "CommandOrControl+Alt+R",
-  "CommandOrControl+Alt+Z",
-  "Alt+Shift+R",
-  "CommandOrControl+Alt+`",
-  "CommandOrControl+Shift+`",
-  "CommandOrControl+Alt+Insert",
-];
-
-let activeHotkey: string | null = null;
-
-/** Whichever shortcut actually registered, spelled how a person reads it. */
 export function recordHotkeyLabel(): string {
-  if (activeHotkey === null) return "";
-  return activeHotkey.replace(
-    "CommandOrControl",
-    process.platform === "darwin" ? "Cmd" : "Ctrl",
-  );
+  return recordShortcutInfo().hotkey;
+}
+
+export function shortcutState(): ShortcutState {
+  return { ...recordShortcutInfo(), startWithWindows: autostartEnabled(), startupSupported: app.isPackaged && process.platform === "win32" };
+}
+
+export function changeAutostart(enabled: boolean): ShortcutState {
+  if (typeof enabled !== "boolean") throw new Error("Start with Windows must be a boolean");
+  if (!app.isPackaged || process.platform !== "win32") throw new Error("Start with Windows requires the installed Windows app");
+  setAutostart(enabled);
+  updateTray();
+  return shortcutState();
 }
 
 let tray: Tray | null = null;
@@ -75,7 +61,8 @@ function updateTray(): void {
     Menu.buildFromTemplate([
       {
         label: recording ? "Recording controls…" : "Record…",
-        accelerator: activeHotkey ?? undefined,
+        accelerator: recordHotkeyLabel() || undefined,
+        registerAccelerator: false,
         click: () => void toggleRecording(),
       },
       { type: "separator" },
@@ -92,9 +79,9 @@ function updateTray(): void {
         label: "Start with Windows",
         type: "checkbox",
         checked: autostartEnabled(),
+        enabled: app.isPackaged && process.platform === "win32",
         click: (item) => {
-          setAutostart(item.checked);
-          updateTray();
+          changeAutostart(item.checked);
         },
       },
       { type: "separator" },
@@ -146,22 +133,7 @@ export function registerRecordingControls(): void {
     tray = null;
   }
 
-  activeHotkey = null;
-  for (const candidate of RECORD_HOTKEY_CANDIDATES) {
-    if (globalShortcut.register(candidate, () => void toggleRecording())) {
-      activeHotkey = candidate;
-      break;
-    }
-  }
-
-  if (activeHotkey === null) {
-    logDiag(
-      "hotkey",
-      `every candidate shortcut is taken (${RECORD_HOTKEY_CANDIDATES.join(", ")}). Recording still works from the tray and the window.`,
-    );
-  } else {
-    logDiag("hotkey", `registered ${activeHotkey}`);
-  }
+  registerRecordShortcut(() => void toggleRecording());
 
   updateTray();
 }

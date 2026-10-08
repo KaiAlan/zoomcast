@@ -84,6 +84,8 @@ const api: ZoomcastApi = {
   listRecordings: () =>
     ipcRenderer.invoke("recording:list") as Promise<RecordingSummary[]>,
   recordHotkey: () => ipcRenderer.invoke("recording:hotkey") as Promise<string>,
+  shortcutState: () => ipcRenderer.invoke("shortcut:state"),
+  setStartWithWindows: enabled => ipcRenderer.invoke("shortcut:startup", enabled),
   toggleRecording: () => ipcRenderer.invoke("recording:toggle") as Promise<void>,
   isRecording: () => ipcRenderer.invoke("recording:isActive") as Promise<boolean>,
   recording: {

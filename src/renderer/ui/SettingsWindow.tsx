@@ -3,6 +3,7 @@ import { CAPTURE_FPS_CHOICES, type Settings } from "../../shared/settings/types"
 import { fieldLabel, row, selectInput } from "./controls";
 import { UpdateNotice } from "./UpdateNotice";
 import { FeedbackButton } from "./FeedbackButton";
+import { ShortcutSettings } from "./ShortcutSettings";
 
 /**
  * The app's first settings surface.
@@ -56,6 +57,7 @@ export function SettingsWindow() {
       }}
     >
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "0 0 18px" }}>Settings</h2>
+      <ShortcutSettings />
 
       <label style={row}><span style={fieldLabel}>Theme</span><select aria-label="Theme" style={selectInput} value={settings.theme} onChange={event => update({ ...settings, theme: event.target.value as Settings["theme"] })}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></label>
       <p className="control-help">System follows your Windows appearance. Theme changes apply to all open windows.</p>
