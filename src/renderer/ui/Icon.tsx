@@ -12,6 +12,7 @@ const paths = {
   appearance: "M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3z M19 2v4 M17 4h4",
   cursor: "M5 3l14 10-7 1-3 7-4-18z",
   webcam: "M4 6h4l2-2h4l2 2h4v14H4V6z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0z",
+  captions: "M3 5h18v14H3z M6 10h5 M6 14h5 M14 10h4 M14 14h4",
   audio: "M4 10v4 M8 6v12 M12 3v18 M16 7v10 M20 10v4",
   output: "M4 14v6h16v-6 M12 3v12 M7 8l5-5 5 5",
   zoom: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0z M14 14l7 7 M7 10h6 M10 7v6",

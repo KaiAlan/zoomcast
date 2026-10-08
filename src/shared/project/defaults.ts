@@ -1,3 +1,4 @@
+import { defaultCaptions } from "../captions/document";
 import { DEFAULT_ZOOM_CONFIG } from "../zoom/config";
 import type { Project } from "./types";
 
@@ -6,6 +7,7 @@ export function defaultProject(bundleId: string): Project {
     version: 1,
     bundleId,
     cuts: [],
+    captions: defaultCaptions(),
     zoom: { config: { ...DEFAULT_ZOOM_CONFIG }, segments: [], keyframes: [] },
     style: {
       paddingFactor: 0.85,

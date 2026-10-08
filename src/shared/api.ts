@@ -60,6 +60,7 @@ export type ExportStartOptions = Omit<ExportArgsOptions, "outFile"> & {
 export type ZoomcastApi = {
   openFeedback: (request: import("./feedback").FeedbackRequest) => Promise<{ copied: boolean }>;
   updates: import("./updates").UpdateApi;
+  captions: import("./captions/types").CaptionApi;
   exports: {
     start: (request: ExportRequest) => Promise<string>;
     job: (id: string) => Promise<{ job: ExportJob; request: ExportRequest }>;

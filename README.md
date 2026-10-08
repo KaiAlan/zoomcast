@@ -31,6 +31,26 @@ Choose **Cursor** in the editor toolbar to customize the cursor. **Loop Cursor**
 
 Choose **Send feedback** in the workspace or Settings to prepare a bug report, feature request, or general feedback. Review and submit it on GitHub; reports are public and require GitHub sign-in. Long reports are copied for you to paste into the description.
 
+## Transcript and captions
+
+Open **Captions** in the editor and select **Download caption support**. The optional
+Windows CPU engine and multilingual speech model download about 64 MB once and
+remain outside the installer. Nothing downloads automatically. After installation,
+transcription runs offline on your computer; audio is never uploaded and no API key
+or subscription is required. Processing speed and recognition accuracy depend on
+the recording, language, and computer.
+
+Choose microphone, system audio, or both, then **Generate transcript**. Correct the
+text and timing, adjust caption appearance, and save the project. Visible captions
+appear in preview and exported MP4s. **Export SRT** and **Export VTT** save separate
+subtitle files using the current cuts, clip order, and audio sync offset. Regenerating
+replaces the transcript; Undo restores it. Review captions around cuts through a sentence.
+
+In **Settings → Offline captions**, remove the speech download to free disk space.
+Saved captions and exported files remain usable. App updates retain downloaded speech
+files. Downloads use pinned upstream files and SHA-256 verification; cancelled or
+failed downloads are discarded.
+
 ## Updates
 
 Installed version 0.1.2 and later check for newer releases on startup and shows **Update**, followed by **Restart to update**. Public-update builds need no GitHub account or access token. Older builds that ask for update access need one manual upgrade from [GitHub Releases](https://github.com/KaiAlan/zoomcast/releases).

@@ -1,3 +1,4 @@
+import { registerCaptionIpc } from "./captions/ipc";
 import { registerExportJobs } from "./exportJobs";
 import { openFeedback } from "./feedback";
 import { IMAGE_PRESETS, presetProjectFile } from "../shared/style/imagePresets";
@@ -38,6 +39,7 @@ function cancelExport(id: string): void {
 }
 
 export function registerIpc(): void {
+  registerCaptionIpc();
   ipcMain.handle("feedback:open", (_event, request: import("../shared/feedback").FeedbackRequest) => openFeedback(request));
   registerExportJobs();
   ipcMain.handle("library:get", () => getLibrary());

@@ -1,0 +1,18 @@
+.captions-panel { padding: 18px 14px; }
+.caption-heading { font-size: 14px; margin-bottom: 12px; }
+.speech-download { margin-bottom: 16px; }
+.caption-progress { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.caption-progress progress { width: 100%; accent-color: var(--accent); }
+.caption-message, .caption-error { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.caption-error { color: #cf4343; }
+.caption-actions { display: flex; gap: 8px; margin-top: 12px; }
+.caption-search, .caption-edit textarea, .caption-timing input { width: 100%; font: inherit; font-size: 12px; background: var(--control); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 8px; }
+.caption-list { max-height: 260px; overflow: auto; margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.caption-cue { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 10px; text-align: left; background: var(--surface); color: var(--text); border: 0; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px; overflow-wrap: anywhere; }
+.caption-cue.selected { background: var(--accent-soft); }
+.caption-time { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.caption-edit { margin-top: 14px; font-size: 12px; }
+.caption-edit textarea { margin: 8px 0; resize: vertical; }
+.caption-timing { display: flex; gap: 8px; margin-bottom: 10px; }
+.caption-timing label { width: 50%; color: var(--muted); }
+.caption-timing input { margin-top: 5px; }

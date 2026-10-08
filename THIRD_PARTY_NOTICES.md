@@ -15,3 +15,17 @@ The Zoomcast license does not grant trademark rights or patent licenses for thir
 ## Background photographs and artwork
 
 The bundled image backgrounds are supplied under the Unsplash License (https://unsplash.com/license), separately from Zoomcast’s MIT license. Original image links and photographer credits are in `src/renderer/public/backgrounds/CREDITS.md`, copied to `out/renderer/backgrounds/CREDITS.md` in packaged builds.
+
+## Optional offline speech recognition
+
+The on-demand engine is whisper.cpp v1.8.3, licensed under MIT by the ggml authors
+(https://github.com/ggml-org/whisper.cpp/tree/v1.8.3). The downloaded Whisper base
+multilingual model is licensed under MIT by OpenAI
+(https://github.com/openai/whisper#license). The model is a quantized GGML conversion
+from https://huggingface.co/ggerganov/whisper.cpp, pinned by revision and SHA-256.
+The download installs only whisper-cli.exe and the whisper/ggml CPU libraries;
+SDL and unrelated demo binaries are excluded. The complete MIT notices accompany
+the installed speech files in THIRD-PARTY-NOTICES.txt. Speech assets are excluded
+from installers and application update packages.
+
+The ZIP reader fflate retains its upstream MIT license inside the dependency package.

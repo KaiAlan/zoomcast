@@ -1,3 +1,5 @@
+import { captionAt, outputCaptions } from "../../shared/captions/timing";
+import { CaptionsPanel } from "./CaptionsPanel";
 import { cursorFrameAt } from "../../shared/cursor/effects";
 import { Icon, type IconName } from "./Icon";
 import { webcamTime } from "../../shared/webcam/layout";
@@ -252,8 +254,9 @@ export function Editor({
   );
 
   // Latest values for the render loop, which must not be re-created per frame.
-  const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl });
-  live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl };
+  const captionCues = useMemo(() => outputCaptions(project, manifest.durationMs), [project, manifest.durationMs]);
+  const live = useRef({ project, ctx, cursorPath, clicks, backgroundImageUrl, captionCues });
+  live.current = { project, ctx, cursorPath, clicks, backgroundImageUrl, captionCues };
 
   // Stable across history changes, unlike `edit` itself, so the mount effect
   // below can depend on it without being torn down on every edit.
@@ -306,6 +309,7 @@ export function Editor({
 
         renderer.drawFrame({
           screen: frame.image,
+          caption: p.captions ? { text: captionAt(live.current.captionCues, tOutputMs) ?? "", style: p.captions.style } : undefined,
           webcam: cameraFrame && webcamRef.current ? { image: cameraFrame.image, sourceSize: { w: webcamRef.current.width, h: webcamRef.current.height }, config: p.webcam } : undefined,
           zoom: zoomNow,
           motionBlur: blurForCamera(zoomPrev, zoomNow, c.output, p.style.motionBlurAmount),
@@ -761,6 +765,7 @@ export function Editor({
   const tools: Array<{ title: string; icon: IconName }> = [
     { title: "Appearance", icon: "appearance" }, { title: "Cursor", icon: "cursor" },
     { title: "Webcam", icon: "webcam" }, { title: "Audio", icon: "audio" },
+    { title: "Captions", icon: "captions" },
     { title: "Output", icon: "output" }, { title: "Advanced zoom", icon: "zoom" },
   ];
   const addTimelineSegment = (): void => {
@@ -816,6 +821,11 @@ export function Editor({
         <button type="button" className="tool-button rail-settings" aria-label="Settings" title="Settings" onClick={() => void window.zoomcast.openSettings()}><Icon name="settings" size={22} /></button>
       </nav>
       <aside className="editor-inspector" aria-label="Recording controls">
+        <CaptionsPanel active={activeSection === "Captions"} bundle={bundle} project={project}
+          onChange={captions => edit.apply(p => ({ ...p, captions }))}
+          onTransient={captions => edit.applyTransient(p => ({ ...p, captions }))}
+          onCommit={edit.commitGesture}
+          onSeek={t => playerRef.current?.seek(t)} />
         <Inspector
           activeSection={activeSection}
           audio={project.audio}

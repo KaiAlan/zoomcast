@@ -1,3 +1,5 @@
+import { SpeechDownload, useSpeechState } from "./SpeechDownload";
+import "./captions.css";
 import { useEffect, useState } from "react";
 import { CAPTURE_FPS_CHOICES, type Settings } from "../../shared/settings/types";
 import { fieldLabel, row, selectInput } from "./controls";
@@ -17,6 +19,7 @@ import { ShortcutSettings } from "./ShortcutSettings";
  * toggle should not also ask them to confirm it.
  */
 export function SettingsWindow() {
+  const speech = useSpeechState();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraStatus, setCameraStatus] = useState("");
@@ -121,6 +124,9 @@ export function SettingsWindow() {
         <p style={{ color: "var(--muted)", fontSize: 12 }}>Camera video is recorded separately. Adjust its appearance in the editor. Applies to the next recording.</p>
         {cameraStatus && <p role="status" style={{ fontSize: 12 }}>{cameraStatus}</p>}
       </>}
+      <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>Offline captions</h2>
+      <SpeechDownload state={speech.state} management />
+      {speech.error && <p role="alert">{speech.error}</p>}
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>App updates</h2>
       <UpdateNotice settings />
       <p>Updates come from public GitHub releases. No account or access token is needed.</p>

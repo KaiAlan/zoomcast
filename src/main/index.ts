@@ -1,3 +1,4 @@
+import { cancelCaptionTasks } from "./captions/ipc";
 import { registerExportViewer } from "./exportJobs";
 import { isInstallingUpdate, registerUpdates } from "./updates";
 import { loadSettings } from "./settingsStore";
@@ -565,6 +566,7 @@ app.on("before-quit", (event) => {
   // Let electron-updater's quit handler launch the installer. The normal
   // app.exit path below would cut that handler off before installation.
   if (isInstallingUpdate()) return;
+  cancelCaptionTasks();
   cancelAllExportSessions();
   // Finish the take rather than leaving a bundle with no manifest.
   event.preventDefault();

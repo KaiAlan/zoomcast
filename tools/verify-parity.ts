@@ -56,10 +56,21 @@ const CONFIGS: Array<{
   zoom?: Partial<Project["zoom"]>;
   cuts?: Project["cuts"];
   clips?: Project["clips"];
+  captions?: Project["captions"];
   /** Output times to compare when the default SHOTS would overrun a cut config's shorter output. */
   shots?: number[];
 }> = [
   { name: "default" },
+  {
+    name: "captions-reordered",
+    clips: [{ id: "later", startMs: 2500, endMs: 5000 }, { id: "earlier", startMs: 0, endMs: 2000 }],
+    captions: {
+      language: "en",
+      style: { visible: true, font: "Segoe UI", sizePct: 4, position: "bottom", color: "#ffffff", background: true },
+      cues: [{ id: "first", startMs: 0, endMs: 2000, text: "Caption in the earlier clip." }, { id: "second", startMs: 2500, endMs: 5000, text: "Later clip plays first. नमस्ते" }],
+    },
+    shots: [0, 1000, 2400, 2500, 4000],
+  },
   ...(["classic", "rounded", "filled", "dot", "outline"] as const).map(appearance => ({
     name: `cursor-${appearance}`,
     style: { cursor: { ...defaultProject("cursor").style.cursor, appearance, sizePct: 250, motionBlur: 0.4, clickBounce: 3.5, bounceDurationMs: 350, sway: 0.2 } },
@@ -243,6 +254,7 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
     zoom: { ...base.zoom, ...config.zoom },
     cuts: config.cuts ?? base.cuts,
     ...(config.clips ? { clips: config.clips } : {}),
+    ...(config.captions ? { captions: config.captions } : {}),
     webcam: { ...base.webcam, ...config.webcam },
   };
 

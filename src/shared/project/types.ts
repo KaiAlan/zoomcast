@@ -95,6 +95,7 @@ export type Project = {
   bundleId: string;
   cuts: Cut[];
   clips?: SourceClip[];
+  captions?: import("../captions/types").CaptionDocument;
   zoom: {
     config: ZoomConfig;
     /** The persisted, editable unit; keyframes are derived from these. */

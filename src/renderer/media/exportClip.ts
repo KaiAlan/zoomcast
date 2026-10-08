@@ -1,3 +1,4 @@
+import { captionAt, outputCaptions } from "../../shared/captions/timing";
 import { cursorFrameAt } from "../../shared/cursor/effects";
 import { openExportFrameWriter, type ExportFrameWriter } from "./ExportFrameWriter";
 import { webcamTime } from "../../shared/webcam/layout";
@@ -103,6 +104,7 @@ export async function exportClip(opts: {
   });
   const sourceSize = { w: manifest.video.width, h: manifest.video.height };
 
+  const captionCues = outputCaptions(project, manifest.durationMs);
   const frames = planExportFrames(
     manifest.durationMs,
     project.cuts,
@@ -176,6 +178,7 @@ export async function exportClip(opts: {
 
         renderer.drawFrame({
           screen: videoFrame.image,
+          caption: project.captions ? { text: captionAt(captionCues, frame.tOutputMs) ?? "", style: project.captions.style } : undefined,
           webcam: cameraFrame && opts.webcamSource ? { image: cameraFrame.image, sourceSize: { w: opts.webcamSource.width, h: opts.webcamSource.height }, config: project.webcam } : undefined,
           zoom: zoomNow,
           motionBlur: blurForCamera(zoomPrev, zoomNow, output, project.style.motionBlurAmount),

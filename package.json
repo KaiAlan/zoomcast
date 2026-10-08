@@ -1,6 +1,6 @@
 {
   "name": "zoomcast",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "description": "Windows screen recorder and editor with cursor-aware auto zoom",
@@ -38,10 +38,13 @@
     "dist": "npm run prepare:ffmpeg && npm run build && electron-builder --win --x64 --publish never",
     "prepare:ffmpeg": "node tools/prepare-ffmpeg.cjs",
     "verify:camera": "tsx tools/verify-camera.ts",
-    "verify:installed": "node tools/verify-installed.cjs"
+    "verify:installed": "node tools/verify-installed.cjs",
+    "verify:captions": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/prepare-caption-test.ps1 && electron tools/verify-captions.cjs",
+    "verify:caption-package": "node tools/verify-caption-package.cjs"
   },
   "dependencies": {
     "electron-updater": "6.8.9",
+    "fflate": "0.8.3",
     "koffi": "^3.2.1",
     "mp4box": "^2.4.1",
     "react": "^19.2.8",

@@ -1,3 +1,4 @@
+import { normalizeCaptions } from "../captions/document";
 import { defaultProject } from "./defaults";
 import type { Cut, Project } from "./types";
 import { DEFAULT_ZOOM_CONFIG } from "../zoom/config";
@@ -149,6 +150,7 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
 
   return {
     version: 1,
+    captions: normalizeCaptions(raw.captions),
     // The caller's id wins: the directory a bundle was loaded from is the
     // truth, and a copied project directory would otherwise keep a stale id.
     bundleId,

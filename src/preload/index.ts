@@ -31,6 +31,15 @@ ipcRenderer.on("updates:prepare", (_event, token: string) => {
 });
 
 const api: ZoomcastApi = {
+  captions: {
+    state: () => ipcRenderer.invoke("captions:state"),
+    install: () => ipcRenderer.invoke("captions:install"),
+    remove: () => ipcRenderer.invoke("captions:remove"),
+    cancel: () => ipcRenderer.invoke("captions:cancel"),
+    generate: request => ipcRenderer.invoke("captions:generate", request),
+    exportSubtitles: request => ipcRenderer.invoke("captions:export", request),
+    onChanged: callback => on("captions:changed", callback),
+  },
   openFeedback: request => ipcRenderer.invoke("feedback:open", request),
   updates: {
     state: () => ipcRenderer.invoke("updates:state"),

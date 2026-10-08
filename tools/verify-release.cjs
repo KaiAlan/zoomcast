@@ -64,6 +64,8 @@ async function hash(file, algorithm = "sha512", encoding = "base64") {
   const manifest = JSON.parse(asar.extractFile(archive, "package.json").toString());
   assert(manifest.version === version && manifest.dependencies["electron-updater"], "packaged app includes this version and the updater dependency");
   const entries = asar.listPackage(archive).map(entry => entry.replaceAll("\\", "/"));
+  assert(!entries.some(entry => entry.includes("caption-guard.cjs")), "production installer excludes the caption-test bootstrap");
+  assert(!entries.some(entry => /whisper-cli\.exe$|ggml-base-q5_1\.bin$|engine\.zip$/.test(entry)), "speech engine and model are excluded from the installer");
   assert(entries.some(entry => entry.includes("node_modules/electron-updater/out/main.js")), "updater implementation is present in app archive");
   const unpacked = path.join(resources, "app.asar.unpacked", "node_modules");
   assert(fs.existsSync(path.join(unpacked, "uiohook-napi", "prebuilds", "win32-x64", "uiohook-napi.node")), "input-hook native binary is unpacked");

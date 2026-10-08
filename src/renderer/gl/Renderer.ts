@@ -1,3 +1,5 @@
+import { CaptionTexture } from "./captionTexture";
+import type { CaptionStyle } from "../../shared/captions/types";
 import type { CursorSample } from "../../shared/cursor/path";
 import type { Ripple } from "../../shared/cursor/ripples";
 import { cursorArt } from "../../shared/cursor/appearance";
@@ -28,6 +30,7 @@ import {
 
 export type FrameState = {
   screen: TexImageSource;
+  caption?: { text: string; style: CaptionStyle };
   webcam?: { image: TexImageSource; sourceSize: Size; config: WebcamConfig };
   zoom: ZoomState;
   style: StyleConfig;
@@ -125,6 +128,8 @@ export class Renderer {
   private readonly cursorTextures = new CursorTextureCache();
   private readonly backgroundTextures = new BackgroundTextureCache();
   private readonly tex: WebGLTexture;
+  private readonly captionTextures = new CaptionTexture();
+  private readonly captionProgram: Program;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", {
@@ -190,6 +195,12 @@ export class Renderer {
     ]);
     this.cursorProgram = link(gl, CURSOR_FRAG, ["u_tex", "u_shadow", "u_spanPx", "u_texturePx", "u_hotPx", "u_angle", "u_cursorBlur"]);
     this.rippleProgram = link(gl, RIPPLE_FRAG, ["u_progress"]);
+    this.captionProgram = link(gl, `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+out vec4 color;
+void main() { color = texture(u_tex, v_uv); }`, ["u_tex"]);
 
     const tex = gl.createTexture();
     if (tex === null) throw new Error("could not create texture");
@@ -264,6 +275,18 @@ export class Renderer {
       };
       this.drawShadow(layout.quad, out, cameraFrame);
       this.drawScreen(layout.quad, layout.region, out, camera.sourceSize, cameraFrame, camera.image, undefined);
+    }
+
+    if (state.caption?.style.visible && state.caption.text) {
+      const caption = this.captionTextures.get(gl, state.caption.text, state.caption.style, out);
+      gl.useProgram(this.captionProgram.program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, caption.texture);
+      gl.uniform1i(this.captionProgram.uniforms.u_tex ?? null, 0);
+      const margin = out.h * 0.045;
+      const y = state.caption.style.position === "top" ? margin : out.h - margin - caption.height;
+      this.setRect(this.captionProgram, (out.w - caption.width) / 2, y, caption.width, caption.height, out);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
     gl.bindVertexArray(null);
@@ -607,6 +630,8 @@ export class Renderer {
   dispose(): void {
     const gl = this.gl;
     gl.deleteTexture(this.tex);
+    this.captionTextures.dispose(gl);
+    gl.deleteProgram(this.captionProgram.program);
     gl.deleteVertexArray(this.vao);
     gl.deleteProgram(this.bg.program);
     gl.deleteProgram(this.shadow.program);

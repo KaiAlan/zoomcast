@@ -1,3 +1,4 @@
+import { captionsAreBusy } from "./captions/ipc";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import updater from "electron-updater";
 import { randomUUID } from "node:crypto";
@@ -58,7 +59,8 @@ export function registerUpdates(enabled: boolean): void {
     },
     busyReason: () => isRecording() || recorderIsBusy()
       ? "Finish recording before restarting to update."
-      : hasActiveExports() ? "Wait for your exports to finish before restarting to update." : null,
+      : hasActiveExports() ? "Wait for your exports to finish before restarting to update."
+      : captionsAreBusy() ? "Wait for your caption task to finish before restarting to update." : null,
     confirm: async () => (await dialog.showMessageBox({
       type: "question", title: "Update Zoomcast", message: "Restart to install the update?",
       detail: "Your open projects will be saved. Zoomcast will close and reopen after installation.",
