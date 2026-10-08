@@ -1,6 +1,6 @@
 import type { AppUpdater } from "electron-updater";
 import type { AppUpdaterEvents } from "electron-updater/out/AppUpdater";
-import type { UpdateState } from "../shared/updates";
+import { releaseSummary, type UpdateState } from "../shared/updates";
 
 export type UpdateDriver = Pick<AppUpdater,
   "autoDownload" | "autoInstallOnAppQuit" | "allowPrerelease" | "allowDowngrade" |
@@ -32,10 +32,10 @@ export class UpdateController {
     driver.allowPrerelease = false;
     driver.allowDowngrade = false;
     driver.on("checking-for-update", () => this.set({ status: "checking", message: undefined }));
-    driver.on("update-available", info => this.set({ status: "available", version: info.version, message: undefined }));
-    driver.on("update-not-available", () => this.set({ status: "current", version: undefined, message: undefined }));
+    driver.on("update-available", info => this.set({ status: "available", version: info.version, release: releaseSummary(info.version, info.releaseNotes), message: undefined }));
+    driver.on("update-not-available", () => this.set({ status: "current", version: undefined, release: undefined, message: undefined }));
     driver.on("download-progress", progress => this.set({ status: "downloading", percent: Math.max(0, Math.min(100, progress.percent)) }));
-    driver.on("update-downloaded", info => this.set({ status: "downloaded", version: info.version, percent: 100, message: undefined }));
+    driver.on("update-downloaded", info => this.set({ status: "downloaded", version: info.version, release: info.releaseNotes ? releaseSummary(info.version, info.releaseNotes) : this.value.release, percent: 100, message: undefined }));
     driver.on("error", error => this.fail(error));
   }
 

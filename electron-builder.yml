@@ -2,6 +2,10 @@ appId: dev.zoomcast.app
 productName: zoomcast
 artifactName: zoomcast-Setup-${version}.${ext}
 
+# Generated from the same reviewed notes used for GitHub and the in-app summary.
+releaseInfo:
+  releaseNotesFile: release-notes.md
+
 publish:
   provider: github
   owner: KaiAlan

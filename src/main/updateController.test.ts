@@ -67,6 +67,17 @@ describe("installed app updates", () => {
     expect(driver.quitAndInstall).not.toHaveBeenCalled();
   });
 
+  it("carries release highlights through download and clears them when current", async () => {
+    const { driver, controller } = setup();
+    driver.emit("update-available", { version: "0.1.4", releaseNotes: "## Highlights\n- Edit clips on the timeline.\n\n## Fixed\n- Full details." });
+    expect(controller.state().release?.highlights).toEqual(["Edit clips on the timeline."]);
+    await controller.download();
+    driver.emit("update-downloaded", { version: "0.1.4" });
+    expect(controller.state().release?.highlights).toEqual(["Edit clips on the timeline."]);
+    driver.emit("update-not-available", { version: "0.1.0" });
+    expect(controller.state().release).toBeUndefined();
+  });
+
   it("only downloads after availability and reports progress before completion", async () => {
     const { controller, driver } = setup();
     await controller.download();

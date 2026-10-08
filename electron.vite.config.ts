@@ -1,9 +1,14 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
+import { createRequire } from "node:module";
+
+const { check } = createRequire(import.meta.url)("./tools/release-notes.cjs");
+const { version, highlights, url } = check();
 
 export default defineConfig({
   main: {
+    define: { __ZOOMCAST_RELEASE__: JSON.stringify({ version, highlights, url }) },
     // uiohook-napi is a native addon: a .node binary cannot be bundled, so
     // dependencies stay external and are required from node_modules at runtime.
     plugins: [externalizeDepsPlugin()],

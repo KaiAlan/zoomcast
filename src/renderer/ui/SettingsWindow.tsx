@@ -3,7 +3,7 @@ import "./captions.css";
 import { useEffect, useState } from "react";
 import { CAPTURE_FPS_CHOICES, type Settings } from "../../shared/settings/types";
 import { fieldLabel, row, selectInput } from "./controls";
-import { UpdateNotice } from "./UpdateNotice";
+import { UpdateNotice, WhatsNew } from "./UpdateNotice";
 import { FeedbackButton } from "./FeedbackButton";
 import { ShortcutSettings } from "./ShortcutSettings";
 
@@ -129,7 +129,8 @@ export function SettingsWindow() {
       {speech.error && <p role="alert">{speech.error}</p>}
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>App updates</h2>
       <UpdateNotice settings />
-      <p>Updates come from public GitHub releases. No account or access token is needed.</p>
+      <p>Zoomcast checks once when you open the app. If a new version is available, an in-app notice appears. Click Update to download, then Restart to update when ready. You can also check manually here.</p>
+      <WhatsNew settings />
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>Feedback</h2>
       <FeedbackButton />
     </div>

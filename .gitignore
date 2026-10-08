@@ -3,6 +3,7 @@ dist/
 out/
 release/
 .vite/
+build/release-notes.md
 *.log
 
 # vendored binaries — fetched, not committed

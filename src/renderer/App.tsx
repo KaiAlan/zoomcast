@@ -11,7 +11,7 @@ import { installShootHook } from "./shoot";
 import { Editor } from "./ui/Editor";
 import { SettingsWindow } from "./ui/SettingsWindow";
 import { Welcome } from "./ui/Welcome";
-import { UpdateNotice } from "./ui/UpdateNotice";
+import { UpdateNotice, WhatsNew } from "./ui/UpdateNotice";
 import { FeedbackButton } from "./ui/FeedbackButton";
 
 /** The headless screenshot harness, used by tools/verify-decode.ts. */
@@ -93,6 +93,7 @@ export function App() {
       <UpdateNotice />
       <FeedbackButton />
     </nav>
+    <WhatsNew />
     <div className="workspace-main">
       <div className="workspace-editor-pane" style={activeTab === "exports" ? {display:"none"} : undefined}>
         {bundle ? <Editor key={bundle.dir} bundle={bundle} onBack={() => setBundle(null)} /> : <Welcome error={error} onOpen={dir => void open(dir)} />}

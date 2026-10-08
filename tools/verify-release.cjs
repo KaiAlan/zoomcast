@@ -16,8 +16,10 @@ async function hash(file, algorithm = "sha512", encoding = "base64") {
   return digest.digest(encoding);
 }
 (async () => {
+  const notes = require('./release-notes.cjs').check();
   const metadata = yaml.load(fs.readFileSync(path.join(release, "latest.yml"), "utf8"));
   assert(metadata.version === version, "update metadata matches package version");
+  assert(metadata.releaseNotes?.replaceAll('\r\n', '\n') === notes.markdown, "update metadata includes the reviewed detailed release notes");
   assert(Array.isArray(metadata.files) && metadata.files.length === 1, "update metadata lists one Windows installer");
   const entry = metadata.files[0];
   assert(entry.url === `zoomcast-Setup-${version}.exe`, "installer has the expected stable asset name");
@@ -66,6 +68,8 @@ async function hash(file, algorithm = "sha512", encoding = "base64") {
   const entries = asar.listPackage(archive).map(entry => entry.replaceAll("\\", "/"));
   assert(!entries.some(entry => entry.includes("caption-guard.cjs")), "production installer excludes the caption-test bootstrap");
   assert(!entries.some(entry => /whisper-cli\.exe$|ggml-base-q5_1\.bin$|engine\.zip$/.test(entry)), "speech engine and model are excluded from the installer");
+  const mainBundle = asar.extractFile(archive, path.join("out", "main", "index.js")).toString();
+  assert(notes.highlights.every(line => mainBundle.includes(JSON.stringify(line).slice(1, -1))), "packaged app includes every reviewed release highlight");
   assert(entries.some(entry => entry.includes("node_modules/electron-updater/out/main.js")), "updater implementation is present in app archive");
   const unpacked = path.join(resources, "app.asar.unpacked", "node_modules");
   assert(fs.existsSync(path.join(unpacked, "uiohook-napi", "prebuilds", "win32-x64", "uiohook-napi.node")), "input-hook native binary is unpacked");

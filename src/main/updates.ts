@@ -1,5 +1,5 @@
 import { captionsAreBusy } from "./captions/ipc";
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import updater from "electron-updater";
 import { randomUUID } from "node:crypto";
 import { isRecording } from "./capture/SessionController";
@@ -9,6 +9,11 @@ import { UpdateController } from "./updateController";
 import { logDiag } from "./log";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { UpdateHistory } from "./updateHistory";
+import { scheduleUpdates } from "./updateSchedule";
+import { releaseUrl, type ReleaseSummary, type UpdateState } from "../shared/updates";
+
+declare const __ZOOMCAST_RELEASE__: ReleaseSummary;
 
 let controller: UpdateController | null = null;
 export const isInstallingUpdate = (): boolean => controller?.isInstalling() ?? false;
@@ -34,6 +39,16 @@ async function saveOpenProjects(): Promise<void> {
 }
 
 export function registerUpdates(enabled: boolean): void {
+  const history = new UpdateHistory(join(app.getPath("userData"), "update-history.json"));
+  const installedRelease = __ZOOMCAST_RELEASE__.version === app.getVersion() ? __ZOOMCAST_RELEASE__ : undefined;
+  const stateForUi = (state: UpdateState): UpdateState => ({
+    ...state, installedRelease, showWhatsNew: !!installedRelease && !history.hasSeen(installedRelease.version),
+  });
+  const publish = (state: UpdateState): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.webContents.isDestroyed()) win.webContents.send("updates:changed", stateForUi(state));
+    }
+  };
   // Releases contain a complete NSIS installer, never a web installer.
   updater.autoUpdater.disableWebInstaller = true;
   // Public releases use the packaged app-update.yml, without credentials.
@@ -52,11 +67,7 @@ export function registerUpdates(enabled: boolean): void {
     driver: updater.autoUpdater,
     enabled,
     currentVersion: app.getVersion(),
-    changed: state => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.webContents.isDestroyed()) win.webContents.send("updates:changed", state);
-      }
-    },
+    changed: publish,
     busyReason: () => isRecording() || recorderIsBusy()
       ? "Finish recording before restarting to update."
       : hasActiveExports() ? "Wait for your exports to finish before restarting to update."
@@ -69,13 +80,20 @@ export function registerUpdates(enabled: boolean): void {
     save: saveOpenProjects,
     log: error => logDiag("updates", message(error)),
   });
-  ipcMain.handle("updates:state", () => controller?.state());
+  ipcMain.handle("updates:state", () => controller && stateForUi(controller.state()));
   ipcMain.handle("updates:check", () => controller?.check());
   ipcMain.handle("updates:download", () => controller?.download());
   ipcMain.handle("updates:install", () => controller?.install());
+  ipcMain.handle("updates:dismiss-whats-new", () => {
+    if (installedRelease) history.markSeen(installedRelease.version);
+    if (controller) publish(controller.state());
+  });
+  ipcMain.handle("updates:release-notes", async (_event, version: unknown) => {
+    if (typeof version !== "string" || ![app.getVersion(), controller?.state().version].includes(version)) throw new Error("Unknown release version");
+    await shell.openExternal(releaseUrl(version));
+  });
   if (enabled) {
-    const initial = setTimeout(() => void controller?.check(), 5000);
-    const periodic = setInterval(() => void controller?.check(), 6 * 60 * 60 * 1000);
-    app.once("will-quit", () => { clearTimeout(initial); clearInterval(periodic); });
+    const schedule = scheduleUpdates(() => controller?.check() ?? Promise.resolve());
+    app.once("will-quit", schedule.stop);
   }
 }

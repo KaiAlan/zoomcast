@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RecorderAction, RecorderOptions, RecorderSource, RecorderState } from "../../shared/recorder";
 import "./recorder.css";
-import { UpdateNotice } from "./UpdateNotice";
+import { UpdateNotice, WhatsNew } from "./UpdateNotice";
 
 const icons = {
   chevron: <path d="m6 9 6 6 6-6" />,
@@ -108,7 +108,7 @@ export function RecorderWidget() {
       <button type="button" className="recorder-icon" title="Hide widget — shortcut brings it back" aria-label="Hide widget" onClick={() => act("hide")}><span style={{ fontSize: 24 }}>−</span></button>
       <button type="button" className="recorder-icon" title={idle ? "Close widget" : "Hide widget — recording continues"} aria-label="Close widget" onClick={() => act("hide")}><Icon name="close"/></button>
     </div>
-    {idle && panel === null && <UpdateNotice recorder />}
+    {idle && panel === null && <><UpdateNotice recorder /><WhatsNew recorder /></>}
     {panel === "source" && <div className="recorder-panel" id="recorder-source-panel">
       <header>Capture source <div className="recorder-panel-actions"><button type="button" disabled={sourcesLoading} onClick={refreshSources}>{sourcesLoading ? "Loading…" : "Refresh"}</button><button type="button" className="recorder-panel-close" aria-label="Close capture sources" onClick={() => setPanel(null)}><Icon name="close" /></button></div></header>
       <input type="search" className="recorder-source-search" aria-label="Search capture sources" placeholder="Find a screen or app window…" value={sourceQuery} onChange={e => setSourceQuery(e.target.value)} />
