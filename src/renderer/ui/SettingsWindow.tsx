@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CAPTURE_FPS_CHOICES, type Settings } from "../../shared/settings/types";
 import { fieldLabel, row, selectInput } from "./controls";
-import { UpdateNotice } from "./UpdateNotice";
+import { UpdateNotice, WhatsNew } from "./UpdateNotice";
 import { FeedbackButton } from "./FeedbackButton";
 
 /**
@@ -121,7 +121,8 @@ export function SettingsWindow() {
       </>}
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>App updates</h2>
       <UpdateNotice settings />
-      <p>Updates come from public GitHub releases. No account or access token is needed.</p>
+      <p>Zoomcast checks on startup, every hour and after waking from sleep. New versions appear here and in a Windows notification. Click Update to download, then Restart to update when ready.</p>
+      <WhatsNew settings />
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>Feedback</h2>
       <FeedbackButton />
     </div>

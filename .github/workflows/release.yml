@@ -3,7 +3,6 @@ name: Windows release candidate
 on:
   push:
     tags: ["v*"]
-    branches: ["release/0.1.2"]
   workflow_dispatch:
 
 permissions:
@@ -25,14 +24,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Verify version and release notes
-        shell: pwsh
-        run: |
-          $version = node -p "require('./package.json').version"
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
-            throw 'The release tag must match package.json version.'
-          }
-          if (!(Test-Path "docs/releases/$version.md")) { throw 'Release notes are missing.' }
+      - name: Verify version, detailed notes, app highlights and changelog
+        run: npm run notes:check
       - run: npm run typecheck
       - run: npm run lint
       - uses: FedericoCarboni/setup-ffmpeg@v3
@@ -47,6 +40,7 @@ jobs:
           MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
       - run: npm run verify:release
       - run: npm run verify:updates
+      - run: npm run verify:update-notices
       - run: npm run verify:packaged
       - uses: actions/upload-artifact@v4
         with:
@@ -57,19 +51,16 @@ jobs:
             release/latest.yml
             release/*-source-*.zip
             release/*-source-*.zip.sha256
+            build/release-notes.md
+            CHANGELOG.md
           if-no-files-found: error
       - name: Create release
-        if: github.ref_type == 'tag' || github.ref == 'refs/heads/release/0.1.2'
+        if: github.ref_type == 'tag'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = node -p "require('./package.json').version"
           $assets = @(Get-ChildItem release/*.exe, release/*.blockmap, release/latest.yml, release/*-source-*.zip, release/*-source-*.zip.sha256 | ForEach-Object FullName)
-          if ($env:GITHUB_REF -eq 'refs/heads/release/0.1.2') {
-            if ($version -ne '0.1.2') { throw 'This release branch is reserved for 0.1.2.' }
-            gh release create "v$version" @assets --target $env:GITHUB_SHA --latest --title "Zoomcast $version" --notes-file "docs/releases/$version.md"
-          } else {
-            gh release create "v$version" @assets --draft --verify-tag --title "Zoomcast $version" --notes-file "docs/releases/$version.md"
-          }
+          gh release create "v$version" @assets --draft --verify-tag --title "Zoomcast $version" --notes-file "build/release-notes.md"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

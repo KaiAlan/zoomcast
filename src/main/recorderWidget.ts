@@ -130,8 +130,12 @@ export function registerRecorderWidget(editor: (dir?: string) => void, controls:
   ipcMain.handle("recorder:resize", (_event, height: number) => {
     if (widget && Number.isFinite(height)) {
       // Windows can retain a non-resizable window's previous minimum size.
+      const { workArea } = screen.getDisplayMatching(widget.getBounds());
+      const nextHeight = Math.max(70, Math.min(workArea.height - 24, 720, Math.ceil(height)));
       widget.setResizable(true);
-      widget.setSize(430, Math.max(70, Math.min(390, Math.ceil(height))));
+      widget.setSize(430, nextHeight);
+      const { x, y } = widget.getBounds();
+      if (y + nextHeight > workArea.y + workArea.height - 12) widget.setPosition(x, workArea.y + workArea.height - nextHeight - 12);
       widget.setResizable(false);
     }
   });

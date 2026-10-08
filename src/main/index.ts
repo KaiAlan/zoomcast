@@ -461,7 +461,7 @@ void app.whenReady().then(async () => {
   registerBundleProtocol();
   registerDisplayMediaHandler();
   registerIpc();
-  registerUpdates(app.isPackaged && process.platform === "win32" && !headless);
+  registerUpdates(app.isPackaged && process.platform === "win32" && !headless, openSettings);
   registerEditorOpener(showEditor);
   registerExportViewer(showEditor);
   registerSettingsOpener(openSettings);
