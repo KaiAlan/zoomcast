@@ -7,6 +7,7 @@ import { parseTelemetry } from "../shared/bundle/telemetry";
 import type { TelemetryEvent } from "../shared/bundle/types";
 import { normalizeProject } from "../shared/project/migrate";
 import type { Project } from "../shared/project/types";
+import { DEFAULT_IMAGE_BACKGROUND_FILE, DESKTOP_BACKGROUND_FILE } from "../shared/style/desktopBackground";
 
 const PROJECT_FILE = "project.json";
 
@@ -45,6 +46,10 @@ export function openBundle(dir: string): OpenedBundle {
   const projectPath = join(root, PROJECT_FILE);
   const saved = existsSync(projectPath) ? JSON.parse(readFileSync(projectPath, "utf8")) : null;
   const project: Project = normalizeProject(saved, manifest.id);
+  if (saved === null) {
+    const imageFile = [DESKTOP_BACKGROUND_FILE, DEFAULT_IMAGE_BACKGROUND_FILE].find(file => existsSync(join(root, file)));
+    if (imageFile) project.style.background = { ...project.style.background, kind: "image", imageFile };
+  }
 
   return {
     dir: root,

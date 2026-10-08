@@ -1,14 +1,15 @@
 /** Curated locally bundled backgrounds; credits travel with the app. */
 export type ImagePreset = { id: string; label: string; file: string; thumbnail: string; author: string; source: string };
+export const DEFAULT_IMAGE_PRESET: ImagePreset = {
+  "id": "ribbons",
+  "label": "Ribbons",
+  "author": "Milad Fakurian",
+  "source": "https://unsplash.com/photos/E8Ufcyxz514",
+  "file": "ribbons.jpg",
+  "thumbnail": "ribbons-thumb.jpg"
+};
 export const IMAGE_PRESETS: readonly ImagePreset[] = [
-  {
-    "id": "ribbons",
-    "label": "Ribbons",
-    "author": "Milad Fakurian",
-    "source": "https://unsplash.com/photos/E8Ufcyxz514",
-    "file": "ribbons.jpg",
-    "thumbnail": "ribbons-thumb.jpg"
-  },
+  DEFAULT_IMAGE_PRESET,
   {
     "id": "spectrum",
     "label": "Spectrum",

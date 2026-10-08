@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultProject } from "../shared/project/defaults";
 import { openBundle, saveProject } from "./bundleIo";
+import { DEFAULT_IMAGE_BACKGROUND_FILE, DESKTOP_BACKGROUND_FILE } from "../shared/style/desktopBackground";
 
 vi.mock("node:fs", async importOriginal => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -18,6 +19,32 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }); });
 describe("saved project persistence", () => {
+  it("uses a recording's wallpaper snapshot without disabling automatic zoom planning", () => {
+    fs.writeFileSync(join(root, DESKTOP_BACKGROUND_FILE), "snapshot");
+    const bundle = openBundle(root);
+    expect(bundle.project.style.background).toMatchObject({ kind: "image", imageFile: DESKTOP_BACKGROUND_FILE });
+    expect(bundle.hasSavedPlan).toBe(false);
+    expect(fs.existsSync(join(root, "project.json"))).toBe(false);
+    saveProject(root, bundle.project);
+    expect(openBundle(root).project.style.background).toEqual(bundle.project.style.background);
+  });
+  it("preserves a saved background even if the recording has a wallpaper snapshot", () => {
+    fs.writeFileSync(join(root, DESKTOP_BACKGROUND_FILE), "snapshot");
+    const project = defaultProject("fixture-basic");
+    project.style.background.kind = "color";
+    project.style.background.color = "#385948";
+    saveProject(root, project);
+    expect(openBundle(root).project.style.background).toEqual(project.style.background);
+  });
+  it("keeps the existing default for recordings without a wallpaper snapshot", () => {
+    expect(openBundle(root).project.style.background).toEqual(defaultProject("fixture-basic").style.background);
+  });
+  it("uses the bundled fallback image for a new take without a desktop wallpaper", () => {
+    fs.writeFileSync(join(root, DEFAULT_IMAGE_BACKGROUND_FILE), "bundled image");
+    const bundle = openBundle(root);
+    expect(bundle.project.style.background).toMatchObject({ kind: "image", imageFile: DEFAULT_IMAGE_BACKGROUND_FILE });
+    expect(bundle.hasSavedPlan).toBe(false);
+  });
   it("distinguishes a new take from a deliberately empty saved zoom timeline", () => {
     expect(openBundle(root).hasSavedPlan).toBe(false);
     const project = defaultProject("fixture-basic");

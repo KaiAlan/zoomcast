@@ -35,6 +35,7 @@
     "verify:parity": "npm run build && tsx tools/verify-parity.ts",
     "verify:capture": "tsx tools/verify-capture.ts",
     "verify:countdown": "electron tools/verify-countdown.cjs",
+    "verify:desktop-background": "electron tools/verify-desktop-background.cjs",
     "tune": "tsx tools/tune-planner.ts",
     "bench:encoders": "tsx tools/bench-encoders.ts",
     "bench:preview": "tsx tools/bench-preview.ts",

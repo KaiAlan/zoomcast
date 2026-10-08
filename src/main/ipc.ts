@@ -1,12 +1,12 @@
 import { registerCaptionIpc } from "./captions/ipc";
 import { registerExportJobs } from "./exportJobs";
 import { openFeedback } from "./feedback";
-import { IMAGE_PRESETS, presetProjectFile } from "../shared/style/imagePresets";
+import { IMAGE_PRESETS } from "../shared/style/imagePresets";
+import { copyBackgroundPreset } from "./backgroundImages";
 import { BrowserWindow, dialog, ipcMain, MessageChannelMain, nativeTheme, shell, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { copyFileSync } from "node:fs";
-import { dirname, extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { extname, join } from "node:path";
 import type { ExportStartOptions } from "../shared/api";
 import { formatExportFailure, formatExportStart } from "../shared/export/diagnostics";
 import type { Project } from "../shared/project/types";
@@ -70,10 +70,7 @@ export function registerIpc(): void {
   ipcMain.handle("background:preset", (_event, dir: string, id: string) => {
     const preset = IMAGE_PRESETS.find(image => image.id === id);
     if (!preset) throw new Error("Unknown background preset");
-    const file = presetProjectFile(preset);
-    const assets = process.env.ELECTRON_RENDERER_URL ? "../../src/renderer/public/backgrounds" : "../renderer/backgrounds";
-    copyFileSync(join(dirname(fileURLToPath(import.meta.url)), assets, preset.file), join(dir, file));
-    return file;
+    return copyBackgroundPreset(dir, preset);
   });
   ipcMain.handle("background:choose", async (_event, dir: string) => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];

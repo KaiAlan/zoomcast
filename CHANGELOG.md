@@ -16,6 +16,7 @@ Includes the 0.1.6 change history and new countdown feedback prepared for the ne
 
 ### Added
 
+- New recordings use the currently applied Windows desktop wallpaper as their background. Each take keeps its own image copy, so later wallpaper changes do not affect existing projects. Image is the first Appearance background tab; desktops without a usable wallpaper use the bundled Ribbons image.
 - Expanded solid background presets to 24 colors, including warm neutrals, pastels, richer hues and dark shades, alongside the existing custom color picker.
 - A large countdown centered on the recorded display, with one gentle beep per second and a different quiet chime once capture successfully starts. The overlay stays out of the captured video, cancels immediately and respects the existing No delay / 3 / 5 / 10 second choices.
 - Settings uses searchable General, Recording, Captions, App updates and Help & feedback sections. Controls save automatically, report disk failures and offer retry. The editor no longer shows the installed-release card.

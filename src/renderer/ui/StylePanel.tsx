@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { COLOR_PRESETS, IMAGE_PRESETS, presetImageUrl, presetProjectFile } from "../../shared/style/imagePresets";
+import { DESKTOP_BACKGROUND_FILE } from "../../shared/style/desktopBackground";
 import { SliderField } from "./SliderField";
 import { ColorPicker } from "./ColorPicker";
 import { InspectorSection } from "./InspectorSection";
@@ -31,7 +32,7 @@ type Props = {
   onOutputChange: (next: OutputConfig) => void;
 };
 
-const BACKGROUND_KINDS: BackgroundKind[] = ["gradient", "color", "image", "hidden"];
+const BACKGROUND_KINDS: BackgroundKind[] = ["image", "gradient", "color", "hidden"];
 const BLURS: BlurStrength[] = ["none", "moderate", "strong"];
 const FRAME_PRESET_NAMES: FramePreset[] = ["default", "minimal", "hidden"];
 /** Kept as strings because SelectRow is generic over string values. */
@@ -153,7 +154,7 @@ export function StylePanel({ style, output, dir, onStyleChange, onStyleTransient
                 overflowWrap: "anywhere",
               }}
             >
-              {IMAGE_PRESETS.find(preset => bg.imageFile === presetProjectFile(preset))?.label ?? bg.imageFile ?? "Choose a preset or your own image"}
+              {bg.imageFile === DESKTOP_BACKGROUND_FILE ? "Desktop wallpaper" : IMAGE_PRESETS.find(preset => bg.imageFile === presetProjectFile(preset))?.label ?? bg.imageFile ?? "Choose a preset or your own image"}
             </div>
             <SelectRow
               label="blur"

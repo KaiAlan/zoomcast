@@ -19,6 +19,7 @@ import { loadSettings } from "../settingsStore";
 import { WebcamRecorder } from "./WebcamRecorder";
 import type { AudioHealth, RecorderOptions } from "../../shared/recorder";
 import { resolveRecordingTarget, windowRegion } from "./recordingTarget";
+import { prepareRecordingBackground } from "../desktopBackground";
 
 /**
  * ddagrab is GPU-side and delivers close to what it is asked for, so it is not
@@ -91,6 +92,7 @@ export async function startRecording(options?: RecorderOptions): Promise<void> {
 
   const selected = await resolveRecordingTarget(options?.sourceId ?? "");
   const display = selected.display;
+  prepareRecordingBackground(dir);
 
   cachedEncoder ??= await pickEncoder();
   cachedTarget ??= await probeCapture(logDiag);
