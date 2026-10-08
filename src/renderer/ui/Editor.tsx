@@ -844,6 +844,8 @@ export function Editor({
           output={project.output}
           dir={bundle.dir}
           onStyleChange={(style) => edit.apply((p) => ({ ...p, style }), { replan: style.paddingFactor !== project.style.paddingFactor })}
+          onStyleTransient={style => edit.applyTransient(p => ({ ...p, style }))}
+          onStyleCommit={edit.commitGesture}
           onOutputChange={onOutputChange}
         />
       </aside>

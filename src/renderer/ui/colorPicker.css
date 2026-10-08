@@ -1,0 +1,34 @@
+.color-trigger { display:flex; align-items:center; gap:8px; min-width:124px; padding:6px 8px; border:1px solid var(--line); border-radius:7px; background:var(--surface); color:var(--text); cursor:pointer; font-size:11px; font-variant-numeric:tabular-nums; }
+.color-chip { width:23px; height:23px; flex-shrink:0; border:1px solid #0002; border-radius:4px; }
+.color-trigger-arrow { margin-left:auto; color:var(--muted); }
+.color-picker { position:fixed; z-index:1000; width:280px; max-width:calc(100vw - 24px); max-height:calc(100vh - 24px); overflow:auto; background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 40px #0003,0 2px 8px #0001; font-size:12px; outline:none; }
+.color-picker header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line); }
+.color-picker-close,.color-eyedropper { display:grid; place-items:center; width:26px; height:26px; padding:0; background:transparent; color:var(--muted); border:0; border-radius:5px; cursor:pointer; }
+.color-picker-close:hover,.color-eyedropper:hover { background:var(--control); color:var(--text); }
+.color-picker-body { padding:16px; }
+.color-plane { display:block; width:100%; position:relative; height:210px; padding:0; margin:0; border:0; border-radius:7px; background-image:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent); cursor:crosshair; touch-action:none; }
+.color-plane-handle { position:absolute; width:14px; height:14px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 1px #0006,0 1px 4px #0004; transform:translate(-50%,-50%); pointer-events:none; }
+.color-plane:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.color-hue-row { display:flex; align-items:center; gap:10px; margin:16px 0; }
+.color-eyedropper { flex-shrink:0; }
+.color-eyedropper:disabled { opacity:.4; cursor:default; }
+.color-hue { appearance:none; width:100%; height:12px; margin:0; padding:0; border:0; border-radius:8px; cursor:pointer; background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
+.color-hue::-webkit-slider-thumb { appearance:none; width:17px; height:17px; border:3px solid #fff; border-radius:50%; background:transparent; box-shadow:0 0 0 1px #0004,0 1px 3px #0003; }
+.color-fields { display:flex; align-items:flex-start; gap:7px; }
+.color-fields select { width:68px; min-width:68px; font-size:11px; min-height:32px; padding-left:8px; padding-right:22px; background-position:right 5px center; background-size:12px; }
+.color-hex { display:flex; align-items:center; flex:1; min-width:0; height:32px; background:var(--control); border:1px solid var(--line); border-radius:7px; }
+.color-hex>span { padding-left:10px; color:var(--muted); }
+.color-hex input { width:100%; min-width:0; border:0; padding:7px 8px; background:transparent; color:var(--text); font-size:12px; font-variant-numeric:tabular-nums; outline:none; }
+.color-hex:focus-within { border-color:var(--accent); }
+.color-hex:has([aria-invalid=true]) { border-color:#d95d4f; }
+.color-number { flex:1; min-width:0; text-align:center; }
+.color-number input { width:100%; min-width:0; height:32px; padding:5px 2px; border:1px solid var(--line); border-radius:6px; background:var(--control); color:var(--text); font-size:11px; text-align:center; font-variant-numeric:tabular-nums; }
+.color-number input::-webkit-inner-spin-button,.color-number input::-webkit-outer-spin-button { appearance:none; margin:0; }
+.color-number>span { display:block; padding-top:6px; font-size:9px; color:var(--muted); }
+.color-picker footer { padding:12px 16px 15px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
+.color-recents { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.color-recents button { width:24px; height:24px; border:1px solid #0002; border-radius:5px; cursor:pointer; }
+.color-recents p { margin:0; font-size:11px; }
+.color-picker-message { font-size:11px; line-height:1.5; margin:10px 0 0; color:var(--muted); }
+:root[data-theme=dark] .color-picker { box-shadow:0 12px 40px #0009,0 2px 8px #0005; }
+.color-picker button:focus-visible,.color-trigger:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }

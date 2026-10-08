@@ -1,6 +1,6 @@
 {
   "name": "zoomcast",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "description": "Windows screen recorder and editor with cursor-aware auto zoom",

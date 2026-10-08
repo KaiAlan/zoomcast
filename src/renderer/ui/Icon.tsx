@@ -8,6 +8,7 @@ const paths = {
   move: "M3 6h7l2 2h9v12H3V6 M9 14h8 M14 11l3 3-3 3",
   search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0 M14 14l7 7",
   close: "M5 5l14 14 M5 19 19 5",
+  eyedropper: "M15 3l6 6 M17 2l5 5-3 3-5-5 3-3z M14 7L4 17v3h3L17 10",
 
   appearance: "M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3z M19 2v4 M17 4h4",
   cursor: "M5 3l14 10-7 1-3 7-4-18z",

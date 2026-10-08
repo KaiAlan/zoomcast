@@ -30,6 +30,8 @@ type Props = {
   output: OutputConfig;
   dir: string;
   onStyleChange: (next: StyleConfig) => void;
+  onStyleTransient: (next: StyleConfig) => void;
+  onStyleCommit: () => void;
   onOutputChange: (next: OutputConfig) => void;
 };
 
@@ -94,6 +96,8 @@ export function Inspector({
   output,
   dir,
   onStyleChange,
+  onStyleTransient,
+  onStyleCommit,
   onOutputChange,
 }: Props) {
   const isTuned = FIELDS.every((f) => config[f.key] === DEFAULT_ZOOM_CONFIG[f.key]) &&
@@ -101,7 +105,7 @@ export function Inspector({
 
   return (
     <InspectorTab.Provider value={activeSection}>
-      <StylePanel group="appearance" style={style} output={output} dir={dir} onStyleChange={onStyleChange} onOutputChange={onOutputChange} />
+      <StylePanel group="appearance" style={style} output={output} dir={dir} onStyleChange={onStyleChange} onStyleTransient={onStyleTransient} onStyleCommit={onStyleCommit} onOutputChange={onOutputChange} />
       <InspectorSection title="Webcam" hint={hasWebcam ? "PiP" : "Not recorded"}>
       {!hasWebcam ? <p style={{ fontSize: 12 }}>Enable webcam in Settings before recording.</p> : <>
         <label style={row}><span style={fieldLabel}>visible</span><input type="checkbox" checked={webcam.visible} onChange={(e) => onWebcamChange({ ...webcam, visible: e.target.checked })} /></label>

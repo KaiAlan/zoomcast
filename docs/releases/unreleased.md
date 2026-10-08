@@ -1,6 +1,6 @@
 # Unreleased
 
-Changes prepared in the 0.1.5 candidate; these are not part of the published 0.1.4 installer.
+Changes included in 0.1.6; see the reviewed release notes in 0.1.6.md.
 
 ## Highlights
 
@@ -12,6 +12,7 @@ Changes prepared in the 0.1.5 candidate; these are not part of the published 0.1
 
 ## Added
 
+- A Figma-style custom background picker supports a saturation/brightness area, hue slider, HEX/RGB/HSB inputs, a screen eyedropper and recent colors. Continuous adjustments preview live and form one Undo step.
 - Optional offline caption support downloads about 64 MB only when requested. Generate from microphone or system audio, edit text and timing, and export SRT/VTT or MP4 captions. Saved captions follow cuts, reordered clips and audio sync. Removing speech support retains saved captions.
 - Classic, rounded, filled, dot and outline cursor styles, with size, motion blur, bounce, duration and sway controls. Outline has a black fill and white border.
 - A collection of 24 high-resolution photo backgrounds with source attribution, and 24 gradient presets.

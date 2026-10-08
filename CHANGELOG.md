@@ -4,7 +4,7 @@ Detailed changes for each Zoomcast release. The app shows the Highlights from th
 
 ## Unreleased
 
-Changes prepared in the 0.1.5 candidate; these are not part of the published 0.1.4 installer.
+Changes included in 0.1.6; see the reviewed release notes in 0.1.6.md.
 
 ### Highlights
 
@@ -16,6 +16,7 @@ Changes prepared in the 0.1.5 candidate; these are not part of the published 0.1
 
 ### Added
 
+- A Figma-style custom background picker supports a saturation/brightness area, hue slider, HEX/RGB/HSB inputs, a screen eyedropper and recent colors. Continuous adjustments preview live and form one Undo step.
 - Optional offline caption support downloads about 64 MB only when requested. Generate from microphone or system audio, edit text and timing, and export SRT/VTT or MP4 captions. Saved captions follow cuts, reordered clips and audio sync. Removing speech support retains saved captions.
 - Classic, rounded, filled, dot and outline cursor styles, with size, motion blur, bounce, duration and sway controls. Outline has a black fill and white border.
 - A collection of 24 high-resolution photo backgrounds with source attribution, and 24 gradient presets.
@@ -30,6 +31,46 @@ Changes prepared in the 0.1.5 candidate; these are not part of the published 0.1
 - The zoom segment popup anchors to the selected segment and closes on an outside click. Repeated zoom preset clicks, Fixed/Follow cursor and Reset to auto work reliably.
 - Splitting or reordering clips preserves source-linked zooms and keeps exported video and audio in the same order.
 - Timeline scaling leaves the helper text fixed. Short zoom segments have valid transitions, the aspect dropdown updates the preview, and playback returns to the beginning at the end.
+
+## [Zoomcast 0.1.6](https://github.com/KaiAlan/zoomcast/releases/tag/v0.1.6)
+
+Windows x64 beta release.
+
+### Highlights
+
+- Choose custom background colors with a Figma-style picker, precise values and a screen eyedropper.
+- Generate editable offline transcripts and export subtitles or captioned MP4s.
+- Customize cursor styles and choose from 24 photo backgrounds and 24 gradients.
+- Split, reorder and delete video clips, with reliable zoom editing and looping playback.
+- See a quiet in-app update notice on startup and a short summary after updating.
+
+### Added
+
+- A custom background color picker replaces the Windows color dialog. Adjust saturation and brightness in a color area, drag the hue slider, enter HEX/RGB/HSB values, sample the screen, and reuse recent colors. Preview updates while dragging; Undo restores the whole gesture. Keyboard arrows adjust the color area, and Escape closes the picker. Colors persist in projects.
+- Open Captions in the editor, download caption support once, and generate a transcript from microphone audio, system audio, or both. The optional Windows CPU engine and multilingual speech model download about 64 MB outside the installer. Recognition runs locally with no audio upload.
+- Correct caption text and timing, search transcript segments, seek to their video position, and change font, size, position, color and background. Projects retain the transcript and appearance; Undo restores a replaced or edited transcript.
+- Export SRT and WebVTT subtitles, or include visible captions in exported MP4s. Subtitle and video captions follow cuts, reordered or repeated clips, and the audio sync offset.
+- Cancel speech downloads or transcription, verify downloaded files, and remove speech support in Settings to reclaim storage. Removal keeps saved captions and exported files; app upgrades retain downloaded speech support.
+- Classic, rounded, filled, dot and outline cursor styles, with size, motion blur, bounce, duration and sway controls. Choose from 24 high-resolution photo backgrounds with source attribution and 24 gradients.
+- Split video clips or zoom segments at the playhead with the scissors button or Ctrl+B. Delete selected pieces, drag clips to reorder, or use Alt+Left/Right. Ctrl+scroll zooms the timeline; Shift+scroll pans it. Undo and redo retain these edits.
+- Reviewed release notes supply detailed GitHub notes and short in-app Highlights. A single automatic update check runs after opening the app; available releases appear quietly in the app. Downloads and restart remain user actions.
+
+### Fixed
+
+- Cursor changes redraw paused previews and remain consistent in exports. Zoom popups, repeated presets, Fixed/Follow cursor, Reset to auto and short zoom transitions work reliably.
+- Splitting or reordering clips preserves source-linked zooms and exports audio in the same order. Aspect changes update the preview, and playback loops to the beginning at the end.
+- Includes the published 0.1.4 recording-shortcut fix.
+- Updating waits for active caption tasks alongside recording and export before restarting.
+
+### Upgrade notes
+
+Install the Windows setup executable, or open Settings → App updates → Check for updates in your current installation. Download and restart when you are ready. Existing projects and settings are retained.
+
+Caption support is optional and downloads only when requested. No API key or subscription is needed. Recognition accuracy depends on speech, language and recording quality. Review text and captions around cuts through a sentence; subtitles split at cuts rather than infer word timings. Regenerating replaces the transcript, and Undo restores it.
+
+The installer includes FFmpeg and ffprobe. Matching media sources and their checksum accompany the build. Speech engine and model licenses are retained with the optional download.
+
+For native Windows validation, run typecheck, lint, tests and build. Run npm run verify:captions to use an isolated profile and a synthetic spoken recording to check real downloads, offline recognition, edits, Ctrl+S, visibility, reopen, subtitles, reordered MP4 export, audio and removal. Run npm run verify:caption-package to repeat the checks in a separate packaged app with bundled FFmpeg and no development overrides. Run npm run verify:parity to compare captioned preview/export frames across reordered clips. Test evidence stays outside the installer.
 
 ## [Zoomcast 0.1.5](https://github.com/KaiAlan/zoomcast/releases/tag/v0.1.5)
 

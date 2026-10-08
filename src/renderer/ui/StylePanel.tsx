@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { COLOR_PRESETS, IMAGE_PRESETS, presetImageUrl, presetProjectFile } from "../../shared/style/imagePresets";
 import { SliderField } from "./SliderField";
+import { ColorPicker } from "./ColorPicker";
 import { InspectorSection } from "./InspectorSection";
 import type {
   AspectChoice,
@@ -16,7 +17,6 @@ import {
   fieldLabel,
   row,
   selectInput,
-  textInput,
 } from "./controls";
 
 type Props = {
@@ -26,6 +26,8 @@ type Props = {
   /** Bundle directory, so a chosen image is copied next to the project. */
   dir: string;
   onStyleChange: (next: StyleConfig) => void;
+  onStyleTransient?: (next: StyleConfig) => void;
+  onStyleCommit?: () => void;
   onOutputChange: (next: OutputConfig) => void;
 };
 
@@ -92,7 +94,7 @@ function CheckRow({
  * nothing is a bug report waiting to happen. Blur is image-only for the same
  * reason: on a procedural mesh it is a measured no-op (RMS 0.1 out of 255).
  */
-export function StylePanel({ style, output, dir, onStyleChange, onOutputChange, group }: Props) {
+export function StylePanel({ style, output, dir, onStyleChange, onStyleTransient, onStyleCommit, onOutputChange, group }: Props) {
   const [imageBusy, setImageBusy] = useState(false);
   const [imageError, setImageError] = useState("");
   const latestStyle = useRef(style);
@@ -130,15 +132,12 @@ export function StylePanel({ style, output, dir, onStyleChange, onOutputChange, 
         </div>}
         {bg.kind === "color" && (<>
           <div className="color-preset-grid">{COLOR_PRESETS.map(preset => <button key={preset.name} type="button" className={`color-preset ${bg.color.toLowerCase() === preset.color ? "selected" : ""}`} aria-label={`${preset.name} color background`} aria-pressed={bg.color.toLowerCase() === preset.color} title={preset.name} style={{ background: preset.color }} onClick={() => setBg({ color: preset.color })}><span>{preset.name}</span></button>)}</div>
-          <label style={row}>
+          <div style={row}>
             <span style={fieldLabel}>Custom color</span>
-            <input
-              type="color"
-              value={/^#[0-9a-f]{6}$/i.test(bg.color) ? bg.color : "#0d0e11"}
-              onChange={(e) => setBg({ color: e.target.value })}
-              style={textInput}
-            />
-          </label></>
+            <ColorPicker value={bg.color}
+              onChange={color => (onStyleTransient ?? onStyleChange)({ ...latestStyle.current, background: { ...latestStyle.current.background, color } })}
+              onCommit={() => onStyleCommit?.()} />
+          </div></>
         )}
 
         {bg.kind === "image" && (
