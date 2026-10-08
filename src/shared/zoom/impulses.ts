@@ -54,3 +54,23 @@ export function toImpulses(events: TelemetryEvent[], cfg: ZoomConfig): Impulse[]
 
   return out;
 }
+
+/** A click starts a shot; typing may continue it. Hover/scroll never starts one. */
+export function clickAttention(events: TelemetryEvent[], cfg: ZoomConfig): Impulse[] {
+  let clicked: Impulse | undefined;
+  let lastKeyAt = -Infinity;
+  const out: Impulse[] = [];
+  const focused = contextResolver(events);
+  for (const impulse of toImpulses(events, cfg)) {
+    if (impulse.kind === "click") {
+      clicked = impulse; lastKeyAt = -Infinity; out.push(impulse);
+    } else if (impulse.kind === "key" && clicked
+      && (impulse.t - clicked.t <= cfg.keyAnchorWindowMs || impulse.t - lastKeyAt <= cfg.clusterWindowMs)) {
+      const control = focused(impulse.t, "key");
+      out.push({ ...impulse, x: control ? control.rect.x + control.rect.w / 2 : clicked.x,
+        y: control ? control.rect.y + control.rect.h / 2 : clicked.y });
+      lastKeyAt = impulse.t;
+    }
+  }
+  return out;
+}

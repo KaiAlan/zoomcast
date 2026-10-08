@@ -43,16 +43,15 @@ describe("planZoom", () => {
     expect(kfs[1]?.scale).toBe(1);
   });
 
-  it("leads the zoom in", () => {
+  it("starts the zoom at the click", () => {
     const kfs = plan(
       [{ t: 1000, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
-    // 1000 - leadInMs 250 = 750, but a keyframe cannot be eased into from
-    // before zero, so openAtRest moves it to transitionMs.
+    // Hover/scroll before the click must not start an automatic shot.
     expect(kfs[0]?.tSourceMs).toBe(
-      750 + DEFAULT_ZOOM_CONFIG.transitionMs,
+      1000 + DEFAULT_ZOOM_CONFIG.transitionMs,
     );
   });
 
@@ -67,7 +66,7 @@ describe("planZoom", () => {
     // Plus the pull-out shift: the out keyframe sits transitionOutMs - trailMs
     // past the segment end so the transition begins at the last event.
     expect(kfs[1]?.tSourceMs).toBe(
-      750 + DEFAULT_ZOOM_CONFIG.transitionMs +
+      1000 + DEFAULT_ZOOM_CONFIG.transitionMs +
         Math.max(DEFAULT_ZOOM_CONFIG.minDwellMs, DEFAULT_ZOOM_CONFIG.minHoldMs) +
         DEFAULT_ZOOM_CONFIG.transitionOutMs,
     );
@@ -120,13 +119,13 @@ describe("planZoom", () => {
    * open on a hard cut. The lead-in is still clamped to zero — it just is not
    * where the keyframe ends up.
    */
-  it("opens at rest rather than leading in before zero", () => {
+  it("opens at rest and waits for the first click", () => {
     const kfs = plan(
       [{ t: 10, k: "down", x: 500, y: 400, b: 1 }],
       DEFAULT_ZOOM_CONFIG,
       ctx,
     );
-    expect(kfs[0]?.tSourceMs).toBe(DEFAULT_ZOOM_CONFIG.transitionMs);
+    expect(kfs[0]?.tSourceMs).toBe(10 + DEFAULT_ZOOM_CONFIG.transitionMs);
     expect(kfs[0]?.transitionMs).toBe(DEFAULT_ZOOM_CONFIG.transitionMs);
   });
 

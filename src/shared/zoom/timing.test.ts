@@ -16,11 +16,12 @@ const plan = (events: TelemetryEvent[], context = ctx) => {
 };
 
 describe("click-aligned camera motion", () => {
-  it("does not anticipate a click beyond the configured lead-in", () => {
+  it("does not anticipate a click before it happens", () => {
     const { kfs } = plan([click(10000)]);
     expect(zoomAt(kfs, 10000 - cfg.leadInMs).scale).toBe(1);
-    expect(zoomAt(kfs, 10000).scale).toBeGreaterThan(1);
-    expect(kfs[0]?.tSourceMs).toBe(10000 - cfg.leadInMs + cfg.transitionMs);
+    expect(zoomAt(kfs, 10000).scale).toBe(1);
+    expect(zoomAt(kfs, 10500).scale).toBeGreaterThan(1);
+    expect(kfs[0]?.tSourceMs).toBe(10000 + cfg.transitionMs);
   });
 
   it("does not pull out and re-enter for related clicks", () => {
@@ -99,7 +100,7 @@ describe("click-aligned camera motion", () => {
     const segments = planZoom(events, dense, ctx);
     const kfs = segmentsToKeyframes(segments, dense, ctx);
     expect(segments).toHaveLength(1);
-    expect(segments[0]?.waypoints.at(-1)?.tMs).toBe(34000 - cfg.leadInMs);
+    expect(segments[0]?.waypoints.at(-1)?.tMs).toBe(34000);
     expect(zoomAt(kfs, 34000).scale).toBeGreaterThan(1.5);
   });
 

@@ -64,6 +64,21 @@ const CONFIGS: Array<{
 }> = [
   { name: "default" },
   {
+    name: "click-pacing",
+    telemetry: [
+      { t: 0, k: "move", x: 500, y: 500 },
+      { t: 300, k: "wheel", x: 500, y: 500, dy: -1 },
+      { t: 650, k: "move", x: 500, y: 500 },
+      { t: 800, k: "down", x: 500, y: 500, b: 1 },
+      { t: 2400, k: "move", x: 500, y: 500 },
+      { t: 2600, k: "move", x: 950, y: 500 },
+      { t: 2800, k: "move", x: 1400, y: 500 },
+      { t: 3000, k: "move", x: 1850, y: 500 },
+      { t: 3500, k: "move", x: 1700, y: 500 },
+    ],
+    shots: [700, 900, 1800, 3200, 4500],
+  },
+  {
     name: "semantic-fast",
     telemetry: [
       { t: 0, k: "move", x: 850, y: 450 },

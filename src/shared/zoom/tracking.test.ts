@@ -81,7 +81,8 @@ describe("safe-area camera", () => {
     const kfs = segmentsToKeyframes(planZoom(events, cfg, ctx), cfg, ctx, followPath(events));
     expect(kfs[0]?.cx).toBeCloseTo(600 / 1920, 6);
     expect(zoomAt(kfs, 750).scale).toBe(1);
-    expect(zoomAt(kfs, 1000).scale).toBeGreaterThan(1.3);
+    expect(zoomAt(kfs, 1000).scale).toBe(1);
+    expect(zoomAt(kfs, 1250).scale).toBeGreaterThan(1.3);
   });
 
   it("tracks an escape during entrance and carries its velocity into the hold", () => {
