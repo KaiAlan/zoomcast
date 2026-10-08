@@ -121,7 +121,7 @@ export function SettingsWindow() {
       </>}
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>App updates</h2>
       <UpdateNotice settings />
-      <p>Zoomcast checks on startup, every hour and after waking from sleep. New versions appear here and in a Windows notification. Click Update to download, then Restart to update when ready.</p>
+      <p>Zoomcast checks once when you open the app. If a new version is available, an in-app notice appears. Click Update to download, then Restart to update when ready. You can also check manually here.</p>
       <WhatsNew settings />
       <h2 style={{ fontWeight: 400, fontSize: 18, margin: "24px 0 12px" }}>Feedback</h2>
       <FeedbackButton />

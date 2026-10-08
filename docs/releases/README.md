@@ -8,7 +8,7 @@ Download `zoomcast-Setup-<version>.exe` from the [latest release](https://github
 
 Version 0.1.2 and later check public GitHub releases without an account or access token. Versions 0.1.0 and 0.1.1 need one manual upgrade to the latest version. After that, use Update and Restart to update.
 
-The next release checks automatically five seconds after startup, hourly while running, and after waking from sleep if the previous check was at least 15 minutes ago. A new published stable release appears in the editor, idle recorder and Settings. A quiet Windows notification appears once per offered version, including across app restarts; clicking it opens App updates. Notifications wait until recording is idle. Windows notification preferences may suppress the system notification; the in-app notice remains available. Publishing a draft makes it discoverable on the next automatic check; drafts and prereleases are excluded.
+The next release checks automatically once, five seconds after opening the app. A new published stable release appears in a quiet in-app notice in the editor, idle recorder and Settings. There are no Windows notifications, hourly checks or wake-up checks. Users can still choose Check for updates in Settings. Publishing a draft makes it discoverable the next time someone opens Zoomcast; drafts and prereleases are excluded.
 
 Each installed version shows a short What's new card on the workspace and idle recorder until Got it is clicked. Dismissal persists across restarts and updates every open window. Settings always retains the summary and its link to the detailed GitHub release. The first launch also shows the installed version's highlights.
 
@@ -51,7 +51,7 @@ Each version file has 1–5 plain-text bullets under `## Highlights` (13–240 c
 
 `npm run build` validates the changelog and prepares `build/release-notes.md`. Electron Builder includes these detailed notes in latest.yml. The same build embeds only the current version and Highlights in the app. The GitHub workflow uses this prepared Markdown as the release body, and `verify:release` checks metadata and packaged highlights against the source. Editing an older release's source file does not retroactively edit its published GitHub body.
 
-`verify:update-notices` drives the normal installed startup path with a simulated provider and intercepted Windows notifications/browser opens. It verifies the automatic check, incoming and installed summaries, correct release links, recording deferral, dismissal persistence, cross-window updates and notification deduplication. `verify:updates` separately checks downloads, progress, busy recording/export guards and project saves before restart. Neither harness publishes a release, downloads an installer or displays real Windows notifications.
+`verify:update-notices` drives the normal installed startup path with a simulated provider and intercepted browser opens. It verifies the single automatic check, incoming and installed summaries, correct release links, no Windows notifications or wake checks, dismissal persistence and cross-window updates. `verify:updates` separately checks downloads, progress, busy recording/export guards and project saves before restart. Neither harness publishes a release or downloads an installer.
 
 ## Licenses
 

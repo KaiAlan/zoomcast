@@ -1,5 +1,5 @@
 /** Native startup -> updater -> IPC -> UI/history guard; no real downloads/toasts. */
-const { app, BrowserWindow, Notification, shell } = require('electron');
+const { app, BrowserWindow, Notification, powerMonitor, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = process.cwd();
@@ -52,7 +52,10 @@ import('../out/main/index.js').then(async () => {
     assert(!await js("document.querySelector('.recorder-whats-new').textContent.includes('reopening a recording')"), 'technical GitHub details stay out of the short app summary');
     await wait(() => js("window.zoomcast.updates.state().then(s=>s.status==='available')"), 'automatic startup check');
     assert(providerChecks === 1, 'installed app checks automatically without clicking Check for updates');
-    assert(downloads === 0 && notifications.length === 1, 'new version creates one notification without downloading');
+    assert(downloads === 0 && notifications.length === 0, 'new version stays inside the app without a Windows notification or automatic download');
+    powerMonitor.emit('resume');
+    await delay(100);
+    assert(providerChecks === 1 && notifications.length === 0, 'waking from sleep triggers no extra check or notification');
     assert(await js(`document.querySelector('.recorder-update').textContent.includes(${JSON.stringify(remoteVersion)})`), 'new version is visible on the floating recorder');
     await js("document.querySelector('.recorder-update summary').click()");
     assert(await js("document.querySelector('.recorder-update').textContent.includes('Split and reorder video clips.')"), 'update availability can show the incoming short highlights');
@@ -68,14 +71,14 @@ import('../out/main/index.js').then(async () => {
       assert(await js(`window.zoomcast.updates.openReleaseNotes(${JSON.stringify(version)}).then(()=>false,()=>true)`), 'release notes IPC refuses an unknown version');
     }
     assert(opened.length === 2, 'invalid release links never reach the browser');
-    notifications[0].emit('click');
-    await wait(() => BrowserWindow.getAllWindows().some(win => win.webContents.getURL().endsWith('#settings')), 'notification opens App updates');
+    await js("window.zoomcast.openSettings()");
+    await wait(() => BrowserWindow.getAllWindows().some(win => win.webContents.getURL().endsWith('#settings')), 'opening Settings');
     const settings = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().endsWith('#settings'));
     await wait(() => settings.webContents.executeJavaScript("Boolean(document.querySelector('.update-whats-new'))"), 'Settings summary');
-    assert(await settings.webContents.executeJavaScript(`document.querySelector('.update-settings').textContent.includes(${JSON.stringify(remoteVersion)})`), 'notification click opens Settings with the available update');
+    assert(await settings.webContents.executeJavaScript(`document.querySelector('.update-settings').textContent.includes(${JSON.stringify(remoteVersion)})`), 'Settings shows the available update without an interrupting dialog');
     settings.hide();
     await js("window.zoomcast.updates.check()");
-    assert(notifications.length === 1, 'repeat automatic/manual checks do not repeat the same notification');
+    assert(providerChecks === 2 && notifications.length === 0, 'manual checks remain available and never show Windows notifications');
     await js("[...document.querySelectorAll('.recorder-whats-new button')].find(b=>b.textContent==='Got it').click()");
     await wait(() => js("!document.querySelector('.recorder-whats-new')"), 'dismissal');
     assert(JSON.parse(fs.readFileSync(path.join(profile, 'update-history.json'), 'utf8')).seenVersion === notes.version, 'Got it persists the installed version for the next launch');
@@ -84,13 +87,12 @@ import('../out/main/index.js').then(async () => {
     const countdown = js("window.zoomcast.recorder.action('start',{sourceId:'',countdown:3,mic:false,system:false,webcam:false,webcamDeviceId:''})");
     await wait(() => js("window.zoomcast.recorder.state().then(s=>s.phase==='countdown')"), 'recording countdown');
     autoUpdater.emit('update-available', { version: laterVersion });
-    assert(notifications.length === 1, 'recording countdown defers the Windows notification');
+    assert(notifications.length === 0, 'recording countdown never shows a Windows notification');
     assert(!await js("document.querySelector('.recorder-whats-new') || document.querySelector('.recorder-update')"), 'update cards stay hidden during recording countdown');
     await js("window.zoomcast.recorder.action('cancel')");
     await countdown;
     autoUpdater.emit('update-available', { version: laterVersion });
-    assert(notifications.length === 2, 'a later release receives a new notification');
-    assert(JSON.parse(fs.readFileSync(path.join(profile, 'update-history.json'), 'utf8')).notifiedVersion === laterVersion, 'notification deduplication survives restarting the app');
+    assert(notifications.length === 0, 'later releases still produce no Windows notification');
     fs.writeFileSync(path.join(root, 'tmp', 'update-notices-ui.png'), (await widget.webContents.capturePage()).toPNG());
     result(true); clearTimeout(timer); app.exit(0);
   } catch (error) { result(false, String(error)); clearTimeout(timer); app.exit(1); }

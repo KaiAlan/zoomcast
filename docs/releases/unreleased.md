@@ -8,7 +8,7 @@ Changes prepared for the next version; these are not part of the published 0.1.3
 - Choose from 24 photo backgrounds and 24 gradients.
 - Split, reorder and delete video clips, and split zoom segments at the playhead.
 - Use working zoom controls, timeline scroll shortcuts and looping playback.
-- See automatic update notifications and a short summary after installing a new version.
+- See an in-app update notice when opening Zoomcast and a short summary after updating.
 
 ## Added
 
@@ -17,7 +17,7 @@ Changes prepared for the next version; these are not part of the published 0.1.3
 - A base video track. Select a video clip or zoom, position the playhead, and split with the scissors button or Ctrl+B. Delete selected pieces, drag video pieces to reorder, or use Alt+Left/Right. Undo and redo include these edits.
 - Ctrl+scroll zooms the timeline around the pointer. Shift+scroll pans horizontally. Add segment inserts a zoom at the playhead.
 - A checked release-note pipeline: detailed changes on GitHub and in CHANGELOG.md, short Highlights in the app after an installed version changes, and full release-note links in Settings and update notices.
-- Automatic update checks on startup, hourly while running, and after waking from sleep. A Windows notification announces a new version once; clicking it opens App updates. Downloads and restarts remain user actions.
+- One automatic update check when opening Zoomcast. An available version appears in an in-app notice, with no Windows notification, hourly polling or wake-up checks. Downloads and restarts remain user actions.
 
 ## Fixed
 
