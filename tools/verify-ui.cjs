@@ -144,7 +144,9 @@ app.on("browser-window-created", (_, win) => {
       assert(await js("window.__zc.renderAt(1000)") !== before, "webcam control updates composition");
       await click(button("Appearance"));
       await click(button("Color"));
-      assert(await js("document.querySelectorAll('.color-preset').length===12"), "appearance offers twelve color presets");
+      assert(await js("document.querySelectorAll('.color-preset').length===24"), "appearance offers twenty-four color presets");
+      await click(button("Forest color background")); await click(button("Save project"));
+      assert(JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.background.color==="#385948", "new solid color preset persists to project");
       await click(button("Sand color background")); await click(button("Save project"));
       assert(JSON.parse(fs.readFileSync(path.join(dir,"project.json"),"utf8")).style.background.color==="#eee5d9", "color preset persists to project");
       await click(button("Custom background color"));

@@ -197,10 +197,18 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
 export const presetImageUrl = (preset: ImagePreset): string => `/backgrounds/${preset.thumbnail}`;
 export const presetProjectFile = (preset: ImagePreset): string => `background-preset-${preset.file}`;
 export const COLOR_PRESETS = [
+  { name: "White", color: "#ffffff" },
   { name: "Cloud", color: "#f5f6f8" }, { name: "Sand", color: "#eee5d9" },
+  { name: "Cream", color: "#fff5e6" },
+  { name: "Lemon", color: "#f6e7a7" }, { name: "Amber", color: "#e6af55" },
   { name: "Peach", color: "#f4d5c4" }, { name: "Rose", color: "#ead4df" },
+  { name: "Coral", color: "#e99c8b" }, { name: "Berry", color: "#a95c78" },
   { name: "Lavender", color: "#d9d7ef" }, { name: "Sky", color: "#cfe2f2" },
+  { name: "Lilac", color: "#bba1d4" }, { name: "Periwinkle", color: "#9399d4" },
+  { name: "Blue", color: "#719bd3" }, { name: "Teal", color: "#4f8c8a" },
   { name: "Mint", color: "#d1e5df" }, { name: "Sage", color: "#b5c7b0" },
+  { name: "Forest", color: "#385948" },
   { name: "Ocean", color: "#315b74" }, { name: "Plum", color: "#594763" },
+  { name: "Charcoal", color: "#252a32" },
   { name: "Slate", color: "#3d4655" }, { name: "Ink", color: "#161b25" },
 ] as const;

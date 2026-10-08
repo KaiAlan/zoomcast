@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from "electron";
+import { COUNTDOWN_CUES, countdownCueHtml, countdownOverlayBounds } from "../shared/countdown";
 
 /**
  * On-screen recording UI must not appear in the recording.
@@ -49,30 +50,54 @@ export function showRecordingBorder(bounds = screen.getPrimaryDisplay().bounds):
   return win;
 }
 
-/** 3-2-1 before the take starts. Resolves when it finishes. */
-export async function runCountdown(seconds = 3): Promise<void> {
-  const display = screen.getPrimaryDisplay();
-  const size = 220;
+export type RecordingCue = {
+  tick: (number: number) => Promise<void>;
+  hide: () => void;
+  started: () => Promise<void>;
+  close: () => void;
+};
 
-  const win = makeOverlay({
-    x: Math.round(display.bounds.x + (display.bounds.width - size) / 2),
-    y: Math.round(display.bounds.y + (display.bounds.height - size) / 2),
-    width: size,
-    height: size,
+/** One protected, unfocused renderer owns both the number and quiet audio cues. */
+export async function createRecordingCue(bounds = screen.getPrimaryDisplay().bounds): Promise<RecordingCue> {
+  const win = new BrowserWindow({
+    ...countdownOverlayBounds(bounds), title: "zoomcast countdown", show: false,
+    frame: false, transparent: true, resizable: false, movable: false,
+    focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false,
+    backgroundColor: "#00000000",
+    webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, autoplayPolicy: "no-user-gesture-required" },
   });
+  win.setIgnoreMouseEvents(true);
+  win.setContentProtection(true);
+  win.setAlwaysOnTop(true, "screen-saver");
+  const close = (): void => { if (!win.isDestroyed()) win.destroy(); };
+  try {
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(countdownCueHtml())}`);
+  } catch (error) { close(); throw error; }
+  return {
+    tick: async number => {
+      if (win.isDestroyed()) return;
+      await win.webContents.executeJavaScript(`window.countdownCue.tick(${JSON.stringify(number)})`);
+      if (!win.isDestroyed()) win.showInactive();
+    },
+    hide: () => { if (!win.isDestroyed()) win.hide(); },
+    started: async () => {
+      if (win.isDestroyed()) return;
+      await win.webContents.executeJavaScript("window.countdownCue.started()");
+      // Let the short, different start tone finish before closing its renderer.
+      await new Promise<void>(resolve => setTimeout(resolve, COUNTDOWN_CUES.started.durationMs + 40));
+    },
+    close,
+  };
+}
 
-  const render = (n: number): Promise<void> =>
-    win.loadURL(
-      html(
-        `<div style="display:flex;align-items:center;justify-content:center;height:100%;
-            font-size:120px;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,.6)">${n}</div>`,
-      ),
-    );
-
-  for (let n = seconds; n >= 1; n--) {
-    await render(n);
-    await new Promise<void>((resolve) => setTimeout(resolve, 700));
-  }
-
-  win.destroy();
+/** The native capture verification path uses the same centered countdown. */
+export async function runCountdown(seconds = 3): Promise<void> {
+  if (seconds <= 0) return;
+  const cue = await createRecordingCue();
+  try {
+    for (let n = seconds; n >= 1; n--) {
+      await cue.tick(n);
+      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+    }
+  } finally { cue.close(); }
 }

@@ -64,6 +64,16 @@ app.on("browser-window-created", (_, win) => {
       win.show(); win.focus(); await pause(500);
       assert(await js("Boolean(window.__zc)"), "editor opens native fixture");
       assert(await js("document.querySelectorAll('.timeline-clip').length===1 && !document.querySelector('.timeline-cut-lane')"), "full base clip replaces drag-to-cut lane");
+      await js("window.getSelection().removeAllRanges()");
+      const firstTick = await box("document.querySelector('.timeline-tick span')");
+      const lastTick = await box("[...document.querySelectorAll('.timeline-tick span')].at(-1)");
+      const dragStart = { x: Math.round(firstTick.x + firstTick.width / 2), y: Math.round(firstTick.y + firstTick.height / 2) };
+      const dragEnd = { x: Math.round(lastTick.x + lastTick.width / 2), y: dragStart.y };
+      wc.sendInputEvent({ type: "mouseDown", button: "left", clickCount: 1, ...dragStart });
+      wc.sendInputEvent({ type: "mouseMove", ...dragEnd }); await pause();
+      wc.sendInputEvent({ type: "mouseUp", button: "left", ...dragEnd }); await pause();
+      assert(await js("window.getSelection().toString()===''"), "dragging across ruler time labels does not select text");
+      assert(await js("parseFloat(document.querySelector('.time-readout').textContent.split(':')[1])>4"), "dragging on time labels still seeks the playhead");
       await seek(3000);
       for (const preset of [0, 5, 1, 4]) {
         await click("document.querySelector('.timeline-segment')");

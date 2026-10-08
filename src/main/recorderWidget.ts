@@ -4,9 +4,9 @@ import type { RecorderAction, RecorderOptions, RecorderState } from "../shared/r
 import { recorderCuts } from "../shared/recorder";
 import type { Cut } from "../shared/project/types";
 import { isRecording, recordingAudioHealth, recordingClockBase, recordingDisplayBounds, startRecording, stopRecording } from "./capture/SessionController";
-import { recorderSources } from "./capture/recordingTarget";
+import { recorderSources, resolveRecordingTarget } from "./capture/recordingTarget";
 import { openBundle, saveProject } from "./bundleIo";
-import { showRecordingBorder } from "./overlays";
+import { createRecordingCue, type RecordingCue, showRecordingBorder } from "./overlays";
 import { preloadPath, rendererUrl } from "./windows";
 import { logDiag } from "./log";
 import { LibraryStore } from "./libraryStore";
@@ -14,6 +14,7 @@ import { recordingsRoot } from "./recordingsRoot";
 
 let widget: BrowserWindow | null = null;
 let border: BrowserWindow | null = null;
+let countdownCue: RecordingCue | null = null;
 let timer: NodeJS.Timeout | null = null;
 let openEditor: ((dir?: string) => void) | null = null;
 const state: RecorderState = { phase: "idle", paused: false, cutting: false, elapsedMs: 0, countdownLeft: 0, error: null };
@@ -64,9 +65,9 @@ function endRange(start: number | null): void {
   if (start !== null) cuts.push({ id: randomUUID(), startMs: start, endMs: now() });
 }
 export async function recorderAction(action: RecorderAction, options?: RecorderOptions): Promise<void> {
-  if (action === "hide") { if (state.phase === "countdown") cancelled = true; widget?.hide(); return; }
+  if (action === "hide") { if (state.phase === "countdown") { cancelled = true; countdownCue?.close(); } widget?.hide(); return; }
   if (action === "editor") { openEditor?.(); return; }
-  if (action === "cancel") { if (state.phase === "countdown") cancelled = true; return; }
+  if (action === "cancel") { if (state.phase === "countdown") { cancelled = true; countdownCue?.close(); } return; }
   if (action === "pause" && state.phase === "recording") {
     if (pauseAt === null) pauseAt = now(); else { endRange(pauseAt); pauseAt = null; }
     state.paused = pauseAt !== null; push(); return;
@@ -76,6 +77,7 @@ export async function recorderAction(action: RecorderAction, options?: RecorderO
     state.cutting = cutAt !== null; push(); return;
   }
   if (action === "stop" && state.phase === "recording") {
+    countdownCue?.close();
     const pausedAtStop = pauseAt !== null;
     const cuttingAtStop = cutAt !== null;
     endRange(pauseAt); endRange(cutAt); pauseAt = cutAt = null;
@@ -105,12 +107,20 @@ export async function recorderAction(action: RecorderAction, options?: RecorderO
   state.audioHealth = {};
   state.error = null; cuts = []; pauseAt = cutAt = null; cancelled = false;
   state.elapsedMs = 0; state.phase = "countdown";
+  let cue: RecordingCue | null = null;
   try {
+    const target = await resolveRecordingTarget(options.sourceId);
+    try {
+      cue = await createRecordingCue(target.display.bounds);
+      countdownCue = cue;
+    } catch (err) { logDiag("recorder:cue", err); }
     for (let n = options.countdown; n > 0 && !cancelled; n--) {
       state.countdownLeft = n; push();
+      try { await cue?.tick(n); } catch (err) { logDiag("recorder:cue", err); }
       await new Promise<void>(resolve => setTimeout(resolve, 1000));
     }
     if (cancelled) { state.phase = "idle"; state.countdownLeft = 0; push(); return; }
+    cue?.hide();
     state.phase = "starting"; state.countdownLeft = 0; push();
     await startRecording({ ...options, folderId: state.folderId ?? null });
     if (options.sourceId === "" || options.sourceId.startsWith("screen:")) {
@@ -120,7 +130,9 @@ export async function recorderAction(action: RecorderAction, options?: RecorderO
     state.phase = "recording";
     timer = setInterval(push, 200);
     updateControls?.(); broadcast("recording:started", true); push();
-  } catch (err) { state.phase = "idle"; report(err); push(); }
+    try { await cue?.started(); } catch (err) { logDiag("recorder:cue", err); }
+  } catch (err) { state.phase = "idle"; state.countdownLeft = 0; report(err); push(); }
+  finally { cue?.close(); if (countdownCue === cue) countdownCue = null; }
 }
 function report(err: unknown): void {
   state.error = err instanceof Error ? err.message : String(err);
@@ -147,6 +159,7 @@ export function registerRecorderWidget(editor: (dir?: string) => void, controls:
 }
 export function destroyRecorderWidget(): void {
   cancelled = true;
+  countdownCue?.close(); countdownCue = null;
   if (timer !== null) clearInterval(timer);
   widget?.destroy(); widget = null; border?.destroy(); border = null;
 }

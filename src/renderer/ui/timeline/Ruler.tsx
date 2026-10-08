@@ -38,6 +38,8 @@ export function Ruler({ outputDurationMs, onSeek }: Props) {
         overflow: "hidden",
       }}
       onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
         // Pointer capture keeps the scrub alive when the cursor leaves the
         // track, which is what makes dragging past either end feel normal.
         e.currentTarget.setPointerCapture(e.pointerId);

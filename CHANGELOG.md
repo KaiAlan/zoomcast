@@ -4,7 +4,7 @@ Detailed changes for each Zoomcast release. The app shows the Highlights from th
 
 ## Unreleased
 
-Changes included in 0.1.6; see the reviewed release notes in 0.1.6.md.
+Includes the 0.1.6 change history and new countdown feedback prepared for the next release. Published 0.1.6 details remain in 0.1.6.md.
 
 ### Highlights
 
@@ -16,6 +16,8 @@ Changes included in 0.1.6; see the reviewed release notes in 0.1.6.md.
 
 ### Added
 
+- Expanded solid background presets to 24 colors, including warm neutrals, pastels, richer hues and dark shades, alongside the existing custom color picker.
+- A large countdown centered on the recorded display, with one gentle beep per second and a different quiet chime once capture successfully starts. The overlay stays out of the captured video, cancels immediately and respects the existing No delay / 3 / 5 / 10 second choices.
 - Settings uses searchable General, Recording, Captions, App updates and Help & feedback sections. Controls save automatically, report disk failures and offer retry. The editor no longer shows the installed-release card.
 - A Figma-style custom background picker supports a saturation/brightness area, hue slider, HEX/RGB/HSB inputs, a screen eyedropper and recent colors. Continuous adjustments preview live and form one Undo step.
 - Optional offline caption support downloads about 64 MB only when requested. Generate from microphone or system audio, edit text and timing, and export SRT/VTT or MP4 captions. Saved captions follow cuts, reordered clips and audio sync. Removing speech support retains saved captions.
@@ -28,6 +30,7 @@ Changes included in 0.1.6; see the reviewed release notes in 0.1.6.md.
 
 ### Fixed
 
+- Dragging the playhead or timeline segments no longer selects the time labels or clip text.
 - Cursor styles and effects now update paused previews and exported video consistently, including the start of a recording.
 - The zoom segment popup anchors to the selected segment and closes on an outside click. Repeated zoom preset clicks, Fixed/Follow cursor and Reset to auto work reliably.
 - Splitting or reordering clips preserves source-linked zooms and keeps exported video and audio in the same order.

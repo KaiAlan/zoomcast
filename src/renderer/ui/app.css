@@ -126,8 +126,8 @@ input[type=checkbox]:checked::after { transform: translateX(13px); }
 .timeline-scale button:disabled { opacity: .4; cursor: default; }
 .timeline-scale input { width: 140px; accent-color: #90a2b9; }
 .timeline-viewport { overflow-x: auto; overflow-y: hidden; padding: 0 16px; scrollbar-width: thin; scrollbar-color: #dce3eb transparent; }
-.timeline-tracks { background: #fafcff; }
-.timeline-ruler { background: var(--surface); border: 0; border-radius: 0; }
+.timeline-tracks { background: #fafcff; user-select: none; }
+.timeline-ruler { background: var(--surface); border: 0; border-radius: 0; touch-action: none; user-select: none; }
 .timeline-tick { position: absolute; top: 7px; width: 1px; height: 12px; background: #9aaec8; }
 .timeline-tick span { display: block; margin: 16px 0 0 5px; color: #8290a3; font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .timeline-minor-tick { position: absolute; top: 7px; width: 1px; height: 7px; background: #d9e2ee; }
