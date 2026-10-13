@@ -55,6 +55,7 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   { key: "clusterWindowMs", label: "cluster window (ms)", step: 100, min: 0 },
   { key: "minGapMs", label: "min gap (ms)", step: 50, min: 0 },
   { key: "minWeight", label: "min weight", step: 0.1, min: 0 },
+  { key: "leadInMs", label: "lead in (ms)", step: 50, min: 0 },
   { key: "trailMs", label: "trail (ms)", step: 50, min: 0 },
   // Below ~100ms a "transition" is a cut, and the dwell floor is twice this.
   { key: "transitionMs", label: "transition in (ms)", step: 50, min: 100 },
@@ -71,14 +72,15 @@ const FIELDS: Array<{ key: keyof ZoomConfig; label: string; step: number; min: n
   // the only depth control and the grading is invisible.
   { key: "depthClick", label: "depth · click", step: 0.05, min: 0 },
   { key: "depthType", label: "depth · typing", step: 0.05, min: 0 },
+  { key: "depthScroll", label: "depth · scroll", step: 0.05, min: 0 },
   { key: "contextFraction", label: "context fraction", step: 0.05, min: 0.1 },
 ];
 
-const ZOOM_LIMITS: Partial<Record<keyof ZoomConfig, number>> = { minHoldMs: 10000, minDwellMs: 10000, minRecoveryMs: 10000, deadzonePx: 500, maxZoomsPerMinute: 60, clusterRadiusPx: 1000, clusterWindowMs: 10000, minGapMs: 5000, minWeight: 10, trailMs: 5000, transitionMs: 5000, transitionOutMs: 5000, panMs: 5000, maxZoom: 5, depthClick: 1, depthType: 1, contextFraction: 1 };
+const ZOOM_LIMITS: Partial<Record<keyof ZoomConfig, number>> = { minHoldMs: 10000, minDwellMs: 10000, minRecoveryMs: 10000, deadzonePx: 500, maxZoomsPerMinute: 60, clusterRadiusPx: 1000, clusterWindowMs: 10000, minGapMs: 5000, minWeight: 10, leadInMs: 3000, trailMs: 5000, transitionMs: 5000, transitionOutMs: 5000, panMs: 5000, maxZoom: 5, depthClick: 1, depthType: 1, depthScroll: 1, contextFraction: 1 };
 const ZOOM_GROUPS = [
   { title: "Pacing", keys: ["minHoldMs", "minDwellMs", "minRecoveryMs", "maxZoomsPerMinute", "minGapMs"] },
-  { title: "Camera motion", keys: ["transitionMs", "transitionOutMs", "panMs", "trailMs"] },
-  { title: "Zoom depth", keys: ["maxZoom", "depthClick", "depthType", "contextFraction"] },
+  { title: "Camera motion", keys: ["transitionMs", "transitionOutMs", "panMs", "leadInMs", "trailMs"] },
+  { title: "Zoom depth", keys: ["maxZoom", "depthClick", "depthType", "depthScroll", "contextFraction"] },
   { title: "Activity detection", keys: ["deadzonePx", "clusterRadiusPx", "clusterWindowMs", "minWeight"] },
 ];
 
@@ -154,7 +156,7 @@ export function Inspector({
       </div>)}
 
       <label style={row}>
-        <span style={fieldLabel}>fixed / manual curve</span>
+        <span style={fieldLabel}>transition curve</span>
         <select
           value={config.easing === "linear" ? "zoomGlide" : config.easing}
           onChange={(e) => onChange({ ...config, easing: e.target.value as EasingName })}

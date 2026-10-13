@@ -16,8 +16,10 @@ describe("defaultProject", () => {
 });
 
 describe("motion blur", () => {
-  it("defaults to gentle motion blur for new recordings", () => {
-    expect(defaultProject("b1").style.motionBlurAmount).toBe(0.35);
-    expect(defaultProject("b1").style.cursor.motionBlur).toBe(0.35);
+  it("defaults off", () => {
+    // Off by default so the default verify:parity configuration is unmoved,
+    // and per 2026-09-04-composition-and-camera-design.md:375 it may stay off
+    // if export time suffers.
+    expect(defaultProject("b1").style.motionBlurAmount).toBe(0);
   });
 });

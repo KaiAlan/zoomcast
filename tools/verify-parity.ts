@@ -17,7 +17,6 @@ import { cpSync, readFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path";
 import { defaultProject } from "../src/shared/project/defaults";
 import { normalizeProject } from "../src/shared/project/migrate";
-import type { TelemetryEvent } from "../src/shared/bundle/types";
 import type { Project } from "../src/shared/project/types";
 
 const ROOT = process.cwd();
@@ -58,55 +57,10 @@ const CONFIGS: Array<{
   cuts?: Project["cuts"];
   clips?: Project["clips"];
   captions?: Project["captions"];
-  telemetry?: TelemetryEvent[];
   /** Output times to compare when the default SHOTS would overrun a cut config's shorter output. */
   shots?: number[];
 }> = [
   { name: "default" },
-  {
-    name: "cursor-sweep",
-    telemetry: [
-      { t: 0, k: "move", x: 300, y: 200 },
-      { t: 100, k: "down", x: 300, y: 200, b: 1 },
-      { t: 200, k: "up", x: 300, y: 200, b: 1 },
-      ...Array.from({ length: 25 }, (_, i): TelemetryEvent => ({ t: 2500 + i * 1000 / 120, k: "move", x: 300 + i * 1500 / 24, y: 200 + i * 780 / 24 })),
-      { t: 4200, k: "move", x: 1800, y: 980 },
-    ],
-    shots: [900, 2400, 2600, 2733.3333333333335, 3900],
-  },
-  {
-    name: "click-pacing",
-    telemetry: [
-      { t: 0, k: "move", x: 500, y: 500 },
-      { t: 300, k: "wheel", x: 500, y: 500, dy: -1 },
-      { t: 650, k: "move", x: 500, y: 500 },
-      { t: 800, k: "down", x: 500, y: 500, b: 1 },
-      { t: 2400, k: "move", x: 500, y: 500 },
-      { t: 2600, k: "move", x: 950, y: 500 },
-      { t: 2800, k: "move", x: 1400, y: 500 },
-      { t: 3000, k: "move", x: 1850, y: 500 },
-      { t: 3500, k: "move", x: 1700, y: 500 },
-    ],
-    shots: [700, 900, 1800, 3200, 4500],
-  },
-  {
-    name: "semantic-fast",
-    telemetry: [
-      { t: 0, k: "move", x: 850, y: 450 },
-      { t: 100, k: "down", x: 850, y: 450, b: 1 },
-      { t: 100, k: "context", trigger: "down", target: { role: "Edit", rect: { x: 600, y: 300, w: 700, h: 300 } } },
-      { t: 2513, k: "down", x: 50, y: 40, b: 1 },
-      { t: 2513, k: "context", trigger: "down", target: { role: "ToolBar", rect: { x: 10, y: 10, w: 1500, h: 80 } } },
-      { t: 2577, k: "down", x: 1800, y: 1000, b: 1 },
-      { t: 2700, k: "down", x: 900, y: 500, b: 1 },
-      { t: 2700, k: "context", trigger: "down", target: { role: "Edit", rect: { x: 600, y: 300, w: 700, h: 300 } } },
-      { t: 3200, k: "key", d: "down", c: "30" },
-      { t: 3200, k: "context", trigger: "key", target: { role: "Edit", rect: { x: 600, y: 300, w: 700, h: 300 } } },
-      { t: 3900, k: "key", d: "down", c: "30" },
-      { t: 3900, k: "context", trigger: "key", target: { role: "Edit", rect: { x: 600, y: 300, w: 700, h: 300 } } },
-    ],
-    shots: [0, 1900, 2500, 2583.3333333333335, 3900],
-  },
   {
     name: "captions-reordered",
     clips: [{ id: "later", startMs: 2500, endMs: 5000 }, { id: "earlier", startMs: 0, endMs: 2000 }],
@@ -292,7 +246,6 @@ function prepare(config: (typeof CONFIGS)[number]): { dir: string; mp4: string }
   const dir = join(OUT, config.name);
   cpSync(BUNDLE, dir, { recursive: true });
 
-  if (config.telemetry) writeFileSync(join(dir, "input.jsonl"), `${config.telemetry.map(event => JSON.stringify(event)).join("\n")}\n`);
   const base = normalizeProject(null, "fixture-basic");
   const project: Project = {
     ...base,

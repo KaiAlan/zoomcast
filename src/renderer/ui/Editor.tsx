@@ -226,7 +226,7 @@ export function Editor({
     () =>
       buildCursorPath(bundle.telemetry, {
         halfLifeMs: smoothingToHalfLife(project.style.cursor.smoothing),
-        pinClicks: true, sampleHz: 120,
+        sampleHz: 120,
       }),
     [bundle.telemetry, project.style.cursor.smoothing],
   );

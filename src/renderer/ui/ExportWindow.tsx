@@ -34,7 +34,7 @@ export function ExportWindow() {
         if (bundle.media.webcam && project.webcam.visible) camera = await DecodedFrameSource.open(bundle.media.webcam, { sequential: true });
         const completed = await exportClip({
           manifest: bundle.manifest, project,
-          cursorPath: buildCursorPath(bundle.telemetry, { halfLifeMs: smoothingToHalfLife(project.style.cursor.smoothing), pinClicks: true, sampleHz: 120 }),
+          cursorPath: buildCursorPath(bundle.telemetry, { halfLifeMs: smoothingToHalfLife(project.style.cursor.smoothing), sampleHz: 120 }),
           clicks: bundle.telemetry.filter(event => event.k === "down"),
           backgroundImageUrl: project.style.background.kind === "image" ? bundleAssetUrl(bundle.dir, project.style.background.imageFile) : undefined,
           mediaDir: bundle.dir.replace(/\\/g, "/"), renderer, source, webcamSource: camera,

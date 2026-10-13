@@ -34,7 +34,7 @@ export type ZoomConfig = {
   deadzonePx: number;
   /** Excess clusters in a minute are dropped lowest-weight-first. */
   maxZoomsPerMinute: number;
-  /** Legacy stored value. Automatic shots now start at the actual click. */
+  /** Start the camera move this long before the cluster begins. */
   leadInMs: number;
   /** Hold the zoom this long after the cluster ends. */
   trailMs: number;
@@ -71,7 +71,7 @@ export type ZoomConfig = {
   depthClick: number;
   /** Depth for a typing run — shallower, because reading needs context. */
   depthType: number;
-  /** Legacy depth grading; scrolling cannot initiate an automatic shot. */
+  /** Depth for a scroll burst. */
   depthScroll: number;
   /** What fraction of the frame the activity may occupy before pulling back. */
   contextFraction: number;
@@ -132,8 +132,6 @@ export type ZoomKeyframe = {
   pinned: boolean;
   /** Derived rendered endpoint; rebuilt when framing or aspect changes. */
   quad?: Rect;
-  /** Already sampled in output space; regenerated with the automatic shot. */
-  cameraSample?: true;
   /** Rest frame for the first transition, which has no preceding keyframe. */
   restQuad?: Rect;
   /** Sample of an entrance while its focus follows the cursor. */

@@ -1,4 +1,3 @@
-import { validControlContext } from "../zoom/context";
 import type { TelemetryEvent } from "./types";
 
 /**
@@ -25,8 +24,7 @@ export function parseTelemetry(text: string): TelemetryEvent[] {
     if (typeof value !== "object" || value === null) continue;
 
     const e = value as Record<string, unknown>;
-    if (typeof e.t !== "number" || !Number.isFinite(e.t) || typeof e.k !== "string") continue;
-    if (e.k === "context" && (!["down", "key", "wheel"].includes(String(e.trigger)) || !validControlContext(e.target))) continue;
+    if (typeof e.t !== "number" || typeof e.k !== "string") continue;
 
     out.push(e as unknown as TelemetryEvent);
   }

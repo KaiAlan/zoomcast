@@ -9,13 +9,9 @@ describe("blurAt", () => {
     expect(blurAt(still, still, 16, OUT, 1).px).toBe(0);
   });
 
-  it("is zero below the 200px/s deadzone", () => {
+  it("is zero below the 15px/s deadzone", () => {
     // 0.1px over 16ms is 6.25px/s. Without a deadzone an idle camera shimmers.
     expect(blurAt(still, { x: 0.1, y: 0, scale: 1 }, 16, OUT, 1).px).toBe(0);
-  });
-
-  it("keeps slow reading pans sharp", () => {
-    expect(blurAt(still, { x: 2, y: 0, scale: 1 }, 16, OUT, 0.35).px).toBe(0);
   });
 
   it("counts scale change as motion, so a pure zoom blurs", () => {

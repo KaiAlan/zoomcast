@@ -123,7 +123,7 @@ const ASPECTS = ["native", "16:9", "4:3", "1:1", "9:16"] as const;
  */
 export function normalizeProject(raw: unknown, bundleId: string): Project {
   const base = defaultProject(bundleId);
-  if (!isRecord(raw) || Object.keys(raw).length === 0) return base;
+  if (!isRecord(raw)) return base;
 
   const style = isRecord(raw.style) ? raw.style : {};
   const cursor = isRecord(style.cursor) ? style.cursor : {};
@@ -170,7 +170,7 @@ export function normalizeProject(raw: unknown, bundleId: string): Project {
     },
     style: {
       paddingFactor: num(style.paddingFactor, base.style.paddingFactor),
-      motionBlurAmount: num01(style.motionBlurAmount, 0),
+      motionBlurAmount: num01(style.motionBlurAmount, base.style.motionBlurAmount),
       frame: {
         preset: oneOf(frame.preset, FRAME_PRESETS, base.style.frame.preset),
         cornerRadiusPx: num(

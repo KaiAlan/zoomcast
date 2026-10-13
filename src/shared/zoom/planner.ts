@@ -1,11 +1,11 @@
 import type { TelemetryEvent } from "../bundle/types";
-import { absorbCluster, clusterImpulses, clusterIntent, mergeAndFilter } from "./cluster";
+import { clusterImpulses, clusterIntent, mergeAndFilter } from "./cluster";
 import { applyGuards, rateLimit } from "./guards";
 import { depthConfigFrom, zoomDepth } from "./depth";
-import { clickAttention } from "./impulses";
+import { toImpulses } from "./impulses";
 import { scaleToDepth } from "./keyframes";
 import { applySegmentGuards, type Segment } from "./segments";
-import type { Cluster, PlanContext, ZoomConfig, ZoomSegment } from "./types";
+import type { PlanContext, ZoomConfig, ZoomSegment } from "./types";
 
 /**
  * Turn telemetry into an editable zoom plan.
@@ -25,15 +25,8 @@ export function planZoom(
   cfg: ZoomConfig,
   ctx: PlanContext,
 ): ZoomSegment[] {
-  const owned: Cluster[] = [];
-  for (const cluster of clusterImpulses(clickAttention(events, cfg), cfg)) {
-    const previous = owned[owned.length - 1];
-    if (cluster.intentScores.click > 0) owned.push(cluster);
-    else if (previous && cluster.startT - previous.endT <= cfg.keyAnchorWindowMs
-      && Math.hypot(cluster.cx - previous.cx, cluster.cy - previous.cy) <= cfg.clusterRadiusPx) absorbCluster(previous, cluster);
-  }
   const clusters = applyGuards(
-    mergeAndFilter(owned, cfg),
+    mergeAndFilter(clusterImpulses(toImpulses(events, cfg), cfg), cfg),
     cfg,
     ctx.durationMs,
     // Budget camera shots after chaining, not the clicks that guide a shot.
@@ -62,12 +55,12 @@ export function planZoom(
     if (scale <= 1.0001) continue;
 
     segments.push({
-      startT: Math.max(0, c.startT),
+      startT: Math.max(0, c.startT - cfg.leadInMs),
       endT: c.endT + cfg.trailMs + cfg.transitionOutMs,
       waypoints: [
         {
           id: `k${c.anchorIndex}`,
-          t: Math.max(0, c.startT),
+          t: Math.max(0, c.startT - cfg.leadInMs),
           scale,
           cx: c.cx / ctx.source.w,
           cy: c.cy / ctx.source.h,

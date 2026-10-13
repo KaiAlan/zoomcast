@@ -13,7 +13,7 @@ export const DEFAULT_ZOOM_CONFIG: ZoomConfig = {
   minRecoveryMs: 1500,
   deadzonePx: 120,
   maxZoomsPerMinute: 20,
-  // Preserved for older projects; automatic shots never anticipate a click.
+  // The move starts here, rather than another transition duration earlier.
   leadInMs: 250,
   trailMs: 400,
   transitionMs: 1500,

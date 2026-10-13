@@ -8,8 +8,6 @@ export type PathOptions = {
    */
   halfLifeMs: number;
   sampleHz: number;
-  /** Preserve interaction positions while smoothing travel between them. */
-  pinClicks?: boolean;
 };
 
 export type CursorSample = {
@@ -24,7 +22,6 @@ export type CursorPath = {
   xs: Float32Array;
   ys: Float32Array;
   shapes: CursorShape[];
-  clicks?: { t: number; x: number; y: number }[];
 };
 
 /** Half-life of the lag, in ms, at the two ends of the smoothing range. */
@@ -95,7 +92,6 @@ export function buildCursorPath(
       if (e.k === "move" || e.k === "down" || e.k === "up" || e.k === "wheel") {
         targetX = e.x;
         targetY = e.y;
-        if (opts.pinClicks && e.k === "down") { x = e.x; y = e.y; }
       }
       if (e.k === "cursor") shape = e.shape;
       cursor++;
@@ -109,7 +105,7 @@ export function buildCursorPath(
     shapes[i] = shape;
   }
 
-  return { t0, stepMs, xs, ys, shapes, ...(opts.pinClicks ? { clicks: events.filter((e): e is Extract<TelemetryEvent, { k: "down" }> => e.k === "down").map(e => ({ t: e.t, x: e.x, y: e.y })) } : {}) };
+  return { t0, stepMs, xs, ys, shapes };
 }
 
 /**
@@ -129,13 +125,9 @@ export function cursorAt(path: CursorPath, tMs: number): CursorSample | null {
 
   const i = Math.min(path.xs.length - 1, Math.round((tMs - path.t0) / path.stepMs));
 
-  let lo = 0, hi = path.clicks?.length ?? 0;
-  while (lo < hi) { const mid = (lo + hi) >>> 1; if ((path.clicks?.[mid]?.t ?? Infinity) <= tMs) lo = mid + 1; else hi = mid; }
-  const click = path.clicks?.[lo - 1];
-  const pinned = click && tMs - click.t < path.stepMs ? click : undefined;
   return {
-    x: pinned?.x ?? path.xs[i] as number,
-    y: pinned?.y ?? path.ys[i] as number,
+    x: path.xs[i] as number,
+    y: path.ys[i] as number,
     shape: path.shapes[i] ?? "arrow",
   };
 }

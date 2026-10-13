@@ -110,7 +110,7 @@ export function screenQuadFor(
 export function projectKeyframes(frames: ZoomKeyframe[], ctx: PlanContext): ZoomKeyframe[] {
   const rest = screenRect(ctx.source, ctx.output, ctx.paddingFactor);
   return frames.map((frame, i) => {
-    const target = frame.cameraSample && frame.quad ? frame.quad : screenQuadFor(ctx.source, ctx.output, ctx.paddingFactor,
+    const target = screenQuadFor(ctx.source, ctx.output, ctx.paddingFactor,
       { scale: frame.entrance?.scale ?? frame.scale, cx: frame.cx, cy: frame.cy });
     const e = frame.entrance?.progress;
     const quad = e === undefined ? target : {

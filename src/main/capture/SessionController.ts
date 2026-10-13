@@ -12,7 +12,6 @@ import {
   probeRecording,
   ScreenSource,
 } from "./ScreenSource";
-import { SemanticTargetReader } from "./SemanticTargetReader";
 import { TelemetryRecorder } from "./TelemetryRecorder";
 import { recordingsRoot } from "../recordingsRoot";
 import { LibraryStore } from "../libraryStore";
@@ -102,8 +101,6 @@ export async function startRecording(options?: RecorderOptions): Promise<void> {
   const backend = selected.primary && screen.getAllDisplays().length === 1 ? target.backend : "gdigrab";
   const settings = loadSettings();
   const requestedFps = backend === "ddagrab" ? DDAGRAB_FPS : settings.captureFps;
-  // Warm the optional provider while audio/video initialize, before first input.
-  const semantic = SemanticTargetReader.start();
 
   // Audio first: device warm-up costs a few hundred milliseconds, and starting
   // it after the screen would silently clip the head of every take. Starting it
@@ -147,21 +144,13 @@ export async function startRecording(options?: RecorderOptions): Promise<void> {
     windowHandle: selected.hwnd,
     region: selected.region,
   }); } catch (err) {
-    semantic?.stop();
     await webcam?.abort();
     await audio?.stop(Date.now(), audioStarted);
     throw err;
   }
 
   const clockBaseMs = screenSource.startedAtUnixMs;
-  let telemetry: TelemetryRecorder;
-  try {
-    telemetry = TelemetryRecorder.start(join(dir, "input.jsonl"), clockBaseMs, () => selected.hwnd === undefined ? selected.region : windowRegion(selected.hwnd), semantic);
-  } catch (error) {
-    semantic?.stop();
-    await Promise.allSettled([screenSource.stop(), webcam?.abort(), audio?.stop(Date.now(), audioStarted)]);
-    throw error;
-  }
+  const telemetry = TelemetryRecorder.start(join(dir, "input.jsonl"), clockBaseMs, () => selected.hwnd === undefined ? selected.region : windowRegion(selected.hwnd));
 
   active = {
     id,

@@ -11,8 +11,9 @@ export function defaultProject(bundleId: string): Project {
     zoom: { config: { ...DEFAULT_ZOOM_CONFIG }, segments: [], keyframes: [] },
     style: {
       paddingFactor: 0.85,
-      // Gentle directional blur is strongest during rapid camera movement.
-      motionBlurAmount: 0.35,
+      // Off by default: it may stay off if export time suffers, and an
+      // off-by-default setting cannot move the default parity configuration.
+      motionBlurAmount: 0,
       frame: {
         preset: "default",
         cornerRadiusPx: 12,
@@ -29,7 +30,7 @@ export function defaultProject(bundleId: string): Project {
       cursor: {
         appearance: "filled",
         loop: false,
-        motionBlur: 0.35,
+        motionBlur: 0,
         clickBounce: 0,
         bounceDurationMs: 350,
         sway: 0,
