@@ -6,7 +6,7 @@ Microphone selection also appears in the recording widget's three-dot menu, alon
 
 During capture, the widget shows microphone status and input level. Capture failures, lost or muted tracks, write errors and a stalled audio renderer show a red badge and visible alert. After 15 seconds without detected microphone sound, an amber advisory invites the user to check their mute switch; silence is distinct from failed capture. Sound clears the advisory. System audio failures also show a visible alert. Captured chunks are written in order and acknowledged before finalizing audio files. Only tracks with saved bytes appear in the manifest.
 
-No dependencies, cloud service or bundled speech models are added. Existing projects and the installed app are unchanged. These changes are prepared locally, without a push or release.
+Device tests run locally without adding dependencies, a cloud service or bundled speech models. Existing projects remain compatible.
 
 ## Validation
 

@@ -2,40 +2,42 @@
 
 Detailed changes for each Zoomcast release. The app shows the Highlights from these same notes.
 
-## Unreleased
+## [Zoomcast 0.1.7](https://github.com/KaiAlan/zoomcast/releases/tag/v0.1.7)
 
-Includes the 0.1.6 change history and new countdown feedback prepared for the next release. Published 0.1.6 details remain in 0.1.6.md.
+Windows x64 beta release.
 
 ### Highlights
 
-- Customize cursor styles, size and motion effects, with consistent preview and export.
-- Choose from 24 photo backgrounds and 24 gradients.
-- Split, reorder and delete video clips, and split zoom segments at the playhead.
-- Generate editable offline transcripts, export subtitles and include captions in MP4s.
-- Find settings in searchable sections, with release highlights kept out of the editor.
+- Choose your microphone and test microphone input or a live camera preview before recording.
+- See microphone levels and capture warnings while recording, with optional microphone processing controls.
+- Start recordings with a large centered countdown, quiet ticks and a distinct start chime.
+- New recordings use a portable copy of your current desktop wallpaper, with a bundled image fallback.
+- Choose from 24 solid background colors and drag the timeline without selecting its labels.
 
 ### Added
 
-- New recordings use the currently applied Windows desktop wallpaper as their background. Each take keeps its own image copy, so later wallpaper changes do not affect existing projects. Image is the first Appearance background tab; desktops without a usable wallpaper use the bundled Ribbons image.
-- Expanded solid background presets to 24 colors, including warm neutrals, pastels, richer hues and dark shades, alongside the existing custom color picker.
-- A large countdown centered on the recorded display, with one gentle beep per second and a different quiet chime once capture successfully starts. The overlay stays out of the captured video, cancels immediately and respects the existing No delay / 3 / 5 / 10 second choices.
-- Settings uses searchable General, Recording, Captions, App updates and Help & feedback sections. Controls save automatically, report disk failures and offer retry. The editor no longer shows the installed-release card.
-- A Figma-style custom background picker supports a saturation/brightness area, hue slider, HEX/RGB/HSB inputs, a screen eyedropper and recent colors. Continuous adjustments preview live and form one Undo step.
-- Optional offline caption support downloads about 64 MB only when requested. Generate from microphone or system audio, edit text and timing, and export SRT/VTT or MP4 captions. Saved captions follow cuts, reordered clips and audio sync. Removing speech support retains saved captions.
-- Classic, rounded, filled, dot and outline cursor styles, with size, motion blur, bounce, duration and sway controls. Outline has a black fill and white border.
-- A collection of 24 high-resolution photo backgrounds with source attribution, and 24 gradient presets.
-- A base video track. Select a video clip or zoom, position the playhead, and split with the scissors button or Ctrl+B. Delete selected pieces, drag video pieces to reorder, or use Alt+Left/Right. Undo and redo include these edits.
-- Ctrl+scroll zooms the timeline around the pointer. Shift+scroll pans horizontally. Add segment inserts a zoom at the playhead.
-- A checked release-note pipeline: detailed changes on GitHub and in CHANGELOG.md, short Highlights in the app after an installed version changes, and full release-note links in Settings and update notices.
-- One automatic update check when opening Zoomcast. An available version appears in an in-app notice, with no Windows notification, hourly polling or wake-up checks. Downloads and restarts remain user actions.
+- Settings → Recording includes microphone selection, microphone and camera tests, and shortcuts to Windows privacy settings. Opening Settings does not request device access. Camera tests show a muted live preview; microphone tests record up to 15 seconds and provide level monitoring and temporary sample playback. Samples stay local, are excluded from the recording library, and are cleared when leaving the section. Device tests are unavailable during recording.
+- Select microphone and camera devices in the recorder's three-dot menu. Choices persist and synchronize with Settings. A disconnected selected microphone produces a warning instead of silently switching inputs. Noise suppression, echo cancellation and automatic microphone volume are optional and default off; device support varies.
+- The recording widget shows microphone input level and status. Visible warnings identify failed capture, lost or muted audio tracks, write failures and an unresponsive audio recorder. After 15 seconds without detected microphone sound, a separate advisory asks you to check the mute switch; sound clears it. System audio failures also appear in the widget.
+- A large countdown is centered on the recorded display, with a quiet tick each second and a distinct chime after capture starts. It cancels immediately, stays out of the recorded video and respects No delay / 3 / 5 / 10 second choices.
+- New recordings copy the currently applied Windows desktop wallpaper into their recording folder. Later wallpaper changes do not alter earlier projects. Appearance opens with the Image tab first; desktops without a usable image use the bundled Ribbons background.
+- Solid background presets now include 24 colors across neutrals, pastels, richer colors and dark shades, alongside the custom color picker, photo backgrounds and gradients.
 
 ### Fixed
 
-- Dragging the playhead or timeline segments no longer selects the time labels or clip text.
-- Cursor styles and effects now update paused previews and exported video consistently, including the start of a recording.
-- The zoom segment popup anchors to the selected segment and closes on an outside click. Repeated zoom preset clicks, Fixed/Follow cursor and Reset to auto work reliably.
-- Splitting or reordering clips preserves source-linked zooms and keeps exported video and audio in the same order.
-- Timeline scaling leaves the helper text fixed. Short zoom segments have valid transitions, the aspect dropdown updates the preview, and playback returns to the beginning at the end.
+- Audio chunks are written in order and acknowledged before finalizing audio files. Only tracks with saved bytes appear in the recording manifest.
+- Cancelling a device test, changing its device or preferences, leaving its Settings section, or closing Settings releases the test devices, including delayed permission responses.
+- Dragging the playhead or timeline segments no longer selects time labels or clip text.
+
+### Upgrade notes
+
+Install the Windows setup executable, or open Settings → App updates → Check for updates in your current installation. Download and restart when ready. Existing projects, settings and downloaded caption support are retained.
+
+Automatic zoom and camera following use the same behavior as published 0.1.6. The experimental camera rework tested during development is excluded from this release.
+
+Microphone and camera access depends on Windows permissions and device availability. Device tests help check input before recording; review capture warnings during a take. New microphone processing options default off and do not enable themselves during an upgrade.
+
+The installer includes FFmpeg and ffprobe. Matching media sources and their checksum accompany the release. The beta installer is unsigned.
 
 ## [Zoomcast 0.1.6](https://github.com/KaiAlan/zoomcast/releases/tag/v0.1.6)
 
